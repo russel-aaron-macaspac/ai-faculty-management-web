@@ -13,6 +13,7 @@ export default function FacultyDashboardPage() {
   useEffect(() => {
     const userStr = localStorage.getItem('user');
     if (userStr) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUser(JSON.parse(userStr));
     }
   }, []);
