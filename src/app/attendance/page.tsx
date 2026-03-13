@@ -41,9 +41,7 @@ export default function AttendancePage() {
           <Button variant="outline" className="border-slate-200">
             <Filter className="mr-2 h-4 w-4 text-slate-500" /> Filter
           </Button>
-          <Button className="bg-emerald-600 hover:bg-emerald-700">
-            <Download className="mr-2 h-4 w-4" /> Export CSV
-          </Button>
+        
         </div>
       </div>
 
