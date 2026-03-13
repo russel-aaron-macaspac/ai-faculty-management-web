@@ -71,7 +71,7 @@ export function Sidebar({ user }: SidebarProps) {
     <div className="flex h-full w-64 flex-col bg-slate-900 text-white shadow-xl transition-all duration-300">
       <div className="flex h-16 items-center px-6 border-b border-slate-800">
         <BrainCircuit className="h-6 w-6 text-red-400 mr-2" />
-        <span className="text-lg font-bold tracking-tight">AI Faculty Sys</span>
+        <span className="text-lg font-bold tracking-tight">Faculty & Staff Management System</span>
       </div>
       
       <div className="flex-1 overflow-y-auto py-4">

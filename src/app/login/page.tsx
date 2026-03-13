@@ -77,7 +77,7 @@ export default function LoginPage() {
         <CardHeader className="space-y-1 text-center">
           <CardTitle className="text-3xl font-bold tracking-tight text-slate-900">Sign in</CardTitle>
           <CardDescription className="text-slate-500">
-            AI-Assisted Faculty & Staff Management
+            AI-Assisted Faculty & Staff Management System
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -90,7 +90,7 @@ export default function LoginPage() {
                   <FormItem>
                     <FormLabel>Email</FormLabel>
                     <FormControl>
-                      <Input placeholder="admin@system.com" {...field} className="bg-white" />
+                      <Input placeholder="youremail@sdca.edu.ph" {...field} className="bg-white" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
