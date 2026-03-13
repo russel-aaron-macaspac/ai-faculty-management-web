@@ -117,10 +117,6 @@ export default function LoginPage() {
             </form>
           </Form>
         </CardContent>
-        <CardFooter className="flex flex-col text-sm text-slate-500 space-y-2 mt-4 text-center">
-          <p>Demo Accounts (password: password123)</p>
-          <p>admin@system.com | faculty@system.com | staff@system.com</p>
-        </CardFooter>
       </Card>
     </div>
   );
