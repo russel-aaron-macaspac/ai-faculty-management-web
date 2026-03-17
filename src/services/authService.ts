@@ -1,27 +1,50 @@
-import { User, Role } from '@/types/user';
-import { delay } from './api';
+export type UserRole = "admin" | "faculty" | "staff";
+export type UserStatus = "active" | "inactive" | "on_leave" | "resigned";
 
-const MOCK_USERS: User[] = [
-  { id: 'u1', email: 'admin@sdca.edu.ph', name: 'System Admin', role: 'admin' },
-  { id: 'u2', email: 'faculty@sdca.edu.ph', name: 'Dr. John Doe', role: 'faculty' },
-  { id: 'u3', email: 'staff@sdca.edu.ph', name: 'Jane Smith', role: 'staff' },
-];
+export interface AuthUser {
+  id: number;
+  email: string;
+  role: UserRole;
+  full_name: string;
+}
+
+export interface LoginResponse {
+  user: AuthUser;
+}
 
 export const authService = {
-  login: async (email: string, password: string):Promise<{user: User; token: string}> => {
-    await delay(800);
-    const user = MOCK_USERS.find(u => u.email === email);
-    if (!user || password !== 'password123') { // Simple mock validation
-      throw new Error('Invalid email or password');
+  async login(email: string, password: string): Promise<LoginResponse> {
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const text = await res.text();
+
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(`Unexpected server response: ${text.slice(0, 100)}`);
     }
-    return {
-      user,
-      token: 'mock-jwt-token-12345'
-    };
+
+    if (!res.ok) {
+      throw new Error(data.error || "Login failed");
+    }
+
+    return data as LoginResponse;
   },
-  
-  logout: async (): Promise<void> => {
-    await delay(300);
-    // In a real app, remove token from storage
-  }
+
+  logout(): void {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("user");
+    }
+  },
+
+  getCachedUser(): AuthUser | null {
+    if (typeof window === "undefined") return null;
+    const raw = localStorage.getItem("user");
+    return raw ? (JSON.parse(raw) as AuthUser) : null;
+  },
 };

@@ -100,7 +100,7 @@ export function Sidebar({ user }: SidebarProps) {
       <div className="border-t border-slate-800 p-4 space-y-4">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-full bg-slate-800 flex items-center justify-center text-red-400 font-bold border border-slate-700">
-            {user?.name.charAt(0) || 'U'}
+            {user?.full_name.charAt(0) || 'U'}
           </div>
           <div className="flex flex-col">
             <span className="text-sm font-medium">{user?.name}</span>

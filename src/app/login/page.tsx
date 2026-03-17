@@ -42,9 +42,8 @@ export default function LoginPage() {
     setError(null);
     try {
       const response = await authService.login(values.email, values.password);
-      // Store user in localStorage for mock persistence
       localStorage.setItem('user', JSON.stringify(response.user));
-      
+
       // Redirect based on role
       switch (response.user.role) {
         case 'admin':
