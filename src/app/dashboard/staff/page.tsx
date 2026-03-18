@@ -12,6 +12,7 @@ export default function StaffDashboardPage() {
   useEffect(() => {
     const userStr = localStorage.getItem('user');
     if (userStr) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUser(JSON.parse(userStr));
     }
   }, []);
@@ -36,14 +37,14 @@ export default function StaffDashboardPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-slate-900">Staff Dashboard</h1>
-        <p className="text-slate-500 mt-1">Welcome, {user?.name}. Here's your shift overview.</p>
+        <p className="text-slate-500 mt-1">Welcome, {user?.name}. Here&apos;s your shift overview.</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Current Shift" value="Morning" icon={Clock} />
-        <StatCard title="Hours Logged" value="32h" description="This week" icon={Briefcase} />
-        <StatCard title="Next Shift" value="Tomorrow, 08:00 AM" icon={Calendar} />
-        <StatCard title="Compliance Score" value="95%" icon={FileCheck2} trend="down" trendValue="5%" />
+        <StatCard title="Current Shift" value="Morning" icon={Clock} href="/schedules" />
+        <StatCard title="Hours Logged" value="32h" description="This week" icon={Briefcase} href="/schedules" />
+        <StatCard title="Next Shift" value="Tomorrow, 08:00 AM" icon={Calendar} href="/schedules" />
+        <StatCard title="Compliance Score" value="95%" icon={FileCheck2} trend="down" trendValue="5%" href="/clearance" />
       </div>
 
       <div className="grid gap-6 md:grid-cols-7">
@@ -64,7 +65,7 @@ export default function StaffDashboardPage() {
 
         <div className="md:col-span-3 lg:col-span-2 space-y-6">
            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm text-center">
-              <h3 className="font-semibold text-slate-800 mb-2">Today's Log</h3>
+              <h3 className="font-semibold text-slate-800 mb-2">Today&apos;s Log</h3>
               <div className="text-3xl font-bold text-slate-900 my-4">ON DUTY</div>
               <div className="text-sm text-slate-500">Clocked in at 07:55 AM</div>
            </div>

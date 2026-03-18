@@ -2,21 +2,12 @@
 
 import { Bell, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useRouter } from 'next/navigation';
-import { authService } from '@/services/authService';
 
 interface NavbarProps {
   onMenuClick?: () => void;
 }
 
 export function Navbar({ onMenuClick }: NavbarProps) {
-  const router = useRouter();
-
-  const handleLogout = async () => {
-    await authService.logout();
-    localStorage.removeItem('user');
-    router.push('/login');
-  };
 
   return (
     <header className="flex h-16 w-full items-center justify-between border-b bg-white px-6 shadow-sm">

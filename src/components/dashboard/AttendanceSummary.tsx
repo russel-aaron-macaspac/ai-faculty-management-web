@@ -14,7 +14,7 @@ export function AttendanceSummary() {
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium text-slate-500 flex items-center gap-2">
            <Users className="h-4 w-4" />
-           Today's Attendance Overview
+           Today&apos;s Attendance Overview
         </CardTitle>
       </CardHeader>
       <CardContent>

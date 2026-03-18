@@ -49,10 +49,10 @@ export default function AdminDashboardPage() {
 
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Total Faculty" value="124" description="12 on leave" icon={Users} trend="up" trendValue="2%" />
-        <StatCard title="Total Staff" value="48" icon={UserSquare2} trend="neutral" trendValue="0%" />
-        <StatCard title="Active Classes" value="32" description="Happening right now" icon={CalendarDays} trend="up" trendValue="5%" />
-        <StatCard title="Clearance Completion" value="89%" description="Pending: 15" icon={FileCheck2} trend="up" trendValue="4%" />
+        <StatCard title="Total Faculty" value="124" description="12 on leave" icon={Users} trend="up" trendValue="2%" href="/faculty" />
+        <StatCard title="Total Staff" value="48" icon={UserSquare2} trend="neutral" trendValue="0%" href="/staff" />
+        <StatCard title="Active Classes" value="32" description="Happening right now" icon={CalendarDays} trend="up" trendValue="5%" href="/schedules" />
+        <StatCard title="Clearance Completion" value="89%" description="Pending: 15" icon={FileCheck2} trend="up" trendValue="4%" href="/clearance" />
       </div>
 
       <div className="grid gap-6 md:grid-cols-7">

@@ -48,6 +48,7 @@ export default function FacultyPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
   }, []);
 
@@ -188,7 +189,12 @@ export default function FacultyPage() {
                    No faculty members found.
                  </TableCell>
               </TableRow>
-            ) : filtered.map((f) => (
+            ) : filtered.map((f) => {
+              const statusClassName = f.status === 'active' ? 'bg-emerald-100 text-emerald-800' :
+                f.status === 'on_leave' ? 'bg-amber-100 text-amber-800' :
+                'bg-slate-100 text-slate-800';
+              
+              return (
               <TableRow key={f.id}>
                 <TableCell>
                   <div className="font-medium text-slate-900">{f.fullName}</div>
@@ -200,11 +206,7 @@ export default function FacultyPage() {
                 </TableCell>
                 <TableCell>{f.department}</TableCell>
                 <TableCell>
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${
-                    f.status === 'active' ? 'bg-emerald-100 text-emerald-800' :
-                    f.status === 'on_leave' ? 'bg-amber-100 text-amber-800' :
-                    'bg-slate-100 text-slate-800'
-                  }`}>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${statusClassName}`}>
                     {f.status.replace('_', ' ')}
                   </span>
                 </TableCell>
@@ -219,7 +221,8 @@ export default function FacultyPage() {
                   </div>
                 </TableCell>
               </TableRow>
-            ))}
+            );
+            })}
           </TableBody>
         </Table>
       </div>

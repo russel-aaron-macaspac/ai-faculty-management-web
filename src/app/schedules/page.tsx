@@ -36,6 +36,7 @@ export default function SchedulesPage() {
   useEffect(() => {
     const userStr = localStorage.getItem('user');
     if (userStr) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUser(JSON.parse(userStr));
     }
   }, []);
@@ -62,6 +63,7 @@ export default function SchedulesPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
   }, []);
 

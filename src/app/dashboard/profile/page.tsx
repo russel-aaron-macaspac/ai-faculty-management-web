@@ -41,7 +41,7 @@ export default function ProfilePage() {
         : user.role === 'staff'
         ? 'Office Manager'
         : 'System Administrator',
-    phone: '(555) 123-4567',
+    phone: '+63 917 123 4567',
     address: '123 Main St, Springfield, ST 12345',
     hireDate: 'Aug 15, 2022',
   };

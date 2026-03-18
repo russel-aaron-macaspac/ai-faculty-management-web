@@ -22,7 +22,7 @@ export const authService = {
 
     const text = await res.text();
 
-    let data: any;
+    let data: unknown;
     try {
       data = JSON.parse(text);
     } catch {
@@ -30,7 +30,15 @@ export const authService = {
     }
 
     if (!res.ok) {
-      throw new Error(data.error || "Login failed");
+      const errorMessage =
+        typeof data === "object" &&
+        data !== null &&
+        "error" in data &&
+        typeof (data as { error?: unknown }).error === "string"
+          ? (data as { error: string }).error
+          : "Login failed";
+
+      throw new Error(errorMessage);
     }
 
     return data as LoginResponse;

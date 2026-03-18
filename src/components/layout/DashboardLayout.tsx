@@ -16,6 +16,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     // Check auth on layout load
     const userStr = localStorage.getItem('user');
     if (userStr) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUser(JSON.parse(userStr));
     } else {
       router.push('/login');

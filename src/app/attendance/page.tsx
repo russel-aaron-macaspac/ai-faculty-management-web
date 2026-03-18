@@ -6,7 +6,7 @@ import { Attendance } from '@/types/attendance';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { Download, Loader2, Search, AlertTriangle, Filter } from 'lucide-react';
+import { Loader2, Search, AlertTriangle, Filter } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function AttendancePage() {
@@ -15,15 +15,15 @@ export default function AttendancePage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDate, setFilterDate] = useState(format(new Date(), 'yyyy-MM-dd'));
 
-  const loadData = async () => {
-    setLoading(true);
-    const data = await attendanceService.getAttendance(filterDate);
-    setRecords(data);
-    setLoading(false);
-  };
-
   useEffect(() => {
-    loadData();
+    const loadData = async () => {
+      setLoading(true);
+      const data = await attendanceService.getAttendance(filterDate);
+      setRecords(data);
+      setLoading(false);
+    };
+
+    void loadData();
   }, [filterDate]);
 
   const filtered = records.filter(r =>

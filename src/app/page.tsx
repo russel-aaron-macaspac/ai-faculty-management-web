@@ -15,7 +15,7 @@ export default function Home() {
         else if (user.role === 'faculty') router.push('/dashboard/faculty');
         else if (user.role === 'staff') router.push('/dashboard/staff');
         else router.push('/login');
-      } catch (e) {
+      } catch {
         router.push('/login');
       }
     } else {

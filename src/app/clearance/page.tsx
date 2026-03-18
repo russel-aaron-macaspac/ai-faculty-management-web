@@ -17,8 +17,8 @@ export default function ClearancePage() {
   const [uploading, setUploading] = useState(false);
 
   // Mock form state
-  const [empId, setEmpId] = useState('f1');
-  const [empName, setEmpName] = useState('Dr. Alice Brown');
+  const [empId] = useState('f1');
+  const [empName] = useState('Dr. Alice Brown');
   const [docName, setDocName] = useState('Safety Training Certificate');
 
   const loadData = async () => {
@@ -29,6 +29,7 @@ export default function ClearancePage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
   }, []);
 

@@ -10,10 +10,8 @@ import {
   Calendar, 
   Clock, 
   FileCheck2, 
-  BrainCircuit, 
   BarChart3,
   LogOut,
-  Settings
 } from 'lucide-react';
 import { User } from '@/types/user';
 

@@ -1,14 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StatCard } from '@/components/dashboard/StatCards';
 import { AIAlerts } from '@/components/dashboard/AIAlerts';
-import { AttendanceSummary } from '@/components/dashboard/AttendanceSummary';
 import { User } from '@/types/user';
 import { CalendarDays, Clock, FileCheck2, GraduationCap } from 'lucide-react';
+import { scheduleService } from '@/services/scheduleService';
+import { Schedule } from '@/types/schedule';
 
 export default function FacultyDashboardPage() {
   const [user, setUser] = useState<User | null>(null);
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
 
   useEffect(() => {
     const userStr = localStorage.getItem('user');
@@ -17,6 +19,84 @@ export default function FacultyDashboardPage() {
       setUser(JSON.parse(userStr));
     }
   }, []);
+
+  useEffect(() => {
+    const loadSchedules = async () => {
+      const data = await scheduleService.getSchedules();
+      setSchedules(data);
+    };
+
+    void loadSchedules();
+  }, []);
+
+  const todayStats = useMemo(() => {
+    const normalizeName = (name: string) => name.trim().toLowerCase().replace(/\s+/g, ' ');
+    const parseMinutes = (time: string) => {
+      const [hour, minute] = time.split(':').map(Number);
+      if (Number.isNaN(hour) || Number.isNaN(minute)) {
+        return null;
+      }
+      return hour * 60 + minute;
+    };
+    const formatHourMinute = (time: string) => {
+      const minutes = parseMinutes(time);
+      if (minutes === null) {
+        return 'N/A';
+      }
+
+      const hour24 = Math.floor(minutes / 60);
+      const minute = minutes % 60;
+      const period = hour24 >= 12 ? 'PM' : 'AM';
+      const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+      return `${hour12}:${minute.toString().padStart(2, '0')} ${period}`;
+    };
+
+    const currentDay = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+    const accountName = normalizeName((user as User & { full_name?: string } | null)?.name ?? (user as User & { full_name?: string } | null)?.full_name ?? '');
+    const now = new Date();
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+    const ownClassesToday = schedules
+      .filter((schedule) => {
+        if (schedule.type !== 'class') {
+          return false;
+        }
+
+        if (schedule.dayOfWeek !== currentDay) {
+          return false;
+        }
+
+        const scheduleName = normalizeName(schedule.employeeName);
+        return !!accountName && (scheduleName === accountName || scheduleName.includes(accountName) || accountName.includes(scheduleName));
+      })
+      .sort((a, b) => (parseMinutes(a.startTime) ?? 0) - (parseMinutes(b.startTime) ?? 0));
+
+    const totalMinutes = ownClassesToday.reduce((total, schedule) => {
+      const start = parseMinutes(schedule.startTime);
+      const end = parseMinutes(schedule.endTime);
+
+      if (start === null || end === null || end <= start) {
+        return total;
+      }
+
+      return total + (end - start);
+    }, 0);
+
+    const nextClass = ownClassesToday.find((schedule) => {
+      const end = parseMinutes(schedule.endTime);
+      return end !== null && end > nowMinutes;
+    });
+
+    const totalHours = totalMinutes / 60;
+    const totalHoursLabel = Number.isInteger(totalHours) ? `${totalHours.toFixed(0)}h` : `${totalHours.toFixed(1)}h`;
+
+    return {
+      classCount: ownClassesToday.length,
+      totalHoursLabel,
+      nextClassTime: nextClass ? formatHourMinute(nextClass.startTime) : 'No more today',
+      nextClassRoom: nextClass?.room || nextClass?.subjectOrRole || 'No upcoming class',
+    };
+  }, [schedules, user]);
 
   const mockAlerts = [
     {
@@ -41,10 +121,10 @@ export default function FacultyDashboardPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Classes Today" value="3" icon={GraduationCap} />
-        <StatCard title="Total Hours" value="4.5h" icon={Clock} />
-        <StatCard title="Next Class" value="09:00 AM" description="Room 302" icon={CalendarDays} />
-        <StatCard title="Clearance Status" value="Cleared" icon={FileCheck2} trend="up" trendValue="100%" />
+        <StatCard title="Classes Today" value={todayStats.classCount} icon={GraduationCap} href="/schedules" />
+        <StatCard title="Total Hours" value={todayStats.totalHoursLabel} icon={Clock} href="/schedules" />
+        <StatCard title="Next Class" value={todayStats.nextClassTime} description={todayStats.nextClassRoom} icon={CalendarDays} href="/schedules" />
+        <StatCard title="Clearance Status" value="Cleared" icon={FileCheck2} trend="up" trendValue="100%" href="/clearance" />
       </div>
 
       <div className="grid gap-6 md:grid-cols-7">
