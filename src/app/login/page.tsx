@@ -94,7 +94,7 @@ export default function LoginPage() {
             className="splash-logo-pulse splash-logo-clarity relative z-10 h-auto w-[220px] sm:w-[260px]"
           />
 
-          <p className="text-sm tracking-[0.24em] text-red-100/90 uppercase">Streamlining Faculy and Staff, Digitally</p>
+          <p className="text-sm tracking-[0.24em] text-red-100/90 uppercase">Efficiency Starts Here.</p>
 
           <div className="splash-progress-track w-56 overflow-hidden rounded-full bg-white/15">
             <div className="splash-progress-bar h-1.5 w-full rounded-full" />
@@ -115,7 +115,7 @@ export default function LoginPage() {
         <CardHeader className="space-y-1 text-center">
           <CardTitle className="text-3xl font-bold tracking-tight text-slate-900">Sign in</CardTitle>
           <CardDescription className="text-slate-500">
-            Streamlining Faculty and Staff, Digitally
+            Efficiency Starts Here
           </CardDescription>
         </CardHeader>
         <CardContent>
