@@ -1,17 +1,17 @@
 export const FACULTY_REQUIRED_OFFICES = [
   'Dominican Learning Resource Center',
-  'Property management office',
+  'Property Management Office',
   'Laboratory',
-  'ICT',
-  'CISO',
+  'Information & Communications Technology Office',
+  'Community Extension Services Office',
   'Program Chair',
   'Dean',
-  'Registrar',
-  'OVPREL',
-  'OVPAA',
-  'Accounting',
-  'Treasury',
-  'HRO',
+  'Registrar Office',
+  'Office of the Vice President for Research, Extension & Linkages',
+  'Office of the Vice President for Academic Affairs',
+  'Accounting Office',
+  'Treasury Office',
+  'Human Resources Office',
 ];
 
 export const toOfficeSlug = (office: string) =>

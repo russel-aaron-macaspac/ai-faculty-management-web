@@ -112,7 +112,7 @@ export default function ClearancePage() {
     );
   }, [records, searchTerm, currentUser]);
 
-  const pageTitle = isFacultyUser ? 'My Clearance Offices' : 'Clearance & Compliance';
+  const pageTitle = isFacultyUser ? 'Clearance Offices' : 'Clearance & Compliance';
   const pageSubtitle = isFacultyUser
     ? 'Track required office and department signatures for your clearance.'
     : 'Track and validate required employee documents.';
@@ -190,16 +190,6 @@ export default function ClearancePage() {
                <div className="space-y-2">
                 <label htmlFor="clearance-doc-name" className="text-sm font-medium">Document Name</label>
                 <Input id="clearance-doc-name" value={docName} onChange={e => setDocName(e.target.value)} required />
-               </div>
-               <div className="space-y-2">
-                <label htmlFor="clearance-file-upload" className="text-sm font-medium">File Upload</label>
-                 <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center hover:bg-slate-50 transition-colors cursor-pointer">
-                  <input id="clearance-file-upload" type="file" className="sr-only" />
-                    <FileText className="h-8 w-8 text-slate-400 mx-auto mb-2" />
-                    <span className="text-sm text-red-600 font-medium">Click to upload</span>
-                    <span className="text-sm text-slate-500"> or drag and drop</span>
-                    <p className="text-xs text-slate-400 mt-1">PDF, DOCX up to 10MB</p>
-                 </div>
                </div>
                <div className="flex justify-end pt-4">
                   <Button type="submit" disabled={uploading}>

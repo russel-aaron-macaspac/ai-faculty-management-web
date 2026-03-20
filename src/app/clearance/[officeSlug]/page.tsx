@@ -3,10 +3,11 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { FileText, Loader2, ScanLine, Save, UploadCloud, ArrowLeft } from 'lucide-react';
+import { AlertTriangle, FileText, Loader2, ScanLine, Save, UploadCloud, ArrowLeft, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { clearanceService } from '@/services/clearanceService';
 import { Clearance } from '@/types/clearance';
 import { fromOfficeSlug } from '@/lib/clearanceOffices';
@@ -27,6 +28,12 @@ type OfficeLocalState = {
   notes: string;
   documents: SubmittedDocument[];
   ocrText: string;
+};
+
+type DocumentValidationResult = {
+  isMatch: boolean;
+  confidence: number;
+  matchedKeywords: string[];
 };
 
 const emptyLocalState: OfficeLocalState = {
@@ -66,6 +73,37 @@ const getStatusClass = (status: Clearance['status']) => {
 
 const normalize = (value: string) => value.trim().toLowerCase().split(/\s+/).join(' ');
 
+const DOCUMENT_TYPE_RULES: Record<string, string[]> = {
+  'ICT Device Return Slip': ['device return', 'ict office', 'asset tag'],
+  'Library Clearance Form': ['library', 'borrowed books', 'return slip'],
+  'Laboratory Tools Return Checklist': ['laboratory', 'tools', 'checklist'],
+};
+
+const DOCUMENT_TYPES = Object.keys(DOCUMENT_TYPE_RULES);
+
+function validateDocument(selectedType: string, extractedText: string): DocumentValidationResult {
+  const normalizedText = extractedText.toLowerCase();
+  const expectedKeywords = DOCUMENT_TYPE_RULES[selectedType] || [];
+
+  if (expectedKeywords.length === 0) {
+    return {
+      isMatch: false,
+      confidence: 0,
+      matchedKeywords: [],
+    };
+  }
+
+  const matchedKeywords = expectedKeywords.filter((keyword) => normalizedText.includes(keyword));
+  const confidence = Math.round((matchedKeywords.length / expectedKeywords.length) * 100);
+  const requiredMatches = Math.ceil(expectedKeywords.length * 0.6);
+
+  return {
+    isMatch: matchedKeywords.length >= requiredMatches,
+    confidence,
+    matchedKeywords,
+  };
+}
+
 export default function OfficeClearanceDetailPage() {
   const params = useParams<{ officeSlug: string }>();
   const officeSlug = Array.isArray(params.officeSlug) ? params.officeSlug[0] : params.officeSlug;
@@ -79,13 +117,18 @@ export default function OfficeClearanceDetailPage() {
   const [officeState, setOfficeState] = useState<OfficeLocalState>(() => loadSavedState(storageKey));
   const [selectedDocumentFile, setSelectedDocumentFile] = useState<File | null>(null);
   const [selectedOCRFile, setSelectedOCRFile] = useState<File | null>(null);
+  const [selectedOCRDocumentType, setSelectedOCRDocumentType] = useState(DOCUMENT_TYPES[0]);
   const [isOCRLoading, setIsOCRLoading] = useState(false);
+  const [validationResult, setValidationResult] = useState<DocumentValidationResult | null>(null);
+
+  const handleOCRDocumentTypeChange = (value: string | null) => {
+    setSelectedOCRDocumentType(value ?? DOCUMENT_TYPES[0]);
+  };
 
   useEffect(() => {
     const raw = localStorage.getItem('user');
     if (raw) {
       try {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setCurrentUser(JSON.parse(raw) as StoredUser);
       } catch {
         // Ignore bad local storage payload.
@@ -147,6 +190,21 @@ export default function OfficeClearanceDetailPage() {
     saveLocalState({ ...officeState, documents: nextDocuments });
   };
 
+  const handleRemoveDocument = (indexToRemove: number) => {
+    const target = officeState.documents[indexToRemove];
+    if (!target) {
+      return;
+    }
+
+    const shouldRemove = globalThis.confirm(`Remove submitted document "${target.name}"?`);
+    if (!shouldRemove) {
+      return;
+    }
+
+    const nextDocuments = officeState.documents.filter((_, index) => index !== indexToRemove);
+    saveLocalState({ ...officeState, documents: nextDocuments });
+  };
+
   const handleRunOCR = async () => {
     if (!selectedOCRFile) {
       return;
@@ -154,12 +212,39 @@ export default function OfficeClearanceDetailPage() {
 
     setIsOCRLoading(true);
 
-    await new Promise((resolve) => setTimeout(resolve, 900));
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedOCRFile);
 
-    const generatedText = `OCR AI result for ${selectedOCRFile.name}\nDetected section: ${officeName}\nDetected timestamp: ${new Date().toLocaleString()}\nConfidence: 94%`;
+      const response = await fetch('/api/ocr', {
+        method: 'POST',
+        body: formData,
+      });
 
-    saveLocalState({ ...officeState, ocrText: generatedText });
-    setIsOCRLoading(false);
+      const payload = (await response.json()) as { text?: string; error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'OCR request failed');
+      }
+
+      const extractedText = payload.text || '';
+      const result = validateDocument(selectedOCRDocumentType, extractedText);
+
+      saveLocalState({
+        ...officeState,
+        ocrText: extractedText,
+      });
+      setValidationResult(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to process OCR.';
+      saveLocalState({
+        ...officeState,
+        ocrText: `OCR scan failed: ${message}`,
+      });
+      setValidationResult(null);
+    } finally {
+      setIsOCRLoading(false);
+    }
   };
 
   const status = ownOfficeRecord?.status || 'pending';
@@ -232,8 +317,21 @@ export default function OfficeClearanceDetailPage() {
                 ) : (
                   officeState.documents.map((document, index) => (
                     <div key={`${document.name}-${index}`} className="rounded-md border border-slate-200 p-2 text-sm">
-                      <div className="font-medium text-slate-700">{document.name}</div>
-                      <div className="text-xs text-slate-500">Submitted: {document.submittedAt}</div>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="font-medium text-slate-700">{document.name}</div>
+                          <div className="text-xs text-slate-500">Submitted: {document.submittedAt}</div>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleRemoveDocument(index)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Remove
+                        </Button>
+                      </div>
                     </div>
                   ))
                 )}
@@ -246,12 +344,48 @@ export default function OfficeClearanceDetailPage() {
               <CardTitle>OCR AI Scanner</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              <div className="space-y-2">
+                <label htmlFor="ocr-document-type" className="text-sm font-medium text-slate-700">Document Type</label>
+                <Select value={selectedOCRDocumentType} onValueChange={handleOCRDocumentTypeChange}>
+                  <SelectTrigger id="ocr-document-type" className="w-full">
+                    <SelectValue placeholder="Select document type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DOCUMENT_TYPES.map((type) => (
+                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <Input type="file" onChange={(event) => setSelectedOCRFile(event.target.files?.[0] || null)} />
               <Button onClick={() => void handleRunOCR()} disabled={isOCRLoading} className="bg-red-600 hover:bg-red-700">
                 {isOCRLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ScanLine className="mr-2 h-4 w-4" />} Run OCR AI Scan
               </Button>
 
               <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                <div className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Selected Type: <span className="text-slate-700 normal-case">{selectedOCRDocumentType}</span>
+                </div>
+
+                {validationResult && (
+                  <div className="mb-3 rounded-md border border-slate-200 bg-white p-3 text-sm">
+                    <p className="text-slate-700">
+                      Matched Document Type: {validationResult.isMatch ? '✅' : '❌'}
+                    </p>
+                    <p className="text-slate-700">Confidence Score: {validationResult.confidence}%</p>
+                    <p className="text-slate-700">
+                      Detected Keywords: {validationResult.matchedKeywords.length > 0 ? validationResult.matchedKeywords.join(', ') : 'None'}
+                    </p>
+                    {!validationResult.isMatch && (
+                      <p className="mt-2 flex items-center gap-1 text-amber-600">
+                        <AlertTriangle className="h-4 w-4" />
+                        Uploaded document does not match selected type
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <div className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
                   <FileText className="h-4 w-4" /> Extracted Text
                 </div>
