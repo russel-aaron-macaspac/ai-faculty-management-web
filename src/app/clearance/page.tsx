@@ -147,6 +147,27 @@ export default function ClearancePage() {
     );
   }, [records, searchTerm, currentUser]);
 
+  const facultyStatusTotals = useMemo(() => {
+    if (!isFacultyUser) {
+      return { approved: 0, rejected: 0, pending: 0 };
+    }
+
+    return filtered.reduce(
+      (totals, record) => {
+        if (record.status === 'approved') {
+          totals.approved += 1;
+        } else if (record.status === 'rejected') {
+          totals.rejected += 1;
+        } else {
+          // Treat submitted as pending for faculty progress tracking.
+          totals.pending += 1;
+        }
+        return totals;
+      },
+      { approved: 0, rejected: 0, pending: 0 }
+    );
+  }, [filtered, isFacultyUser]);
+
   const handleDecision = async (record: Clearance, decision: 'approved' | 'rejected' | 'pending') => {
   let rejectionReason: string | undefined;
 
@@ -297,6 +318,23 @@ export default function ClearancePage() {
           </Dialog>
         )}
       </div>
+
+      {isFacultyUser && (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Approved</p>
+            <p className="mt-2 text-3xl font-bold text-emerald-800">{facultyStatusTotals.approved}</p>
+          </div>
+          <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">Rejected</p>
+            <p className="mt-2 text-3xl font-bold text-rose-800">{facultyStatusTotals.rejected}</p>
+          </div>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Pending</p>
+            <p className="mt-2 text-3xl font-bold text-amber-800">{facultyStatusTotals.pending}</p>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex items-center gap-2">
