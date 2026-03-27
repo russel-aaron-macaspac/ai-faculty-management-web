@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { StatCard } from '@/components/dashboard/StatCards';
 import { AIAlerts } from '@/components/dashboard/AIAlerts';
 import { User } from '@/types/user';
-import { Clock, Calendar, Briefcase, FileCheck2, Key, AlertCircle } from 'lucide-react';
+import { Clock, Calendar, Briefcase, Key, AlertCircle } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
 import { Schedule } from '@/types/schedule';
+import { isApprovalOfficer } from '@/lib/roleConfig';
 
 interface RoomAccessTask {
   id: string;
@@ -18,16 +20,22 @@ interface RoomAccessTask {
 }
 
 export default function StaffDashboardPage() {
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
 
   useEffect(() => {
     const userStr = localStorage.getItem('user');
     if (userStr) {
+      const parsedUser = JSON.parse(userStr) as User;
+      if (isApprovalOfficer(parsedUser.role)) {
+        router.replace('/dashboard/approval');
+        return;
+      }
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setUser(JSON.parse(userStr));
+      setUser(parsedUser);
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     const loadSchedules = async () => {

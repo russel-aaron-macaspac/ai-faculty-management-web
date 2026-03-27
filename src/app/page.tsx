@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { isApprovalOfficer } from '@/lib/roleConfig';
+import { getDashboardPathForRole } from '@/lib/roleConfig';
 
 export default function Home() {
   const router = useRouter();
@@ -12,10 +12,7 @@ export default function Home() {
     if (userStr) {
       try {
         const user = JSON.parse(userStr);
-        if (user.role === 'admin') router.push('/dashboard/admin');
-        else if (user.role === 'faculty') router.push('/dashboard/faculty');
-        else if (user.role === 'staff' || isApprovalOfficer(user.role)) router.push('/dashboard/staff');
-        else router.push('/login');
+        router.push(getDashboardPathForRole(user.role));
       } catch {
         router.push('/login');
       }

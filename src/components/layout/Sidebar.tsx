@@ -22,8 +22,8 @@ interface SidebarProps {
   user: User | null;
 }
 
-const createMenuLinks = (label: string) => [
-  { href: '/dashboard/staff', label: 'Dashboard', icon: LayoutDashboard },
+const createMenuLinks = (dashboardPath: string, label: string) => [
+  { href: dashboardPath, label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/profile', label: 'My Profile', icon: UserSquare2 },
   { href: '/schedules', label: 'Work Schedule', icon: Calendar },
   { href: '/attendance', label: 'Attendance', icon: Clock },
@@ -71,7 +71,7 @@ export function Sidebar({ user }: Readonly<SidebarProps>) {
     // Dynamically create links for approval officers
     const officerConfig = getApprovalOfficerConfig(user?.role as string);
     if (officerConfig) {
-      links = createMenuLinks(officerConfig.label);
+      links = createMenuLinks(officerConfig.dashboardPath, officerConfig.label);
     }
   }
 

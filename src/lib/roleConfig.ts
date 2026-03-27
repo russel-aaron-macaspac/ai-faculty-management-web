@@ -11,6 +11,8 @@ export interface ApprovalOfficer {
   dashboardPath: string;
 }
 
+export const APPROVAL_OFFICER_DASHBOARD_PATH = '/dashboard/approval';
+
 /**
  * All approval officer roles - add new roles here only!
  * This config automatically generates:
@@ -25,91 +27,91 @@ export const APPROVAL_OFFICERS: ApprovalOfficer[] = [
     email: 'dlrc@sdca.edu.ph',
     name: 'DLRC Officer',
     label: 'DLRC Clearance Approvals',
-    dashboardPath: '/dashboard/staff',
+    dashboardPath: APPROVAL_OFFICER_DASHBOARD_PATH,
   },
   {
     id: 'pmo',
     email: 'pmo@sdca.edu.ph',
     name: 'PMO Officer',
     label: 'PMO Clearance Approvals',
-    dashboardPath: '/dashboard/staff',
+    dashboardPath: APPROVAL_OFFICER_DASHBOARD_PATH,
   },
   {
     id: 'laboratory',
     email: 'laboratory@sdca.edu.ph',
     name: 'Laboratory Officer',
     label: 'Laboratory Clearance Approvals',
-    dashboardPath: '/dashboard/staff',
+    dashboardPath: APPROVAL_OFFICER_DASHBOARD_PATH,
   },
   {
     id: 'ict',
     email: 'ict@sdca.edu.ph',
     name: 'ICT Officer',
     label: 'ICT Clearance Approvals',
-    dashboardPath: '/dashboard/staff',
+    dashboardPath: APPROVAL_OFFICER_DASHBOARD_PATH,
   },
   {
     id: 'ceso',
     email: 'ceso@sdca.edu.ph',
     name: 'CESO Officer',
     label: 'CESO Clearance Approvals',
-    dashboardPath: '/dashboard/staff',
+    dashboardPath: APPROVAL_OFFICER_DASHBOARD_PATH,
   },
   {
     id: 'programchair',
     email: 'programchair@sdca.edu.ph',
     name: 'Program Chair Officer',
     label: 'Program Chair Clearance Approvals',
-    dashboardPath: '/dashboard/staff',
+    dashboardPath: APPROVAL_OFFICER_DASHBOARD_PATH,
   },
   {
     id: 'dean',
     email: 'dean@sdca.edu.ph',
     name: 'Dean Officer',
     label: 'Dean Clearance Approvals',
-    dashboardPath: '/dashboard/staff',
+    dashboardPath: APPROVAL_OFFICER_DASHBOARD_PATH,
   },
   {
     id: 'registrar',
     email: 'registrar@sdca.edu.ph',
     name: 'Registrar Officer',
     label: 'Registrar Clearance Approvals',
-    dashboardPath: '/dashboard/staff',
+    dashboardPath: APPROVAL_OFFICER_DASHBOARD_PATH,
   },
   {
     id: 'ovprel',
     email: 'ovprel@sdca.edu.ph',
     name: 'OVPREL Officer',
     label: 'OVPREL Clearance Approvals',
-    dashboardPath: '/dashboard/staff',
+    dashboardPath: APPROVAL_OFFICER_DASHBOARD_PATH,
   },
   {
     id: 'ovpaa',
     email: 'ovpaa@sdca.edu.ph',
     name: 'OVPAA Officer',
     label: 'OVPAA Clearance Approvals',
-    dashboardPath: '/dashboard/staff',
+    dashboardPath: APPROVAL_OFFICER_DASHBOARD_PATH,
   },
   {
     id: 'account',
     email: 'account@sdca.edu.ph',
     name: 'Accounting Officer',
     label: 'Accounting Clearance Approvals',
-    dashboardPath: '/dashboard/staff',
+    dashboardPath: APPROVAL_OFFICER_DASHBOARD_PATH,
   },
   {
     id: 'treasury',
     email: 'treasury@sdca.edu.ph',
     name: 'Treasury Officer',
     label: 'Treasury Clearance Approvals',
-    dashboardPath: '/dashboard/staff',
+    dashboardPath: APPROVAL_OFFICER_DASHBOARD_PATH,
   },
   {
     id: 'hro',
     email: 'hro@sdca.edu.ph',
     name: 'HRO Officer',
     label: 'HRO Clearance Approvals',
-    dashboardPath: '/dashboard/staff',
+    dashboardPath: APPROVAL_OFFICER_DASHBOARD_PATH,
   },
 ];
 
@@ -125,6 +127,30 @@ export const isApprovalOfficer = (role: string | undefined): boolean => {
  */
 export const getApprovalOfficerConfig = (roleId: string): ApprovalOfficer | undefined => {
   return APPROVAL_OFFICERS.find(o => o.id === roleId);
+};
+
+/**
+ * Helper: Resolve default dashboard path for any role
+ */
+export const getDashboardPathForRole = (role: string | undefined): string => {
+  if (role === 'admin') {
+    return '/dashboard/admin';
+  }
+
+  if (role === 'faculty') {
+    return '/dashboard/faculty';
+  }
+
+  if (role === 'staff') {
+    return '/dashboard/staff';
+  }
+
+  const officer = role ? getApprovalOfficerConfig(role) : undefined;
+  if (officer) {
+    return officer.dashboardPath;
+  }
+
+  return '/login';
 };
 
 /**

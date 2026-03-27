@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { staffService } from '@/services/staffService';
 import { Staff } from '@/types/staff';
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,8 @@ import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Pencil, Trash2, Loader2, Search } from 'lucide-react';
+import { authService } from '@/services/authService';
+import { getDashboardPathForRole } from '@/lib/roleConfig';
 
 const staffSchema = z.object({
   name: z.string().min(2, { message: 'Name is required' }),
@@ -24,6 +27,9 @@ const staffSchema = z.object({
 });
 
 export default function StaffPage() {
+  const router = useRouter();
+  const [accessChecked, setAccessChecked] = useState(false);
+  const [isAuthorized, setIsAuthorized] = useState(false);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -50,9 +56,44 @@ export default function StaffPage() {
   };
 
   useEffect(() => {
+    const currentUser = authService.getCachedUser();
+
+    if (!currentUser) {
+      router.replace('/login');
+      return;
+    }
+
+    const canAccess = currentUser.role === 'admin' || currentUser.role === 'staff';
+    if (!canAccess) {
+      router.replace(getDashboardPathForRole(currentUser.role));
+      return;
+    }
+
+    setIsAuthorized(true);
+    setAccessChecked(true);
+  }, [router]);
+
+  useEffect(() => {
+    if (!isAuthorized) {
+      return;
+    }
+
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
-  }, []);
+  }, [isAuthorized]);
+
+  if (!accessChecked) {
+    return (
+      <div className="flex h-full items-center justify-center text-slate-500">
+        <Loader2 className="mr-2 h-5 w-5 animate-spin text-red-500" />
+        Checking access...
+      </div>
+    );
+  }
+
+  if (!isAuthorized) {
+    return null;
+  }
 
   const onSubmit = async (values: z.infer<typeof staffSchema>) => {
     if (editingId) {

@@ -14,6 +14,7 @@ type StoredUser = {
   id?: string | number;
   name?: string;
   full_name?: string;
+  role?: string;
 };
 
 export default function AttendancePage() {
@@ -66,9 +67,15 @@ export default function AttendancePage() {
     });
   }, [currentUser, records]);
 
-  const filtered = accountRecords.filter((record) =>
-    record.employeeName.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const isAdminUser = currentUser?.role === 'admin';
+
+  const visibleRecords = isAdminUser ? records : accountRecords;
+
+  const filtered = isAdminUser
+    ? visibleRecords.filter((record) =>
+      record.employeeName.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    : visibleRecords;
 
   return (
     <div className="space-y-6">
@@ -89,15 +96,19 @@ export default function AttendancePage() {
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-            <Search className="h-5 w-5 text-slate-400" />
-            <Input
-              placeholder="Search by employee name..."
-              className="max-w-sm border-0 focus-visible:ring-0 px-0"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
+          {isAdminUser ? (
+            <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+              <Search className="h-5 w-5 text-slate-400" />
+              <Input
+                placeholder="Search by employee name..."
+                className="max-w-sm border-0 focus-visible:ring-0 px-0"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          ) : (
+            <div className="text-sm text-slate-500">Showing your attendance records only.</div>
+          )}
           <div className="flex items-center gap-2">
             <span className="text-sm text-slate-500">Date:</span>
             <Input

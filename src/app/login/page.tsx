@@ -18,7 +18,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { authService } from '@/services/authService';
-import { isApprovalOfficer } from '@/lib/roleConfig';
+import { getDashboardPathForRole } from '@/lib/roleConfig';
 import { Loader2 } from 'lucide-react';
 
 const loginSchema = z.object({
@@ -54,17 +54,7 @@ export default function LoginPage() {
     try {
       const response = await authService.login(values.email, values.password);
       localStorage.setItem('user', JSON.stringify(response.user));
-
-      // Redirect based on role
-      if (response.user.role === 'admin') {
-        router.push('/dashboard/admin');
-      } else if (response.user.role === 'faculty') {
-        router.push('/dashboard/faculty');
-      } else if (response.user.role === 'staff' || isApprovalOfficer(response.user.role)) {
-        router.push('/dashboard/staff');
-      } else {
-        router.push('/');
-      }
+      router.push(getDashboardPathForRole(response.user.role));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Login failed';
       setError(message);
