@@ -12,8 +12,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CalendarPlus, Trash2, Loader2, Search, AlertTriangle, Key, AlertCircle } from 'lucide-react';
+import { CalendarPlus, Trash2, Loader2, Search, AlertTriangle, Key, AlertCircle, Edit2 } from 'lucide-react';
 import { User } from '@/types/user';
+import { parseTimeToMinutes, formatTimeToTwelveHour, subtractMinutesFromTime } from '@/lib/timeUtils';
 
 interface RoomAccessTask {
   id: string;
@@ -35,11 +36,22 @@ const scheduleSchema = z.object({
   endTime: z.string().min(4, { message: 'End time is required' }),
 });
 
+const editScheduleSchema = z.object({
+  type: z.enum(['class', 'shift']),
+  subjectOrRole: z.string().min(2, { message: 'Subject or Role is required' }),
+  room: z.string().optional(),
+  dayOfWeek: z.string().min(1, { message: 'Day is required' }),
+  startTime: z.string().min(4, { message: 'Start time is required' }),
+  endTime: z.string().min(4, { message: 'End time is required' }),
+});
+
 export default function SchedulesPage() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
@@ -55,6 +67,18 @@ export default function SchedulesPage() {
     defaultValues: {
       employeeId: '',
       employeeName: '',
+      type: 'class',
+      subjectOrRole: '',
+      room: '',
+      dayOfWeek: 'Monday',
+      startTime: '',
+      endTime: '',
+    },
+  });
+
+  const editForm = useForm<z.infer<typeof editScheduleSchema>>({
+    resolver: zodResolver(editScheduleSchema),
+    defaultValues: {
       type: 'class',
       subjectOrRole: '',
       room: '',
@@ -83,6 +107,28 @@ export default function SchedulesPage() {
     loadData();
   };
 
+  const onEditSubmit = async (values: z.infer<typeof editScheduleSchema>) => {
+    if (!editingScheduleId) return;
+    await scheduleService.updateSchedule(editingScheduleId, values);
+    setIsEditOpen(false);
+    editForm.reset();
+    setEditingScheduleId(null);
+    loadData();
+  };
+
+  const handleEdit = (schedule: Schedule) => {
+    setEditingScheduleId(schedule.id);
+    editForm.reset({
+      type: schedule.type,
+      subjectOrRole: schedule.subjectOrRole,
+      room: schedule.room || '',
+      dayOfWeek: schedule.dayOfWeek,
+      startTime: schedule.startTime,
+      endTime: schedule.endTime,
+    });
+    setIsEditOpen(true);
+  };
+
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this schedule?')) {
       await scheduleService.deleteSchedule(id);
@@ -102,51 +148,19 @@ export default function SchedulesPage() {
   });
 
   const roomAccessTasks = useMemo(() => {
-    const parseMinutes = (time: string) => {
-      const [hour, minute] = time.split(':').map(Number);
-      if (Number.isNaN(hour) || Number.isNaN(minute)) {
-        return null;
-      }
-      return hour * 60 + minute;
-    };
-
-    const formatHourMinute = (time: string) => {
-      const minutes = parseMinutes(time);
-      if (minutes === null) {
-        return 'N/A';
-      }
-
-      const hour24 = Math.floor(minutes / 60);
-      const minute = minutes % 60;
-      const period = hour24 >= 12 ? 'PM' : 'AM';
-      const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
-      return `${hour12}:${minute.toString().padStart(2, '0')} ${period}`;
-    };
-
-    const subtractMinutes = (time: string, minutes: number) => {
-      const parsed = parseMinutes(time);
-      if (parsed === null) {
-        return time;
-      }
-      const adjusted = Math.max(0, parsed - minutes);
-      const hours = Math.floor(adjusted / 60);
-      const mins = adjusted % 60;
-      return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
-    };
-
     const currentDay = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 
     return schedules
       .filter((schedule) => schedule.type === 'class' && schedule.dayOfWeek === currentDay)
-      .sort((a, b) => (parseMinutes(a.startTime) ?? 0) - (parseMinutes(b.startTime) ?? 0))
+      .sort((a, b) => (parseTimeToMinutes(a.startTime) ?? 0) - (parseTimeToMinutes(b.startTime) ?? 0))
       .map((classSchedule, index) => {
-        const prepTime = subtractMinutes(classSchedule.startTime, 5);
+        const prepTime = subtractMinutesFromTime(classSchedule.startTime, 5);
         return {
           id: `room-${index}`,
           room: classSchedule.room || `Room ${index + 1}`,
           professor: classSchedule.employeeName || 'Professor',
-          prepTime: formatHourMinute(prepTime),
-          classTime: formatHourMinute(classSchedule.startTime),
+          prepTime: formatTimeToTwelveHour(prepTime),
+          classTime: formatTimeToTwelveHour(classSchedule.startTime),
           subject: classSchedule.subjectOrRole || 'Class',
         } as RoomAccessTask;
       });
@@ -243,6 +257,79 @@ export default function SchedulesPage() {
             </DialogContent>
           </Dialog>
         )}
+
+        {user?.role === 'admin' && (
+          <Dialog open={isEditOpen} onOpenChange={(open) => {
+            setIsEditOpen(open);
+            if (!open) {
+              editForm.reset();
+              setEditingScheduleId(null);
+            }
+          }}>
+            <DialogContent className="sm:max-w-[425px]">
+               <DialogHeader>
+                  <DialogTitle>Edit Schedule</DialogTitle>
+               </DialogHeader>
+               <Form {...editForm}>
+                 <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4">
+                   <FormField control={editForm.control} name="type" render={({ field }) => (
+                     <FormItem>
+                       <FormLabel>Schedule Type</FormLabel>
+                       <Select onValueChange={field.onChange} value={field.value}>
+                         <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                         <SelectContent>
+                           <SelectItem value="class">Class (Faculty)</SelectItem>
+                           <SelectItem value="shift">Shift (Staff)</SelectItem>
+                         </SelectContent>
+                       </Select>
+                       <FormMessage />
+                     </FormItem>
+                   )} />
+
+                   <div className="grid grid-cols-2 gap-4">
+                      <FormField control={editForm.control} name="subjectOrRole" render={({ field }) => (
+                        <FormItem><FormLabel>Subject / Role</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <FormField control={editForm.control} name="room" render={({ field }) => (
+                        <FormItem><FormLabel>Room (Optional)</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                   </div>
+
+                   <FormField control={editForm.control} name="dayOfWeek" render={({ field }) => (
+                     <FormItem>
+                       <FormLabel>Day of Week</FormLabel>
+                       <Select onValueChange={field.onChange} value={field.value}>
+                         <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                         <SelectContent>
+                           {['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(d => (
+                              <SelectItem key={d} value={d}>{d}</SelectItem>
+                           ))}
+                         </SelectContent>
+                       </Select>
+                       <FormMessage />
+                     </FormItem>
+                   )} />
+
+                   <div className="grid grid-cols-2 gap-4">
+                      <FormField control={editForm.control} name="startTime" render={({ field }) => (
+                        <FormItem><FormLabel>Start Time</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <FormField control={editForm.control} name="endTime" render={({ field }) => (
+                        <FormItem><FormLabel>End Time</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                   </div>
+
+                   <div className="flex justify-end pt-4">
+                      <Button type="submit" disabled={editForm.formState.isSubmitting}>
+                        {editForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Save Changes
+                      </Button>
+                   </div>
+                 </form>
+               </Form>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       {user?.role === 'staff' && (
@@ -326,7 +413,7 @@ export default function SchedulesPage() {
                   <div className="text-xs text-slate-500">{s.dayOfWeek}</div>
                 </TableCell>
                 <TableCell>
-                  <div className="text-sm">{s.startTime} - {s.endTime}</div>
+                  <div className="text-sm">{formatTimeToTwelveHour(s.startTime)} - {formatTimeToTwelveHour(s.endTime)}</div>
                   <div className="text-xs text-slate-500">{s.room || 'N/A'}</div>
                 </TableCell>
                 <TableCell>
@@ -342,9 +429,14 @@ export default function SchedulesPage() {
                 </TableCell>
                 {user?.role === 'admin' && (
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(s.id)}>
-                      <Trash2 className="h-4 w-4 text-slate-500 hover:text-rose-600" />
-                    </Button>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="ghost" size="icon" onClick={() => handleEdit(s)}>
+                        <Edit2 className="h-4 w-4 text-slate-500 hover:text-blue-600" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(s.id)}>
+                        <Trash2 className="h-4 w-4 text-slate-500 hover:text-rose-600" />
+                      </Button>
+                    </div>
                   </TableCell>
                 )}
               </TableRow>

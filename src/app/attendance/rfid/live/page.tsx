@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Radio, Sparkles, ShieldCheck, CalendarDays, Clock3 } from 'lucide-react';
+import { formatTimeToTwelveHour } from '@/lib/timeUtils';
 
 export default function LiveRFIDPage() {
   const { user, isLoading } = useRoleBasedAccess({
@@ -181,8 +182,8 @@ export default function LiveRFIDPage() {
               <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadgeClass}`}>
                 {latestAttendance?.status || 'no record'}
               </span>
-              <p className="text-sm text-slate-700">Time-in: {latestAttendance?.timeIn || '--:--'}</p>
-              <p className="text-sm text-slate-700">Time-out: {latestAttendance?.timeOut || '--:--'}</p>
+              <p className="text-sm text-slate-700">Time-in: {latestAttendance?.timeIn ? formatTimeToTwelveHour(latestAttendance.timeIn) : '--:--'}</p>
+              <p className="text-sm text-slate-700">Time-out: {latestAttendance?.timeOut ? formatTimeToTwelveHour(latestAttendance.timeOut) : '--:--'}</p>
             </CardContent>
           </Card>
 
@@ -197,7 +198,7 @@ export default function LiveRFIDPage() {
                 schedules.slice(0, 2).map((item) => (
                   <div key={item.id} className="rounded-md border border-slate-200 p-2">
                     <p className="text-sm font-medium text-slate-800">{item.subjectOrRole}</p>
-                    <p className="text-xs text-slate-500">{item.startTime} - {item.endTime} {item.room ? `| ${item.room}` : ''}</p>
+                    <p className="text-xs text-slate-500">{formatTimeToTwelveHour(item.startTime)} - {formatTimeToTwelveHour(item.endTime)} {item.room ? `| ${item.room}` : ''}</p>
                   </div>
                 ))
               )}

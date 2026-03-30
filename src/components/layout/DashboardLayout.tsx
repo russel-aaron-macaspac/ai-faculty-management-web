@@ -6,7 +6,7 @@ import { Navbar } from './Navbar';
 import { User } from '@/types/user';
 import { useRouter } from 'next/navigation';
 
-export function DashboardLayout({ children }: { children: React.ReactNode }) {
+export function DashboardLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -38,7 +38,9 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     <div className="flex h-screen overflow-hidden bg-slate-50">
       {/* Mobile Sidebar overlay */}
       {sidebarOpen && (
-        <div 
+        <button
+          type="button"
+          aria-label="Close sidebar overlay"
           className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm md:hidden"
           onClick={() => setSidebarOpen(false)}
         />
@@ -51,7 +53,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
       {/* Main content */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Navbar onMenuClick={() => setSidebarOpen(true)} />
+        <Navbar onMenuClick={() => setSidebarOpen(true)} userId={user.id} />
         <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
           <div className="mx-auto max-w-7xl animate-in fade-in zoom-in-95 duration-300">
              {children}

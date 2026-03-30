@@ -9,6 +9,7 @@ import { Clock, Calendar, Briefcase, Key, AlertCircle } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
 import { Schedule } from '@/types/schedule';
 import { isApprovalOfficer } from '@/lib/roleConfig';
+import { parseTimeToMinutes, formatTimeToTwelveHour, subtractMinutesFromTime, getTimeStatus } from '@/lib/timeUtils';
 
 interface RoomAccessTask {
   id: string;
@@ -47,27 +48,6 @@ export default function StaffDashboardPage() {
   }, []);
 
   const todayStats = useMemo(() => {
-    const parseMinutes = (time: string) => {
-      const [hour, minute] = time.split(':').map(Number);
-      if (Number.isNaN(hour) || Number.isNaN(minute)) {
-        return null;
-      }
-      return hour * 60 + minute;
-    };
-
-    const formatHourMinute = (time: string) => {
-      const minutes = parseMinutes(time);
-      if (minutes === null) {
-        return 'N/A';
-      }
-
-      const hour24 = Math.floor(minutes / 60);
-      const minute = minutes % 60;
-      const period = hour24 >= 12 ? 'PM' : 'AM';
-      const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
-      return `${hour12}:${minute.toString().padStart(2, '0')} ${period}`;
-    };
-
     const currentDay = new Date().toLocaleDateString('en-US', { weekday: 'long' });
     const now = new Date();
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
@@ -84,11 +64,11 @@ export default function StaffDashboardPage() {
 
         return !!user && (user as User & { full_name?: string | null }).full_name === schedule.employeeName;
       })
-      .sort((a, b) => (parseMinutes(a.startTime) ?? 0) - (parseMinutes(b.startTime) ?? 0));
+      .sort((a, b) => (parseTimeToMinutes(a.startTime) ?? 0) - (parseTimeToMinutes(b.startTime) ?? 0));
 
     const totalMinutes = ownShiftsToday.reduce((total, schedule) => {
-      const start = parseMinutes(schedule.startTime);
-      const end = parseMinutes(schedule.endTime);
+      const start = parseTimeToMinutes(schedule.startTime);
+      const end = parseTimeToMinutes(schedule.endTime);
 
       if (start === null || end === null || end <= start) {
         return total;
@@ -98,13 +78,13 @@ export default function StaffDashboardPage() {
     }, 0);
 
     const currentShift = ownShiftsToday.find((schedule) => {
-      const start = parseMinutes(schedule.startTime);
-      const end = parseMinutes(schedule.endTime);
+      const start = parseTimeToMinutes(schedule.startTime);
+      const end = parseTimeToMinutes(schedule.endTime);
       return start !== null && end !== null && nowMinutes >= start && nowMinutes < end;
     });
 
     const nextShift = ownShiftsToday.find((schedule) => {
-      const start = parseMinutes(schedule.startTime);
+      const start = parseTimeToMinutes(schedule.startTime);
       return start !== null && start > nowMinutes;
     });
 
@@ -114,42 +94,13 @@ export default function StaffDashboardPage() {
     return {
       currentShift: currentShift?.subjectOrRole ?? 'Maintenance Duty',
       totalHoursLabel,
-      nextShiftTime: nextShift ? formatHourMinute(nextShift.startTime) : 'No more today',
+      nextShiftTime: nextShift ? formatTimeToTwelveHour(nextShift.startTime) : 'No more today',
       nextShiftRole: nextShift?.subjectOrRole || 'No upcoming shift',
+      ownShiftsToday,
     };
   }, [schedules, user]);
 
   const roomAccessTasks = useMemo(() => {
-    const parseMinutes = (time: string) => {
-      const [hour, minute] = time.split(':').map(Number);
-      if (Number.isNaN(hour) || Number.isNaN(minute)) {
-        return null;
-      }
-      return hour * 60 + minute;
-    };
-
-    const formatHourMinute = (time: string) => {
-      const minutes = parseMinutes(time);
-      if (minutes === null) {
-        return 'N/A';
-      }
-
-      const hour24 = Math.floor(minutes / 60);
-      const minute = minutes % 60;
-      const period = hour24 >= 12 ? 'PM' : 'AM';
-      const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
-      return `${hour12}:${minute.toString().padStart(2, '0')} ${period}`;
-    };
-
-    const subtractMinutes = (time: string, minutes: number) => {
-      const parsed = parseMinutes(time);
-      if (parsed === null) return time;
-      const adjusted = Math.max(0, parsed - minutes);
-      const hours = Math.floor(adjusted / 60);
-      const mins = adjusted % 60;
-      return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
-    };
-
     const currentDay = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 
     // Get all faculty classes for today
@@ -157,17 +108,17 @@ export default function StaffDashboardPage() {
       .filter((schedule) => {
         return schedule.type === 'class' && schedule.dayOfWeek === currentDay;
       })
-      .sort((a, b) => (parseMinutes(a.startTime) ?? 0) - (parseMinutes(b.startTime) ?? 0));
+      .sort((a, b) => (parseTimeToMinutes(a.startTime) ?? 0) - (parseTimeToMinutes(b.startTime) ?? 0));
 
     // Generate room access tasks (5 minutes before each class)
     const tasks: RoomAccessTask[] = facultyClassesToday.map((classSchedule, index) => {
-      const prepTime = subtractMinutes(classSchedule.startTime, 5);
+      const prepTime = subtractMinutesFromTime(classSchedule.startTime, 5);
       return {
         id: `room-${index}`,
         room: classSchedule.room || `Room ${index + 1}`,
         professor: classSchedule.employeeName || 'Professor',
-        prepTime: formatHourMinute(prepTime),
-        classTime: formatHourMinute(classSchedule.startTime),
+        prepTime: formatTimeToTwelveHour(prepTime),
+        classTime: formatTimeToTwelveHour(classSchedule.startTime),
         subject: classSchedule.subjectOrRole || 'Class',
       };
     });
@@ -246,14 +197,30 @@ export default function StaffDashboardPage() {
           </div>
 
           <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-            <h3 className="font-semibold text-slate-800 mb-4">Maintenance Shift Schedule</h3>
-            <div className="space-y-3">
-              {['Monday: 06:00 - 17:00 (Maintenance & Facilities)', 'Tuesday: 06:00 - 17:00 (Maintenance & Facilities)', 'Wednesday: 06:00 - 17:00 (Maintenance & Facilities)', 'Thursday: 06:00 - 17:00 (Maintenance & Facilities)', 'Friday: 06:00 - 14:00 (Morning Maintenance)'].map((item, i) => (
-                <div key={i} className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-lg border border-slate-100">
-                  <span className="text-sm font-medium text-slate-700">{item}</span>
-                </div>
-              ))}
-            </div>
+            <h3 className="font-semibold text-slate-800 mb-4">My Shift Schedule</h3>
+            {todayStats.ownShiftsToday.length === 0 ? (
+              <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-lg border border-slate-200 text-center justify-center">
+                <p className="text-sm text-slate-600">No shifts scheduled for today</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {todayStats.ownShiftsToday.map((shift) => {
+                  const status = getTimeStatus(shift.startTime, shift.endTime);
+                  return (
+                    <div key={shift.id} className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-lg border border-slate-100 transition-colors">
+                      <div className="flex-1">
+                        <div className="font-medium text-slate-800">
+                          {formatTimeToTwelveHour(shift.startTime)} - {formatTimeToTwelveHour(shift.endTime)} ({shift.subjectOrRole})
+                        </div>
+                      </div>
+                      <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${status.color}`}>
+                        {status.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 

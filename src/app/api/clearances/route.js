@@ -1,6 +1,43 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { NextResponse } from "next/server";
 
+const OFFICE_LOOKUP_COLUMNS = ['name', 'office_name', 'title'];
+
+const normalizeOffice = (value = '') =>
+  value
+    .toLowerCase()
+    .trim()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .join(' ');
+
+async function loadOffices(supabase) {
+  for (const labelColumn of OFFICE_LOOKUP_COLUMNS) {
+    const { data, error } = await supabase
+      .from('offices')
+      .select(`office_id, ${labelColumn}`)
+      .order('office_id', { ascending: true });
+
+    if (!error && data) {
+      return data.map((row) => ({
+        office_id: String(row.office_id),
+        label: row[labelColumn],
+      }));
+    }
+  }
+
+  return [];
+}
+
+async function findOfficeIdByName(supabase, officeName) {
+  const normalizedTarget = normalizeOffice(officeName);
+
+  const offices = await loadOffices(supabase);
+  const matched = offices.find((office) => normalizeOffice(office.label) === normalizedTarget);
+
+  return matched?.office_id ?? null;
+}
+
 export async function GET(request) {
   try {
     const supabase = createSupabaseAdminClient();
@@ -8,24 +45,9 @@ export async function GET(request) {
     const userId = searchParams.get("userId");
 
     let query = supabase
-      .from("clearance_documents")
+      .from("clearances")
       .select(
-        `
-        document_id,
-        status,
-        submitted_at,
-        rejection_reason,
-        user:users!fk_document_user (
-          user_id,
-          first_name,
-          middle_name,
-          last_name
-        ),
-        category:clearance_categories (
-          category_id,
-          name
-        )
-        `
+        `document_id,status,submitted_at,rejection_reason,user_id,office_id,reviewed_by,reviewed_at`
       )
       .order("document_id", { ascending: false });
 
@@ -43,21 +65,42 @@ export async function GET(request) {
       );
     }
 
-    const formatted = data.map((d) => {
-      const fullName = d.user
-        ? [d.user.first_name, d.user.middle_name, d.user.last_name]
-            .filter(Boolean)
-            .join(" ")
-        : "Unknown";
+    const userIds = Array.from(new Set((data || []).map((d) => d.user_id).filter(Boolean)));
+
+    const usersRes = userIds.length
+      ? await supabase
+          .from('users')
+          .select('user_id,first_name,middle_name,last_name')
+          .in('user_id', userIds)
+      : { data: [], error: null };
+
+    const officeMap = new Map();
+    const offices = await loadOffices(supabase);
+    offices.forEach((office) => {
+      officeMap.set(String(office.office_id), office.label || 'Unknown Office');
+    });
+
+    const userMap = new Map(
+      (usersRes.data || []).map((u) => [
+        String(u.user_id),
+        [u.first_name, u.middle_name, u.last_name].filter(Boolean).join(' '),
+      ])
+    );
+
+    const formatted = (data || []).map((d) => {
+      const fullName = userMap.get(String(d.user_id)) || 'Unknown';
+      const officeName = officeMap.get(String(d.office_id)) || 'Unknown Office';
 
       return {
         id:                String(d.document_id),
-        employeeId:        String(d.user?.user_id ?? ""),
+        employeeId:        String(d.user_id ?? ""),
         employeeName:      fullName,
-        requiredDocument:  d.category?.name ?? "",
+        requiredDocument:  officeName,
         status:            d.status ?? "pending",
         submissionDate:    d.submitted_at ? d.submitted_at.split("T")[0] : null,
         validationWarning: d.rejection_reason ?? null,
+        reviewedBy:        d.reviewed_by ? String(d.reviewed_by) : undefined,
+        reviewedAt:        d.reviewed_at ?? undefined,
       };
     });
 
@@ -108,26 +151,20 @@ export async function POST(request) {
       );
     }
 
-    const { data: category, error: categoryError } = await supabase
-      .from("clearance_categories")
-      .select("category_id")
-      .ilike("name", officeName.trim())
-      .single();
+    const officeId = await findOfficeIdByName(supabase, officeName);
 
-    console.log("[CLEARANCES POST CATEGORY]", { category, categoryError });
-
-    if (categoryError || !category) {
+    if (!officeId) {
       return NextResponse.json(
-        { error: `No clearance category found matching "${officeName}"` },
+        { error: `No office found matching "${officeName}"` },
         { status: 404 }
       );
     }
 
     const { data: existing } = await supabase
-      .from("clearance_documents")
+      .from("clearances")
       .select("document_id, status")
       .eq("user_id", employeeId)
-      .eq("category_id", category.category_id)
+      .eq("office_id", officeId)
       .maybeSingle();
 
     if (existing) {
@@ -137,23 +174,31 @@ export async function POST(request) {
       );
     }
 
+    const insertPayload = {
+      user_id: employeeId,
+      office_id: officeId,
+      status: 'submitted',
+      submitted_at: new Date().toISOString(),
+    };
+
+    // Keep insert schema-safe: only include optional fields when explicitly provided.
+    if (academicYear) {
+      insertPayload.academic_year = academicYear;
+    }
+    if (semester) {
+      insertPayload.semester = semester;
+    }
+
     const { data: newDocument, error: insertError } = await supabase
-      .from("clearance_documents")
-      .insert({
-        user_id:      employeeId,
-        category_id:  category.category_id,
-        academic_year: academicYear ?? null,
-        semester:      semester ?? null,
-        status:        "submitted",
-        submitted_at:  new Date().toISOString(),
-      })
+      .from("clearances")
+      .insert(insertPayload)
       .select("document_id")
       .single();
 
     if (insertError) {
       console.error("[CLEARANCES POST ERROR]", insertError);
       return NextResponse.json(
-        { error: "Failed to submit clearance document" },
+        { error: insertError.message || "Failed to submit clearance document" },
         { status: 500 }
       );
     }

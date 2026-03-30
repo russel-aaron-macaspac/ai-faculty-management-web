@@ -7,67 +7,29 @@ import { AlertTriangle, FileText, Loader2, ScanLine, Save, ArrowLeft, CheckCircl
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { clearanceService } from '@/services/clearanceService';
-import { Clearance } from '@/types/clearance';
-
-type SubmittedDocument = {
-  name: string;
-  submittedAt: string;
-};
-
-type DocumentValidationResult = {
-  isMatch: boolean;
-  confidence: number;
-  matchedKeywords: string[];
-};
-
-type DocumentTypeRules = Record<string, string[]>;
-
-const DOCUMENT_TYPE_RULES: DocumentTypeRules = {
-  'ICT Device Return Slip': ['device return', 'ict office', 'asset tag'],
-  'Library Clearance Form': ['library', 'borrowed books', 'return slip'],
-  'Laboratory Tools Return Checklist': ['laboratory', 'tools', 'checklist'],
-  'CESO Completion Certificate': ['ceso', 'completion certificate', 'completed'],
-  'Financial Clearance': ['financial clearance', 'cashier', 'no outstanding balance'],
-  'PMO Equipment Return': ['pmo', 'equipment return', 'property management office'],
-  'Program Chair Clearance': ['program chair', 'clearance', 'department'],
-  'Borrowed Book Slip': ['borrowed book slip', 'borrowed books slip', 'borrowed book', 'library', 'book return', 'dlrc'],
-};
-
-const DOCUMENT_TYPES = Object.keys(DOCUMENT_TYPE_RULES);
-
-const normalize = (value: string) => value.trim().toLowerCase().split(/\s+/).join(' ');
-
-function validateDocument(selectedType: string, extractedText: string): DocumentValidationResult {
-  const normalizedText = normalize(extractedText);
-  const expectedKeywords = DOCUMENT_TYPE_RULES[selectedType] || [];
-
-  if (expectedKeywords.length === 0) {
-    return {
-      isMatch: false,
-      confidence: 0,
-      matchedKeywords: [],
-    };
-  }
-
-  const matchedKeywords = expectedKeywords.filter((keyword) => normalizedText.includes(normalize(keyword)));
-  const confidence = Math.round((matchedKeywords.length / expectedKeywords.length) * 100);
-  const requiredMatches = Math.ceil(expectedKeywords.length * 0.6);
-
-  return {
-    isMatch: matchedKeywords.length >= requiredMatches,
-    confidence,
-    matchedKeywords,
-  };
-}
+import { Clearance, ClearanceNote } from '@/types/clearance';
+import { StoredUser } from '@/lib/stringUtils';
+import { 
+  DOCUMENT_TYPES, 
+  validateDocument,
+  SubmittedDocument,
+  DocumentValidationResult 
+} from '@/lib/documentTypes';
+import { format } from 'date-fns';
+import { getRequiredOfficeForOfficer } from '@/lib/roleConfig';
 
 export default function FacultyDetailPage() {
   const params = useParams<{ employeeId: string }>();
   const employeeId = Array.isArray(params.employeeId) ? params.employeeId[0] : params.employeeId;
 
+  const [currentUser, setCurrentUser] = useState<StoredUser | null>(null);
   const [records, setRecords] = useState<Clearance[]>([]);
   const [loading, setLoading] = useState(true);
+  const [notes, setNotes] = useState<ClearanceNote[]>([]);
+  const [loadingNotes, setLoadingNotes] = useState(false);
 
   const [facultyDocuments, setFacultyDocuments] = useState<SubmittedDocument[]>([]);
   const [dlrcNotes, setDlrcNotes] = useState('');
@@ -77,6 +39,23 @@ export default function FacultyDetailPage() {
   const [validationResult, setValidationResult] = useState<DocumentValidationResult | null>(null);
   const [ocrText, setOcrText] = useState('');
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+
+  // Dialog states for approval/rejection
+  const [isApproveDialogOpen, setIsApproveDialogOpen] = useState(false);
+  const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
+  const [approvalRemarks, setApprovalRemarks] = useState('');
+  const [rejectionReason, setRejectionReason] = useState('');
+
+  useEffect(() => {
+    const raw = localStorage.getItem('user');
+    if (raw) {
+      try {
+        setCurrentUser(JSON.parse(raw) as StoredUser);
+      } catch {
+        // Ignore bad local storage payload.
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -92,6 +71,32 @@ export default function FacultyDetailPage() {
   const facultyRecord = useMemo(() => {
     return records.find((record) => record.employeeId === employeeId);
   }, [records, employeeId]);
+
+  const officerOfficeName = useMemo(() => {
+    return getRequiredOfficeForOfficer(currentUser?.role);
+  }, [currentUser?.role]);
+
+  const facultyName = useMemo(() => {
+    return facultyRecord?.employeeName || `Faculty (${employeeId})`;
+  }, [facultyRecord?.employeeName, employeeId]);
+
+  useEffect(() => {
+    if (facultyRecord?.id) {
+      setLoadingNotes(true);
+      clearanceService
+        .getClearanceNotes(facultyRecord.id)
+        .then((data) => {
+          setNotes(data || []);
+        })
+        .catch((error) => {
+          console.error('Error fetching notes:', error);
+          setNotes([]);
+        })
+        .finally(() => {
+          setLoadingNotes(false);
+        });
+    }
+  }, [facultyRecord?.id]);
 
   const facultyDocumentsData = useMemo(() => {
     if (!facultyRecord) return [];
@@ -166,15 +171,87 @@ export default function FacultyDetailPage() {
     }
   };
 
+  const resolveTargetRecord = async (): Promise<Clearance> => {
+    if (facultyRecord) {
+      return facultyRecord;
+    }
+
+    if (!officerOfficeName) {
+      throw new Error('No office is mapped to your approval role.');
+    }
+
+    await clearanceService.uploadDocument(employeeId, facultyName, officerOfficeName);
+
+    const refreshed = await clearanceService.getClearances();
+    setRecords(refreshed);
+
+    const normalize = (value: string) => value.trim().toLowerCase().split(/\s+/).join(' ');
+    const matched =
+      refreshed.find(
+        (record) =>
+          record.employeeId === employeeId &&
+          normalize(record.requiredDocument) === normalize(officerOfficeName)
+      ) || refreshed.find((record) => record.employeeId === employeeId);
+
+    if (!matched) {
+      throw new Error('Unable to create a clearance record for this faculty user.');
+    }
+
+    return matched;
+  };
+
+  const applyDecision = async (targetRecord: Clearance, decision: 'approved' | 'rejected' | 'pending') => {
+    const reviewerId = currentUser?.id ? String(currentUser.id) : '';
+    const reviewerName = currentUser?.full_name || currentUser?.name || 'Officer';
+    const reviewerRole = currentUser?.role || 'approval_officer';
+
+    if (decision === 'approved') {
+      await clearanceService.approveClearance(
+        targetRecord.id,
+        approvalRemarks,
+        reviewerId,
+        reviewerName,
+        reviewerRole
+      );
+      setIsApproveDialogOpen(false);
+      setApprovalRemarks('');
+      return;
+    }
+
+    if (decision === 'rejected') {
+      await clearanceService.rejectClearance(
+        targetRecord.id,
+        rejectionReason,
+        reviewerId,
+        reviewerName,
+        reviewerRole
+      );
+      setIsRejectDialogOpen(false);
+      setRejectionReason('');
+      return;
+    }
+
+    await clearanceService.updateStatus(targetRecord.id, 'pending');
+  };
+
   const handleDecision = async (decision: 'approved' | 'rejected' | 'pending') => {
-    if (!facultyRecord) return;
-    
-    setActionLoadingId(facultyRecord.id);
-    await clearanceService.updateClearanceStatus(facultyRecord.id, decision);
-    
-    const data = await clearanceService.getClearances();
-    setRecords(data);
-    setActionLoadingId(null);
+    if (!currentUser) return;
+
+    const actionKey = facultyRecord?.id || `virtual-${employeeId}`;
+    setActionLoadingId(actionKey);
+    try {
+      const targetRecord = await resolveTargetRecord();
+      await applyDecision(targetRecord, decision);
+
+      const data = await clearanceService.getClearances();
+      setRecords(data);
+    } catch (error) {
+      console.error('Error making decision:', error);
+      const message = error instanceof Error ? error.message : 'Failed to update clearance decision';
+      globalThis.alert(message);
+    } finally {
+      setActionLoadingId(null);
+    }
   };
 
   const getStatusClass = (status: Clearance['status']) => {
@@ -183,6 +260,10 @@ export default function FacultyDetailPage() {
     if (status === 'rejected') return 'bg-rose-100 text-rose-800';
     return 'bg-slate-100 text-slate-800';
   };
+
+  const status: Clearance['status'] = facultyRecord?.status ?? 'pending';
+  const actionTargetId = facultyRecord?.id || `virtual-${employeeId}`;
+  const submissionDate = facultyRecord?.submissionDate || 'Not submitted';
 
   if (loading) {
     return (
@@ -193,22 +274,11 @@ export default function FacultyDetailPage() {
     );
   }
 
-  if (!facultyRecord) {
-    return (
-      <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-500">
-        <p>Faculty clearance record not found.</p>
-        <Link href="/clearance" className="text-red-600 hover:underline mt-4 inline-block">
-          Back to Clearance
-        </Link>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">{facultyRecord.employeeName}</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">{facultyName}</h1>
           <p className="text-slate-500 mt-1">Clearance review and document verification (DLRC).</p>
         </div>
         <Link href="/clearance" className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
@@ -222,12 +292,12 @@ export default function FacultyDetailPage() {
             <CardTitle>Status</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${getStatusClass(facultyRecord.status)}`}>
-              {facultyRecord.status === 'approved' && <CheckCircle2 className="mr-1 h-3.5 w-3.5" />}
-              {facultyRecord.status}
+            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${getStatusClass(status)}`}>
+              {status === 'approved' && <CheckCircle2 className="mr-1 h-3.5 w-3.5" />}
+              {status}
             </span>
-            <p className="text-sm text-slate-600">Submission date: {facultyRecord.submissionDate || 'Not submitted'}</p>
-            {facultyRecord.validationWarning && (
+            <p className="text-sm text-slate-600">Submission date: {submissionDate}</p>
+            {facultyRecord?.validationWarning && (
               <p className="text-sm text-rose-600">AI note: {facultyRecord.validationWarning}</p>
             )}
           </CardContent>
@@ -235,34 +305,132 @@ export default function FacultyDetailPage() {
 
         <Card className="border-slate-200">
           <CardHeader>
-            <CardTitle>DLRC Review Actions</CardTitle>
+            <CardTitle>Approval Status & Actions</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-4">
+            <div>
+              <p className="text-sm font-medium text-slate-600 mb-2">Current Status</p>
+              <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium capitalize gap-2 ${getStatusClass(status)}`}>
+                {status === 'approved' && <CheckCircle2 className="h-4 w-4" />}
+                {status === 'rejected' && <X className="h-4 w-4" />}
+                {status}
+              </span>
+            </div>
+
+            {facultyRecord?.rejectionReason && status === 'rejected' && (
+              <div className="rounded-md bg-rose-50 p-3 border border-rose-200">
+                <p className="text-sm font-medium text-rose-800">Rejection Reason:</p>
+                <p className="text-sm text-rose-700 mt-1">{facultyRecord.rejectionReason}</p>
+              </div>
+            )}
+
             <div className="space-y-2">
-              <Button 
-                onClick={() => void handleDecision('approved')} 
-                disabled={actionLoadingId === facultyRecord.id || facultyRecord.status === 'approved'}
-                className="w-full bg-emerald-600 hover:bg-emerald-700"
-              >
-                {actionLoadingId === facultyRecord.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                Approve Clearance
-              </Button>
-              <Button 
-                onClick={() => void handleDecision('rejected')} 
-                disabled={actionLoadingId === facultyRecord.id || facultyRecord.status === 'rejected'}
-                variant="destructive"
-                className="w-full"
-              >
-                {actionLoadingId === facultyRecord.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <X className="mr-2 h-4 w-4" />}
-                Reject Clearance
-              </Button>
+              <Dialog open={isApproveDialogOpen} onOpenChange={setIsApproveDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button 
+                    disabled={status === 'approved' || actionLoadingId === actionTargetId}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700"
+                  >
+                    {actionLoadingId === actionTargetId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                    Approve Clearance
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Approve Clearance</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <label htmlFor="approval-remarks" className="text-sm font-medium text-slate-700">Approval Remarks (Optional)</label>
+                      <textarea
+                        id="approval-remarks"
+                        className="w-full mt-2 rounded-md border border-slate-200 p-3 text-sm outline-none focus:border-emerald-500"
+                        placeholder="Add any remarks or notes for the faculty..."
+                        value={approvalRemarks}
+                        onChange={(e) => setApprovalRemarks(e.target.value)}
+                        rows={4}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setIsApproveDialogOpen(false);
+                          setApprovalRemarks('');
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={() => void handleDecision('approved')}
+                        disabled={actionLoadingId === actionTargetId}
+                        className="bg-emerald-600 hover:bg-emerald-700"
+                      >
+                        {actionLoadingId === actionTargetId && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Confirm Approval
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button 
+                    disabled={status === 'rejected' || actionLoadingId === actionTargetId}
+                    variant="destructive"
+                    className="w-full"
+                  >
+                    {actionLoadingId === actionTargetId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <X className="mr-2 h-4 w-4" />}
+                    Reject Clearance
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Reject Clearance</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <label htmlFor="rejection-reason" className="text-sm font-medium text-slate-700">Rejection Reason *</label>
+                      <textarea
+                        id="rejection-reason"
+                        className="w-full mt-2 rounded-md border border-slate-200 p-3 text-sm outline-none focus:border-rose-500"
+                        placeholder="Please provide a reason for rejection..."
+                        value={rejectionReason}
+                        onChange={(e) => setRejectionReason(e.target.value)}
+                        rows={4}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setIsRejectDialogOpen(false);
+                          setRejectionReason('');
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={() => void handleDecision('rejected')}
+                        disabled={!rejectionReason.trim() || actionLoadingId === actionTargetId}
+                        variant="destructive"
+                      >
+                        {actionLoadingId === actionTargetId && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Confirm Rejection
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
               <Button 
                 onClick={() => void handleDecision('pending')} 
-                disabled={actionLoadingId === facultyRecord.id || facultyRecord.status === 'pending'}
+                disabled={status === 'pending' || actionLoadingId === actionTargetId}
                 variant="outline"
                 className="w-full"
               >
-                {actionLoadingId === facultyRecord.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Clock className="mr-2 h-4 w-4" />}
+                {actionLoadingId === actionTargetId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Clock className="mr-2 h-4 w-4" />}
                 Mark as Pending
               </Button>
             </div>
@@ -271,18 +439,46 @@ export default function FacultyDetailPage() {
 
         <Card className="border-slate-200">
           <CardHeader>
-            <CardTitle>DLRC Notes</CardTitle>
+            <CardTitle>DLRC Review Notes</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <textarea
               className="min-h-28 w-full rounded-md border border-slate-200 p-3 text-sm outline-none focus:border-red-500"
               value={dlrcNotes}
               onChange={(event) => setDlrcNotes(event.target.value)}
-              placeholder="Add review notes, concerns, or observations..."
+              placeholder="Add internal review notes, concerns, or observations..."
             />
             <Button onClick={saveDlrcNotes} className="bg-red-600 hover:bg-red-700">
               <Save className="mr-2 h-4 w-4" /> Save Notes
             </Button>
+
+            {loadingNotes && (
+              <div className="flex items-center gap-2 text-slate-500">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-sm">Loading remarks...</span>
+              </div>
+            )}
+            {notes.length > 0 && (
+              <div className="border-t pt-4">
+                <p className="text-sm font-medium text-slate-600 mb-3">Remarks History</p>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {notes.map((note) => (
+                    <div key={note.id} className="rounded-md border p-3 text-sm bg-slate-50">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium text-slate-800">{note.author_name}</span>
+                        <span className="text-xs text-slate-500">
+                          {format(new Date(note.created_at), 'MMM d, yyyy HH:mm')}
+                        </span>
+                      </div>
+                      <p className="text-slate-700">{note.content}</p>
+                      <span className="text-xs font-medium text-slate-600 mt-1 inline-block capitalize">
+                        {note.note_type}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

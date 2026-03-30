@@ -36,6 +36,28 @@ export const scheduleService = {
     return res.json();
   },
 
+  async updateSchedule(id: string, values: {
+    type: "class" | "shift";
+    subjectOrRole: string;
+    room?: string;
+    dayOfWeek: string;
+    startTime: string;
+    endTime: string;
+  }) {
+    const res = await fetch(`/api/schedules/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(values),
+    });
+
+    if (!res.ok) {
+      const { error } = await res.json();
+      throw new Error(error ?? "Failed to update schedule");
+    }
+
+    return res.json();
+  },
+
   async deleteSchedule(id: string) {
     const res = await fetch(`/api/schedules/${id}`, {
       method: "DELETE",

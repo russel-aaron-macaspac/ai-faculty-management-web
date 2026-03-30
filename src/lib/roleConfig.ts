@@ -129,6 +129,30 @@ export const getApprovalOfficerConfig = (roleId: string): ApprovalOfficer | unde
   return APPROVAL_OFFICERS.find(o => o.id === roleId);
 };
 
+export const getRequiredOfficeForOfficer = (role: string | undefined): string | null => {
+  const officeByRole: Partial<Record<ApprovalOfficerId, string>> = {
+    dlrc: 'Dominican Learning Resource Center',
+    pmo: 'Property Management Office',
+    laboratory: 'Laboratory',
+    ict: 'Information & Communications Technology Office',
+    ceso: 'Community Extension Services Office',
+    programchair: 'Program Chair',
+    dean: 'Dean',
+    registrar: 'Registrar Office',
+    ovprel: 'Office of the Vice President for Research, Extension & Linkages',
+    ovpaa: 'Office of the Vice President for Academic Affairs',
+    account: 'Accounting Office',
+    treasury: 'Treasury Office',
+    hro: 'Human Resources Office',
+  };
+
+  if (!role || !isApprovalOfficer(role)) {
+    return null;
+  }
+
+  return officeByRole[role as ApprovalOfficerId] ?? null;
+};
+
 /**
  * Helper: Resolve default dashboard path for any role
  */

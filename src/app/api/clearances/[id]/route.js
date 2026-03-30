@@ -32,7 +32,7 @@ export async function PATCH(request, { params }) {
     }
 
     const { error } = await supabase
-      .from("clearance_documents")
+      .from("clearances")
       .update({
         status,
         rejection_reason: status === "rejected" ? rejectionReason : null,

@@ -12,17 +12,12 @@ import { Input } from '@/components/ui/input';
 import { UploadCloud, CheckCircle2, AlertTriangle, FileText, Loader2, Search, Check, X, Clock } from 'lucide-react';
 import { FACULTY_REQUIRED_OFFICES, toOfficeSlug } from '@/lib/clearanceOffices';
 import { isApprovalOfficer, getClearancePageInfo } from '@/lib/roleConfig';
-
-type StoredUser = {
-  id?: string | number;
-  role?: string;
-  name?: string;
-  full_name?: string;
-};
+import { StoredUser } from '@/lib/stringUtils';
 
 export default function ClearancePage() {
   const router = useRouter();
   const [records, setRecords] = useState<Clearance[]>([]);
+  const [facultyUsers, setFacultyUsers] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -58,8 +53,15 @@ export default function ClearancePage() {
   }, []);
 
   useEffect(() => {
+    const loadAll = async () => {
+      await loadData();
+
+      const users = await clearanceService.getFacultyUsers();
+      setFacultyUsers(users);
+    };
+
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadData();
+    loadAll();
   }, []);
 
   const handleUpload = async (event: { preventDefault: () => void }) => {
@@ -133,10 +135,30 @@ export default function ClearancePage() {
           requiredDocument: `Clearance Request (${recs.length} documents)`,
           _allRecords: recs,
           _hasPending: hasPendingOrSubmitted,
+          _hasRecord: true,
         };
       });
 
-      return uniqueFaculty.filter((faculty) =>
+      const existingFacultyIds = new Set(uniqueFaculty.map((faculty) => faculty.employeeId));
+      const missingFacultyRows = facultyUsers
+        .filter((faculty) => !existingFacultyIds.has(faculty.id))
+        .map((faculty) => ({
+          id: `faculty-${faculty.id}`,
+          employeeId: faculty.id,
+          employeeName: faculty.name,
+          requiredDocument: 'No submission yet',
+          status: 'pending' as const,
+          submissionDate: null,
+          _allRecords: [],
+          _hasPending: false,
+          _hasRecord: false,
+        }));
+
+      const mergedFaculty = [...uniqueFaculty, ...missingFacultyRows].sort((a, b) =>
+        a.employeeName.localeCompare(b.employeeName)
+      );
+
+      return mergedFaculty.filter((faculty) =>
         faculty.employeeName.toLowerCase().includes(term)
       );
     }
@@ -145,7 +167,7 @@ export default function ClearancePage() {
       record.employeeName.toLowerCase().includes(term) ||
       record.requiredDocument.toLowerCase().includes(term)
     );
-  }, [records, searchTerm, currentUser]);
+  }, [records, searchTerm, currentUser, facultyUsers]);
 
   const facultyStatusTotals = useMemo(() => {
     if (!isFacultyUser) {
@@ -252,7 +274,7 @@ export default function ClearancePage() {
                 type="button"
                 size="sm"
                 className="bg-emerald-600 hover:bg-emerald-700"
-                disabled={actionLoadingId === record.id || record.status === 'approved'}
+                disabled={record._hasRecord === false || actionLoadingId === record.id || record.status === 'approved'}
                 onClick={() => void handleDecision(record, 'approved')}
               >
                 {actionLoadingId === record.id ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />}
@@ -262,7 +284,7 @@ export default function ClearancePage() {
                 type="button"
                 size="sm"
                 variant="destructive"
-                disabled={actionLoadingId === record.id || record.status === 'rejected'}
+                disabled={record._hasRecord === false || actionLoadingId === record.id || record.status === 'rejected'}
                 onClick={() => void handleDecision(record, 'rejected')}
               >
                 <X className="mr-1 h-3.5 w-3.5" />
@@ -272,7 +294,7 @@ export default function ClearancePage() {
                 type="button"
                 size="sm"
                 variant="outline"
-                disabled={actionLoadingId === record.id || record.status === 'pending'}
+                disabled={record._hasRecord === false || actionLoadingId === record.id || record.status === 'pending'}
                 onClick={() => void handleDecision(record, 'pending')}
               >
                 <Clock className="mr-1 h-3.5 w-3.5" />

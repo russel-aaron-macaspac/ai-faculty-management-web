@@ -7,6 +7,7 @@ import { User } from '@/types/user';
 import { CalendarDays, Clock, FileCheck2, GraduationCap } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
 import { Schedule } from '@/types/schedule';
+import { parseTimeToMinutes, formatTimeToTwelveHour, getTimeStatus } from '@/lib/timeUtils';
 
 export default function FacultyDashboardPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -30,27 +31,6 @@ export default function FacultyDashboardPage() {
   }, []);
 
   const todayStats = useMemo(() => {
-    const parseMinutes = (time: string) => {
-      const [hour, minute] = time.split(':').map(Number);
-      if (Number.isNaN(hour) || Number.isNaN(minute)) {
-        return null;
-      }
-      return hour * 60 + minute;
-    };
-
-    const formatHourMinute = (time: string) => {
-      const minutes = parseMinutes(time);
-      if (minutes === null) {
-        return 'N/A';
-      }
-
-      const hour24 = Math.floor(minutes / 60);
-      const minute = minutes % 60;
-      const period = hour24 >= 12 ? 'PM' : 'AM';
-      const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
-      return `${hour12}:${minute.toString().padStart(2, '0')} ${period}`;
-    };
-
     const currentDay = new Date().toLocaleDateString('en-US', { weekday: 'long' });
     const accountName = (user as User & { full_name?: string } | null)?.full_name ?? '';
     const now = new Date();
@@ -68,11 +48,11 @@ export default function FacultyDashboardPage() {
 
         return !!accountName && schedule.employeeName === accountName;
       })
-      .sort((a, b) => (parseMinutes(a.startTime) ?? 0) - (parseMinutes(b.startTime) ?? 0));
+      .sort((a, b) => (parseTimeToMinutes(a.startTime) ?? 0) - (parseTimeToMinutes(b.startTime) ?? 0));
 
     const totalMinutes = ownClassesToday.reduce((total, schedule) => {
-      const start = parseMinutes(schedule.startTime);
-      const end = parseMinutes(schedule.endTime);
+      const start = parseTimeToMinutes(schedule.startTime);
+      const end = parseTimeToMinutes(schedule.endTime);
 
       if (start === null || end === null || end <= start) {
         return total;
@@ -82,7 +62,7 @@ export default function FacultyDashboardPage() {
     }, 0);
 
     const nextClass = ownClassesToday.find((schedule) => {
-      const end = parseMinutes(schedule.endTime);
+      const end = parseTimeToMinutes(schedule.endTime);
       return end !== null && end > nowMinutes;
     });
 
@@ -92,8 +72,9 @@ export default function FacultyDashboardPage() {
     return {
       classCount: ownClassesToday.length,
       totalHoursLabel,
-      nextClassTime: nextClass ? formatHourMinute(nextClass.startTime) : 'No more today',
+      nextClassTime: nextClass ? formatTimeToTwelveHour(nextClass.startTime) : 'No more today',
       nextClassRoom: nextClass?.room || nextClass?.subjectOrRole || 'No upcoming class',
+      ownClassesToday,
     };
   }, [schedules, user]);
 
@@ -132,14 +113,32 @@ export default function FacultyDashboardPage() {
           
           <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
             <h3 className="font-semibold text-slate-800 mb-4">My Schedule Today</h3>
-            <div className="space-y-4">
-              {['09:00 AM - CS101 (Room 302)', '13:00 PM - CS201 (Room 201)', '15:30 PM - Faculty Meeting'].map((item, i) => (
-                <div key={i} className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-lg border border-slate-100">
-                  <span className="text-sm font-medium text-slate-700">{item}</span>
-                  <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full">{i === 0 ? 'Upcoming' : 'Scheduled'}</span>
-                </div>
-              ))}
-            </div>
+            {todayStats.ownClassesToday.length === 0 ? (
+              <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-lg border border-slate-200 text-center justify-center">
+                <p className="text-sm text-slate-600">No classes scheduled for today</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {todayStats.ownClassesToday.map((schedule) => {
+                  const status = getTimeStatus(schedule.startTime, schedule.endTime);
+                  return (
+                    <div key={schedule.id} className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-lg border border-slate-100 transition-colors">
+                      <div className="flex-1">
+                        <div className="font-medium text-slate-800">
+                          {formatTimeToTwelveHour(schedule.startTime)} - {formatTimeToTwelveHour(schedule.endTime)} {schedule.subjectOrRole}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {schedule.room ? `Room ${schedule.room}` : 'Location TBD'}
+                        </div>
+                      </div>
+                      <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${status.color}`}>
+                        {status.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 

@@ -9,13 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Loader2, Search, AlertTriangle, Filter, Radio } from 'lucide-react';
 import { format } from 'date-fns';
 import Link from 'next/link';
-
-type StoredUser = {
-  id?: string | number;
-  name?: string;
-  full_name?: string;
-  role?: string;
-};
+import { StoredUser, normalize } from '@/lib/stringUtils';
+import { formatTimeToTwelveHour } from '@/lib/timeUtils';
 
 export default function AttendancePage() {
   const [records, setRecords] = useState<Attendance[]>([]);
@@ -55,7 +50,6 @@ export default function AttendancePage() {
       return [];
     }
 
-    const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
     const accountId = currentUser.id ? String(currentUser.id) : '';
     const accountName = normalize(currentUser.full_name || currentUser.name || '');
 
@@ -155,10 +149,10 @@ export default function AttendancePage() {
                   )}
                 </TableCell>
                 <TableCell>
-                  <div className="text-sm font-medium">{r.timeIn || '--:--'}</div>
+                  <div className="text-sm font-medium">{r.timeIn ? formatTimeToTwelveHour(r.timeIn) : '--:--'}</div>
                 </TableCell>
                 <TableCell>
-                  <div className="text-sm">{r.timeOut || '--:--'}</div>
+                  <div className="text-sm">{r.timeOut ? formatTimeToTwelveHour(r.timeOut) : '--:--'}</div>
                 </TableCell>
                 <TableCell>
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${r.status === 'present' ? 'bg-emerald-100 text-emerald-800' :

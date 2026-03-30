@@ -3,37 +3,28 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { AlertTriangle, FileText, Loader2, ScanLine, Save, UploadCloud, ArrowLeft, Trash2 } from 'lucide-react';
+import { AlertTriangle, FileText, Loader2, ScanLine, Save, UploadCloud, ArrowLeft, Trash2, Bell, CheckCircle2, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { clearanceService } from '@/services/clearanceService';
-import { Clearance } from '@/types/clearance';
+import { Clearance, ClearanceNote } from '@/types/clearance';
 import { fromOfficeSlug } from '@/lib/clearanceOffices';
-
-type StoredUser = {
-  id?: string | number;
-  role?: string;
-  name?: string;
-  full_name?: string;
-};
-
-type SubmittedDocument = {
-  name: string;
-  submittedAt: string;
-};
+import { StoredUser, normalize } from '@/lib/stringUtils';
+import { 
+  DOCUMENT_TYPES, 
+  validateDocument,
+  SubmittedDocument,
+  DocumentValidationResult 
+} from '@/lib/documentTypes';
+import { useClearanceNotifications } from '@/hooks/useClearanceNotifications';
+import { format } from 'date-fns';
 
 type OfficeLocalState = {
   notes: string;
   documents: SubmittedDocument[];
   ocrText: string;
-};
-
-type DocumentValidationResult = {
-  isMatch: boolean;
-  confidence: number;
-  matchedKeywords: string[];
 };
 
 const emptyLocalState: OfficeLocalState = {
@@ -71,44 +62,6 @@ const getStatusClass = (status: Clearance['status']) => {
   return 'bg-slate-100 text-slate-800';
 };
 
-const normalize = (value: string) => value.trim().toLowerCase().split(/\s+/).join(' ');
-
-const DOCUMENT_TYPE_RULES: Record<string, string[]> = {
-  'ICT Device Return Slip': ['device return', 'ict office', 'asset tag'],
-  'Library Clearance Form': ['library', 'borrowed books', 'return slip'],
-  'Laboratory Tools Return Checklist': ['laboratory', 'tools', 'checklist'],
-  'CESO Completion Certificate': ['ceso', 'completion certificate', 'completed'],
-  'Financial Clearance': ['financial clearance', 'cashier', 'no outstanding balance'],
-  'PMO Equipment Return': ['pmo', 'equipment return', 'property management office'],
-  'Program Chair Clearance': ['program chair', 'clearance', 'department'],
-  'Borrowed Book Slip': ['borrowed book slip', 'borrowed books slip', 'borrowed book', 'library', 'book return', 'dlrc'],
-};
-
-const DOCUMENT_TYPES = Object.keys(DOCUMENT_TYPE_RULES);
-
-function validateDocument(selectedType: string, extractedText: string): DocumentValidationResult {
-  const normalizedText = normalize(extractedText);
-  const expectedKeywords = DOCUMENT_TYPE_RULES[selectedType] || [];
-
-  if (expectedKeywords.length === 0) {
-    return {
-      isMatch: false,
-      confidence: 0,
-      matchedKeywords: [],
-    };
-  }
-
-  const matchedKeywords = expectedKeywords.filter((keyword) => normalizedText.includes(normalize(keyword)));
-  const confidence = Math.round((matchedKeywords.length / expectedKeywords.length) * 100);
-  const requiredMatches = Math.ceil(expectedKeywords.length * 0.6);
-
-  return {
-    isMatch: matchedKeywords.length >= requiredMatches,
-    confidence,
-    matchedKeywords,
-  };
-}
-
 export default function OfficeClearanceDetailPage() {
   const params = useParams<{ officeSlug: string }>();
   const officeSlug = Array.isArray(params.officeSlug) ? params.officeSlug[0] : params.officeSlug;
@@ -117,6 +70,12 @@ export default function OfficeClearanceDetailPage() {
   const [currentUser, setCurrentUser] = useState<StoredUser | null>(null);
   const [records, setRecords] = useState<Clearance[]>([]);
   const [loading, setLoading] = useState(true);
+  const [notes, setNotes] = useState<ClearanceNote[]>([]);
+  const [loadingNotes, setLoadingNotes] = useState(false);
+
+  const { unreadCount } = useClearanceNotifications(
+    currentUser?.id ? String(currentUser.id) : null
+  );
 
   const storageKey = `clearance-office-${officeSlug}`;
   const [officeState, setOfficeState] = useState<OfficeLocalState>(() => loadSavedState(storageKey));
@@ -128,6 +87,12 @@ export default function OfficeClearanceDetailPage() {
 
   const handleOCRDocumentTypeChange = (value: string | null) => {
     setSelectedOCRDocumentType(value ?? DOCUMENT_TYPES[0]);
+  };
+
+  const getNoteClass = (noteType: string) => {
+    if (noteType === 'remark') return 'bg-blue-50 border-blue-200';
+    if (noteType === 'validation') return 'bg-amber-50 border-amber-200';
+    return 'bg-slate-50 border-slate-200';
   };
 
   useEffect(() => {
@@ -152,11 +117,7 @@ export default function OfficeClearanceDetailPage() {
     void load();
   }, []);
 
-  const saveLocalState = (nextState: OfficeLocalState) => {
-    localStorage.setItem(storageKey, JSON.stringify(nextState));
-    setOfficeState(nextState);
-  };
-
+  // Fetch remarks when the own office record changes
   const ownOfficeRecord = useMemo(() => {
     const accountId = currentUser?.id ? String(currentUser.id) : '';
     const accountName = normalize(currentUser?.full_name || currentUser?.name || '');
@@ -173,6 +134,29 @@ export default function OfficeClearanceDetailPage() {
       return officeMatches(record) && (sameId || sameName);
     });
   }, [records, currentUser, officeName]);
+
+  useEffect(() => {
+    if (ownOfficeRecord?.id) {
+      setLoadingNotes(true);
+      clearanceService
+        .getClearanceNotes(ownOfficeRecord.id)
+        .then((data) => {
+          setNotes(data || []);
+        })
+        .catch((error) => {
+          console.error('Error fetching notes:', error);
+          setNotes([]);
+        })
+        .finally(() => {
+          setLoadingNotes(false);
+        });
+    }
+  }, [ownOfficeRecord?.id]);
+
+  const saveLocalState = (nextState: OfficeLocalState) => {
+    localStorage.setItem(storageKey, JSON.stringify(nextState));
+    setOfficeState(nextState);
+  };
 
   const handleSaveNotes = () => {
     saveLocalState(officeState);
@@ -203,6 +187,8 @@ export default function OfficeClearanceDetailPage() {
       setRecords(data);
     } catch (err) {
       console.error('Failed to submit document:', err);
+      const message = err instanceof Error ? err.message : 'Failed to submit document';
+      globalThis.alert(message);
     }
   };
 
@@ -287,15 +273,73 @@ export default function OfficeClearanceDetailPage() {
         <div className="grid gap-4 lg:grid-cols-2">
           <Card className="border-slate-200">
             <CardHeader>
-              <CardTitle>Status</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                {unreadCount > 0 && (
+                  <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs font-medium">
+                    <Bell className="h-3 w-3" />
+                    {unreadCount}
+                  </div>
+                )}
+                Status & Officer Remarks
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${getStatusClass(status)}`}>
-                {status}
-              </span>
-              <p className="text-sm text-slate-600">Submission date: {submittedDate}</p>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <div className="text-sm font-medium text-slate-600">Current Status</div>
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium capitalize gap-2 ${getStatusClass(status)}`}
+                  >
+                    {status === 'approved' && <CheckCircle2 className="h-4 w-4" />}
+                    {status === 'rejected' && <XCircle className="h-4 w-4" />}
+                    {status}
+                  </span>
+                </div>
+              </div>
+
+              {ownOfficeRecord?.rejectionReason && (
+                <div className="rounded-md bg-rose-50 p-3 border border-rose-200">
+                  <p className="text-sm font-medium text-rose-800">Rejection Reason:</p>
+                  <p className="text-sm text-rose-700 mt-1">{ownOfficeRecord.rejectionReason}</p>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <div className="text-sm font-medium text-slate-600">
+                  Officer Remarks
+                  {loadingNotes && <Loader2 className="inline h-3 w-3 animate-spin ml-1" />}
+                </div>
+                {notes.length === 0 ? (
+                  <p className="text-sm text-slate-500 italic">No remarks from officers yet</p>
+                ) : (
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {notes.map((note) => (
+                      <div
+                        key={note.id}
+                        className={`rounded-md border p-3 text-sm ${getNoteClass(note.note_type)}`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium text-slate-800">{note.author_name}</span>
+                          <span className="text-xs text-slate-500">
+                            {format(new Date(note.created_at), 'MMM d, yyyy HH:mm')}
+                          </span>
+                        </div>
+                        <p className="text-slate-700">{note.content}</p>
+                        <span className="text-xs font-medium text-slate-600 mt-1 inline-block capitalize">
+                          {note.note_type}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <p className="text-xs text-slate-500">Submitted: {submittedDate}</p>
               {ownOfficeRecord?.validationWarning && (
-                <p className="text-sm text-rose-600">AI note: {ownOfficeRecord.validationWarning}</p>
+                <p className="text-sm text-amber-600 flex items-center gap-1">
+                  <AlertTriangle className="h-4 w-4" />
+                  {ownOfficeRecord.validationWarning}
+                </p>
               )}
             </CardContent>
           </Card>
