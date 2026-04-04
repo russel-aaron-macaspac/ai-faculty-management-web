@@ -9,17 +9,52 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { clearanceService } from '@/services/clearanceService';
-import { Clearance, ClearanceNote } from '@/types/clearance';
-import { StoredUser } from '@/lib/stringUtils';
 import { 
   DOCUMENT_TYPES, 
   validateDocument,
   SubmittedDocument,
   DocumentValidationResult 
 } from '@/lib/documentTypes';
-import { format } from 'date-fns';
+import { Clearance, ClearanceNote } from '@/types/clearance';
 import { getRequiredOfficeForOfficer } from '@/lib/roleConfig';
+import { clearanceService } from '@/services/clearanceService';
+import { format } from 'date-fns';
+
+type StoredUser = {
+  id?: string;
+  role?: string;
+  name?: string;
+  full_name?: string;
+};
+
+const DOCUMENT_TYPE_RULES: Record<string, string[]> = {
+  'ICT Device Return Slip':            ['device return', 'ict office', 'asset tag'],
+  'Library Clearance Form':            ['library', 'borrowed books', 'return slip'],
+  'Laboratory Tools Return Checklist': ['laboratory', 'tools', 'checklist'],
+  'CESO Completion Certificate':       ['ceso', 'completion certificate', 'completed'],
+  'Financial Clearance':               ['financial clearance', 'cashier', 'no outstanding balance'],
+  'PMO Equipment Return':              ['pmo', 'equipment return', 'property management office'],
+  'Program Chair Clearance':           ['program chair', 'clearance', 'department'],
+  'Borrowed Book Slip':                ['borrowed book slip', 'borrowed books slip', 'borrowed book', 'library', 'book return', 'dlrc'],
+};
+
+const normalize = (value: string) => value.trim().toLowerCase().split(/\s+/).join(' ');
+
+const OFFICER_OFFICE_MAP: Record<string, number> = {
+  dlrc:         1,
+  pmo:          2,
+  laboratory:   3,
+  ict:          4,
+  ceso:         5,
+  programchair: 6,
+  dean:         7,
+  registrar:    8,
+  ovprel:       9,
+  ovpaa:        10,
+  account:      11,
+  treasury:     12,
+  hro:          13,
+};
 
 export default function FacultyDetailPage() {
   const params = useParams<{ employeeId: string }>();
@@ -31,7 +66,6 @@ export default function FacultyDetailPage() {
   const [notes, setNotes] = useState<ClearanceNote[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
 
-  const [facultyDocuments, setFacultyDocuments] = useState<SubmittedDocument[]>([]);
   const [dlrcNotes, setDlrcNotes] = useState('');
   const [selectedOCRFile, setSelectedOCRFile] = useState<File | null>(null);
   const [selectedOCRDocumentType, setSelectedOCRDocumentType] = useState(DOCUMENT_TYPES[0]);
@@ -58,14 +92,14 @@ export default function FacultyDetailPage() {
   }, []);
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      const data = await clearanceService.getClearances();
-      setRecords(data);
-      setLoading(false);
-    };
-
-    void load();
+    const raw = localStorage.getItem('user');
+    if (raw) {
+      try {
+        setCurrentUser(JSON.parse(raw) as StoredUser);
+      } catch {
+        // ignore
+      }
+    }
   }, []);
 
   const facultyRecord = useMemo(() => {
@@ -114,17 +148,34 @@ export default function FacultyDetailPage() {
     }
   }, [facultyRecord, employeeId]);
 
-  const dlrcNotesData = useMemo(() => {
-    if (!facultyRecord) return '';
-    
-    const storageKey = `faculty-dlrc-notes-${employeeId}`;
-    return localStorage.getItem(storageKey) || '';
-  }, [facultyRecord, employeeId]);
+  const currentOfficeId = currentUser?.role
+    ? OFFICER_OFFICE_MAP[currentUser.role]
+    : undefined;
 
   useEffect(() => {
-    setFacultyDocuments(facultyDocumentsData);
-    setDlrcNotes(dlrcNotesData);
-  }, [facultyDocumentsData, dlrcNotesData]);
+    if (currentUser === null) return;
+    const load = async () => {
+      setLoading(true);
+      const officeId = currentOfficeId !== undefined ? String(currentOfficeId) : undefined;
+      const data = await clearanceService.getClearances(undefined, officeId);
+      setRecords(data || []);
+      setLoading(false);
+    };
+    void load();
+  }, [currentUser]);
+
+  useEffect(() => {
+    const storageKey = `faculty-dlrc-notes-${employeeId}`;
+    setDlrcNotes(localStorage.getItem(storageKey) || '');
+  }, [employeeId]);
+
+  // All records for this faculty scoped to the current officer's office
+  const facultyAllRecords = useMemo(() => {
+    return records.filter((record) => {
+      const sameEmployee = String(record.employeeId) === String(employeeId);
+      return sameEmployee;
+    });
+  }, [records, employeeId]);
 
   const saveDlrcNotes = () => {
     const storageKey = `faculty-dlrc-notes-${employeeId}`;
@@ -136,30 +187,16 @@ export default function FacultyDetailPage() {
   };
 
   const handleRunOCR = async () => {
-    if (!selectedOCRFile) {
-      return;
-    }
-
+    if (!selectedOCRFile) return;
     setIsOCRLoading(true);
-
     try {
       const formData = new FormData();
       formData.append('file', selectedOCRFile);
-
-      const response = await fetch('/api/ocr', {
-        method: 'POST',
-        body: formData,
-      });
-
+      const response = await fetch('/api/ocr', { method: 'POST', body: formData });
       const payload = (await response.json()) as { text?: string; error?: string };
-
-      if (!response.ok) {
-        throw new Error(payload.error || 'OCR request failed');
-      }
-
+      if (!response.ok) throw new Error(payload.error || 'OCR request failed');
       const extractedText = payload.text || '';
       const result = validateDocument(selectedOCRDocumentType, extractedText);
-
       setOcrText(extractedText);
       setValidationResult(result);
     } catch (error) {
@@ -180,7 +217,9 @@ export default function FacultyDetailPage() {
       throw new Error('No office is mapped to your approval role.');
     }
 
-    await clearanceService.uploadDocument(employeeId, facultyName, officerOfficeName);
+    const officeId = currentOfficeId || OFFICER_OFFICE_MAP[currentUser?.role || ''] || 1;
+
+    await clearanceService.uploadDocument(employeeId, officeId, facultyName, officerOfficeName);
 
     const refreshed = await clearanceService.getClearances();
     setRecords(refreshed);
@@ -188,10 +227,10 @@ export default function FacultyDetailPage() {
     const normalize = (value: string) => value.trim().toLowerCase().split(/\s+/).join(' ');
     const matched =
       refreshed.find(
-        (record) =>
+        (record: Clearance) =>
           record.employeeId === employeeId &&
           normalize(record.requiredDocument) === normalize(officerOfficeName)
-      ) || refreshed.find((record) => record.employeeId === employeeId);
+      ) || refreshed.find((record: Clearance) => record.employeeId === employeeId);
 
     if (!matched) {
       throw new Error('Unable to create a clearance record for this faculty user.');
@@ -235,23 +274,24 @@ export default function FacultyDetailPage() {
   };
 
   const handleDecision = async (decision: 'approved' | 'rejected' | 'pending') => {
-    if (!currentUser) return;
+    if (!facultyRecord) return;
 
-    const actionKey = facultyRecord?.id || `virtual-${employeeId}`;
-    setActionLoadingId(actionKey);
-    try {
-      const targetRecord = await resolveTargetRecord();
-      await applyDecision(targetRecord, decision);
-
-      const data = await clearanceService.getClearances();
-      setRecords(data);
-    } catch (error) {
-      console.error('Error making decision:', error);
-      const message = error instanceof Error ? error.message : 'Failed to update clearance decision';
-      globalThis.alert(message);
-    } finally {
-      setActionLoadingId(null);
+    let rejectionReason: string | undefined;
+    if (decision === 'rejected') {
+      const reason = globalThis.prompt('Enter rejection reason:');
+      if (!reason) return;
+      rejectionReason = reason;
     }
+
+    setActionLoadingId(facultyRecord.id);
+
+    // ✅ Only update the single record for this office — not all faculty records
+    await clearanceService.updateStatus(facultyRecord.id, decision, rejectionReason);
+
+    const officeId = currentOfficeId !== undefined ? String(currentOfficeId) : undefined;
+    const data = await clearanceService.getClearances(undefined, officeId);
+    setRecords(data || []);
+    setActionLoadingId(null);
   };
 
   const getStatusClass = (status: Clearance['status']) => {
@@ -278,8 +318,8 @@ export default function FacultyDetailPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">{facultyName}</h1>
-          <p className="text-slate-500 mt-1">Clearance review and document verification (DLRC).</p>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">{facultyRecord?.employeeName || `Faculty (${employeeId})`}</h1>
+          <p className="text-slate-500 mt-1">Clearance review and document verification.</p>
         </div>
         <Link href="/clearance" className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
           <ArrowLeft className="h-4 w-4" /> Back to Clearance
@@ -288,9 +328,7 @@ export default function FacultyDetailPage() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="border-slate-200">
-          <CardHeader>
-            <CardTitle>Status</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle>Status</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${getStatusClass(status)}`}>
               {status === 'approved' && <CheckCircle2 className="mr-1 h-3.5 w-3.5" />}
@@ -326,7 +364,7 @@ export default function FacultyDetailPage() {
 
             <div className="space-y-2">
               <Dialog open={isApproveDialogOpen} onOpenChange={setIsApproveDialogOpen}>
-                <DialogTrigger asChild>
+                <DialogTrigger>
                   <Button 
                     disabled={status === 'approved' || actionLoadingId === actionTargetId}
                     className="w-full bg-emerald-600 hover:bg-emerald-700"
@@ -375,7 +413,7 @@ export default function FacultyDetailPage() {
               </Dialog>
 
               <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
-                <DialogTrigger asChild>
+                <DialogTrigger>
                   <Button 
                     disabled={status === 'rejected' || actionLoadingId === actionTargetId}
                     variant="destructive"
@@ -424,23 +462,45 @@ export default function FacultyDetailPage() {
                 </DialogContent>
               </Dialog>
 
-              <Button 
-                onClick={() => void handleDecision('pending')} 
-                disabled={status === 'pending' || actionLoadingId === actionTargetId}
-                variant="outline"
-                className="w-full"
-              >
-                {actionLoadingId === actionTargetId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Clock className="mr-2 h-4 w-4" />}
-                Mark as Pending
-              </Button>
+              <Card className="border-slate-200">
+                <CardHeader><CardTitle>Review Actions</CardTitle></CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="space-y-2">
+                    <Button
+                      onClick={() => void handleDecision('approved')}
+                      disabled={actionLoadingId === facultyRecord?.id || facultyRecord?.status === 'approved'}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700"
+                    >
+                      {actionLoadingId === facultyRecord?.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                      Approve Clearance
+                    </Button>
+                    <Button
+                      onClick={() => void handleDecision('rejected')}
+                      disabled={actionLoadingId === facultyRecord?.id || facultyRecord?.status === 'rejected'}
+                      variant="destructive"
+                      className="w-full"
+                    >
+                      {actionLoadingId === facultyRecord?.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <X className="mr-2 h-4 w-4" />}
+                      Reject Clearance
+                    </Button>
+                    <Button
+                      onClick={() => void handleDecision('pending')}
+                      disabled={actionLoadingId === facultyRecord?.id || facultyRecord?.status === 'pending'}
+                      variant="outline"
+                      className="w-full"
+                    >
+                      {actionLoadingId === actionTargetId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Clock className="mr-2 h-4 w-4" />}
+                      Mark as Pending
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </CardContent>
         </Card>
 
         <Card className="border-slate-200">
-          <CardHeader>
-            <CardTitle>DLRC Review Notes</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle>Notes</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             <textarea
               className="min-h-28 w-full rounded-md border border-slate-200 p-3 text-sm outline-none focus:border-red-500"
@@ -483,21 +543,18 @@ export default function FacultyDetailPage() {
         </Card>
 
         <Card className="border-slate-200">
-          <CardHeader>
-            <CardTitle>Submitted Documents</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle>Submitted Documents</CardTitle></CardHeader>
           <CardContent className="space-y-2">
-            {facultyDocuments.length === 0 ? (
+            {facultyAllRecords.length === 0 ? (
               <p className="text-sm text-slate-500">No documents submitted yet.</p>
             ) : (
-              facultyDocuments.map((document, index) => (
-                <div key={`${document.name}-${index}`} className="rounded-md border border-slate-200 p-2 text-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="font-medium text-slate-700">{document.name}</div>
-                      <div className="text-xs text-slate-500">Submitted: {document.submittedAt}</div>
-                    </div>
-                  </div>
+              facultyAllRecords.map((record) => (
+                <div key={record.id} className="rounded-md border border-slate-200 p-2 text-sm">
+                  <div className="font-medium text-slate-700">{record.requiredDocument}</div>
+                  <div className="text-xs text-slate-500">Submitted: {record.submissionDate || 'N/A'}</div>
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium capitalize mt-1 ${getStatusClass(record.status)}`}>
+                    {record.status}
+                  </span>
                 </div>
               ))
             )}
@@ -505,9 +562,7 @@ export default function FacultyDetailPage() {
         </Card>
 
         <Card className="border-slate-200 lg:col-span-2">
-          <CardHeader>
-            <CardTitle>OCR AI Scanner - Document Verification</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle>OCR AI Scanner - Document Verification</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-2">
               <label htmlFor="ocr-document-type" className="text-sm font-medium text-slate-700">Document Type</label>
@@ -522,22 +577,17 @@ export default function FacultyDetailPage() {
                 </SelectContent>
               </Select>
             </div>
-
             <Input type="file" onChange={(event) => setSelectedOCRFile(event.target.files?.[0] || null)} />
             <Button onClick={() => void handleRunOCR()} disabled={isOCRLoading} className="bg-red-600 hover:bg-red-700">
               {isOCRLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ScanLine className="mr-2 h-4 w-4" />} Run OCR AI Scan
             </Button>
-
             <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
               <div className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
                 Selected Type: <span className="text-slate-700 normal-case">{selectedOCRDocumentType}</span>
               </div>
-
               {validationResult && (
                 <div className="mb-3 rounded-md border border-slate-200 bg-white p-3 text-sm">
-                  <p className="text-slate-700">
-                    Matched Document Type: {validationResult.isMatch ? '✅' : '❌'}
-                  </p>
+                  <p className="text-slate-700">Matched Document Type: {validationResult.isMatch ? '✅' : '❌'}</p>
                   <p className="text-slate-700">Confidence Score: {validationResult.confidence}%</p>
                   <p className="text-slate-700">
                     Detected Keywords: {validationResult.matchedKeywords.length > 0 ? validationResult.matchedKeywords.join(', ') : 'None'}
@@ -550,7 +600,6 @@ export default function FacultyDetailPage() {
                   )}
                 </div>
               )}
-
               <div className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
                 <FileText className="h-4 w-4" /> Extracted Text
               </div>

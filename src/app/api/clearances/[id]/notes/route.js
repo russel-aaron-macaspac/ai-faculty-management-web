@@ -7,7 +7,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/server-client';
 export async function GET(request, { params }) {
   try {
     const supabase = createSupabaseAdminClient();
-    const { id } = params;
+    const { id } = await params;
 
     // Fetch notes from clearance_notes table
     const { data, error } = await supabase

@@ -1,41 +1,48 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { NextResponse } from "next/server";
 
-const OFFICE_LOOKUP_COLUMNS = ['name', 'office_name', 'title'];
+const SELECT_FIELDS = `
+  document_id,
+  status,
+  submitted_at,
+  rejection_reason,
+  original_filename,
+  file_path,
+  user:users!clearances_user_id_fkey (
+    user_id,
+    first_name,
+    middle_name,
+    last_name
+  ),
+  office:offices!clearance_documents_office_id_fkey (
+    office_id,
+    name
+  )
+`;
 
-const normalizeOffice = (value = '') =>
-  value
-    .toLowerCase()
-    .trim()
-    .split(/[^a-z0-9]+/)
-    .filter(Boolean)
-    .join(' ');
+function formatRow(d) {
+  const fullName = d.user
+    ? [d.user.first_name, d.user.middle_name, d.user.last_name]
+        .filter(Boolean)
+        .join(" ")
+    : "Unknown";
 
-async function loadOffices(supabase) {
-  for (const labelColumn of OFFICE_LOOKUP_COLUMNS) {
-    const { data, error } = await supabase
-      .from('offices')
-      .select(`office_id, ${labelColumn}`)
-      .order('office_id', { ascending: true });
-
-    if (!error && data) {
-      return data.map((row) => ({
-        office_id: String(row.office_id),
-        label: row[labelColumn],
-      }));
-    }
-  }
-
-  return [];
-}
-
-async function findOfficeIdByName(supabase, officeName) {
-  const normalizedTarget = normalizeOffice(officeName);
-
-  const offices = await loadOffices(supabase);
-  const matched = offices.find((office) => normalizeOffice(office.label) === normalizedTarget);
-
-  return matched?.office_id ?? null;
+  return {
+    id:                String(d.document_id),
+    employeeId:        String(d.user?.user_id ?? ""),
+    employeeName:      fullName,
+    requiredDocument:  d.office?.name ?? "",
+    officeId:          d.office?.office_id
+                         ? String(d.office.office_id)
+                         : undefined,
+    status:            d.status ?? "pending",
+    submissionDate:    d.submitted_at
+                         ? d.submitted_at.split("T")[0]
+                         : null,
+    validationWarning: d.rejection_reason ?? null,
+    originalFilename:  d.original_filename ?? null,
+    filePath:          d.file_path ?? null,
+  };
 }
 
 export async function GET(request) {
@@ -43,16 +50,19 @@ export async function GET(request) {
     const supabase = createSupabaseAdminClient();
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
+    const officeId = searchParams.get("officeId");
 
     let query = supabase
       .from("clearances")
-      .select(
-        `document_id,status,submitted_at,rejection_reason,user_id,office_id,reviewed_by,reviewed_at`
-      )
+      .select(SELECT_FIELDS)
       .order("document_id", { ascending: false });
 
     if (userId) {
       query = query.eq("user_id", userId);
+    }
+
+    if (officeId) {
+      query = query.eq("office_id", officeId);
     }
 
     const { data, error } = await query;
@@ -65,152 +75,61 @@ export async function GET(request) {
       );
     }
 
-    const userIds = Array.from(new Set((data || []).map((d) => d.user_id).filter(Boolean)));
-
-    const usersRes = userIds.length
-      ? await supabase
-          .from('users')
-          .select('user_id,first_name,middle_name,last_name')
-          .in('user_id', userIds)
-      : { data: [], error: null };
-
-    const officeMap = new Map();
-    const offices = await loadOffices(supabase);
-    offices.forEach((office) => {
-      officeMap.set(String(office.office_id), office.label || 'Unknown Office');
-    });
-
-    const userMap = new Map(
-      (usersRes.data || []).map((u) => [
-        String(u.user_id),
-        [u.first_name, u.middle_name, u.last_name].filter(Boolean).join(' '),
-      ])
-    );
-
-    const formatted = (data || []).map((d) => {
-      const fullName = userMap.get(String(d.user_id)) || 'Unknown';
-      const officeName = officeMap.get(String(d.office_id)) || 'Unknown Office';
-
-      return {
-        id:                String(d.document_id),
-        employeeId:        String(d.user_id ?? ""),
-        employeeName:      fullName,
-        requiredDocument:  officeName,
-        status:            d.status ?? "pending",
-        submissionDate:    d.submitted_at ? d.submitted_at.split("T")[0] : null,
-        validationWarning: d.rejection_reason ?? null,
-        reviewedBy:        d.reviewed_by ? String(d.reviewed_by) : undefined,
-        reviewedAt:        d.reviewed_at ?? undefined,
-      };
-    });
+    const formatted = data.map(formatRow);
 
     return NextResponse.json({ data: formatted });
   } catch (err) {
-    console.error("[CLEARANCES GET ERROR]", err);
+    console.error("[GET /api/clearances] Unexpected error:", err);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Server error", details: err instanceof Error ? err.message : String(err) },
       { status: 500 }
     );
   }
 }
 
-export async function POST(request) {
+export async function POST(req) {
   try {
     const supabase = createSupabaseAdminClient();
-    const body = await request.json();
-    const { employeeId, officeName, academicYear, semester } = body;
+    const body = await req.json();
+    const { user_id, office_id, original_filename, file_path } = body;
 
-    console.log("[CLEARANCES POST BODY]", { employeeId, officeName, academicYear, semester });
-
-    if (!employeeId || !officeName) {
+    if (!user_id || !office_id) {
       return NextResponse.json(
-        { error: "employeeId and officeName are required" },
+        { error: "Missing user_id or office_id" },
         { status: 400 }
       );
     }
 
-    const { data: user, error: userError } = await supabase
-      .from("users")
-      .select("user_id, status")
-      .eq("user_id", employeeId)
+    const { data, error } = await supabase
+      .from("clearances")
+      .insert([
+        {
+          user_id,
+          office_id,
+          original_filename: original_filename ?? null,
+          file_path: file_path ?? null,
+          status: "pending",
+          submitted_at: new Date().toISOString(),
+        },
+      ])
+      .select(SELECT_FIELDS)
       .single();
 
-    console.log("[CLEARANCES POST USER]", { user, userError });
-
-    if (userError || !user) {
+    if (error) {
+      console.error("[POST /api/clearances]", error.message);
       return NextResponse.json(
-        { error: "Employee not found" },
-        { status: 404 }
-      );
-    }
-
-    if (user.status !== "active") {
-      return NextResponse.json(
-        { error: "Cannot submit clearance for an inactive employee" },
-        { status: 422 }
-      );
-    }
-
-    const officeId = await findOfficeIdByName(supabase, officeName);
-
-    if (!officeId) {
-      return NextResponse.json(
-        { error: `No office found matching "${officeName}"` },
-        { status: 404 }
-      );
-    }
-
-    const { data: existing } = await supabase
-      .from("clearances")
-      .select("document_id, status")
-      .eq("user_id", employeeId)
-      .eq("office_id", officeId)
-      .maybeSingle();
-
-    if (existing) {
-      return NextResponse.json(
-        { error: "A document for this office has already been submitted" },
-        { status: 409 }
-      );
-    }
-
-    const insertPayload = {
-      user_id: employeeId,
-      office_id: officeId,
-      status: 'submitted',
-      submitted_at: new Date().toISOString(),
-    };
-
-    // Keep insert schema-safe: only include optional fields when explicitly provided.
-    if (academicYear) {
-      insertPayload.academic_year = academicYear;
-    }
-    if (semester) {
-      insertPayload.semester = semester;
-    }
-
-    const { data: newDocument, error: insertError } = await supabase
-      .from("clearances")
-      .insert(insertPayload)
-      .select("document_id")
-      .single();
-
-    if (insertError) {
-      console.error("[CLEARANCES POST ERROR]", insertError);
-      return NextResponse.json(
-        { error: insertError.message || "Failed to submit clearance document" },
+        { error: "Failed to create clearance record" },
         { status: 500 }
       );
     }
 
-    return NextResponse.json(
-      { message: "Document submitted successfully", id: String(newDocument.document_id) },
-      { status: 201 }
-    );
+    const formatted = formatRow(data);
+
+    return NextResponse.json({ data: formatted });
   } catch (err) {
-    console.error("[CLEARANCES POST ERROR]", err);
+    console.error("[POST /api/clearances] Unexpected error:", err);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Server error", details: err instanceof Error ? err.message : String(err) },
       { status: 500 }
     );
   }

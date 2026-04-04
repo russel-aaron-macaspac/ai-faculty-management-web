@@ -34,15 +34,9 @@ const emptyLocalState: OfficeLocalState = {
 };
 
 const loadSavedState = (key: string): OfficeLocalState => {
-  if (globalThis.window === undefined) {
-    return emptyLocalState;
-  }
-
+  if (globalThis.window === undefined) return emptyLocalState;
   const raw = localStorage.getItem(key);
-  if (!raw) {
-    return emptyLocalState;
-  }
-
+  if (!raw) return emptyLocalState;
   try {
     const parsed = JSON.parse(raw) as Partial<OfficeLocalState>;
     return {
@@ -62,6 +56,17 @@ const getStatusClass = (status: Clearance['status']) => {
   return 'bg-slate-100 text-slate-800';
 };
 
+const DOCUMENT_TYPE_RULES: Record<string, string[]> = {
+  'ICT Device Return Slip': ['device return', 'ict office', 'asset tag'],
+  'Library Clearance Form': ['library', 'borrowed books', 'return slip'],
+  'Laboratory Tools Return Checklist': ['laboratory', 'tools', 'checklist'],
+  'CESO Completion Certificate': ['ceso', 'completion certificate', 'completed'],
+  'Financial Clearance': ['financial clearance', 'cashier', 'no outstanding balance'],
+  'PMO Equipment Return': ['pmo', 'equipment return', 'property management office'],
+  'Program Chair Clearance': ['program chair', 'clearance', 'department'],
+  'Borrowed Book Slip': ['borrowed book slip', 'borrowed books slip', 'borrowed book', 'library', 'book return', 'dlrc'],
+};
+
 export default function OfficeClearanceDetailPage() {
   const params = useParams<{ officeSlug: string }>();
   const officeSlug = Array.isArray(params.officeSlug) ? params.officeSlug[0] : params.officeSlug;
@@ -69,6 +74,7 @@ export default function OfficeClearanceDetailPage() {
 
   const [currentUser, setCurrentUser] = useState<StoredUser | null>(null);
   const [records, setRecords] = useState<Clearance[]>([]);
+  const [offices, setOffices] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [notes, setNotes] = useState<ClearanceNote[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
@@ -84,6 +90,13 @@ export default function OfficeClearanceDetailPage() {
   const [selectedOCRDocumentType, setSelectedOCRDocumentType] = useState(DOCUMENT_TYPES[0]);
   const [isOCRLoading, setIsOCRLoading] = useState(false);
   const [validationResult, setValidationResult] = useState<DocumentValidationResult | null>(null);
+
+  const officeData = useMemo(() => {
+    if (!officeName || offices.length === 0) return null;
+    const match = offices.find((o) => o.name.toLowerCase() === officeName.toLowerCase());
+    if (!match) return null;
+    return { id: match.id, name: match.name };
+  }, [officeName, offices]);
 
   const handleOCRDocumentTypeChange = (value: string | null) => {
     setSelectedOCRDocumentType(value ?? DOCUMENT_TYPES[0]);
@@ -101,9 +114,15 @@ export default function OfficeClearanceDetailPage() {
       try {
         setCurrentUser(JSON.parse(raw) as StoredUser);
       } catch {
-        // Ignore bad local storage payload.
+        // ignore
       }
     }
+  }, []);
+
+  useEffect(() => {
+    clearanceService.getOffices().then((data) => {
+      if (Array.isArray(data)) setOffices(data);
+    });
   }, []);
 
   useEffect(() => {
@@ -113,7 +132,6 @@ export default function OfficeClearanceDetailPage() {
       setRecords(data);
       setLoading(false);
     };
-
     void load();
   }, []);
 
@@ -121,8 +139,8 @@ export default function OfficeClearanceDetailPage() {
   const ownOfficeRecord = useMemo(() => {
     const accountId = currentUser?.id ? String(currentUser.id) : '';
     const accountName = normalize(currentUser?.full_name || currentUser?.name || '');
-
-    const officeMatches = (record: Clearance) => normalize(record.requiredDocument) === normalize(officeName);
+    const officeMatches = (record: Clearance) =>
+      normalize(record.requiredDocument) === normalize(officeName);
 
     return records.find((record) => {
       const sameId = accountId !== '' && record.employeeId === accountId;
@@ -130,7 +148,6 @@ export default function OfficeClearanceDetailPage() {
       const sameName =
         accountName !== '' &&
         (recordName === accountName || recordName.includes(accountName) || accountName.includes(recordName));
-
       return officeMatches(record) && (sameId || sameName);
     });
   }, [records, currentUser, officeName]);
@@ -165,14 +182,23 @@ export default function OfficeClearanceDetailPage() {
   const handleSubmitDocument = async () => {
     if (!selectedDocumentFile) return;
 
-    const employeeId = currentUser?.id ? String(currentUser.id) : '';
-    if (!employeeId) return;
+    const userId = currentUser?.id ? String(currentUser.id) : '';
+    if (!userId) {
+      alert('User ID is missing. Please log in again.');
+      return;
+    }
+
+    if (!officeData?.id) {
+      console.error('Office not found for slug:', officeSlug, '| officeName:', officeName, '| offices:', offices);
+      alert('Office not found. Please contact the administrator.');
+      return;
+    }
 
     try {
       await clearanceService.uploadDocument(
-        employeeId,
-        currentUser?.full_name || currentUser?.name || '',
-        officeName
+        userId,
+        Number(officeData.id),
+        selectedDocumentFile.name,
       );
 
       const nextDocuments = [
@@ -187,62 +213,35 @@ export default function OfficeClearanceDetailPage() {
       setRecords(data);
     } catch (err) {
       console.error('Failed to submit document:', err);
-      const message = err instanceof Error ? err.message : 'Failed to submit document';
-      globalThis.alert(message);
+      alert(err instanceof Error ? err.message : 'Failed to submit document');
     }
   };
 
   const handleRemoveDocument = (indexToRemove: number) => {
     const target = officeState.documents[indexToRemove];
-    if (!target) {
-      return;
-    }
-
+    if (!target) return;
     const shouldRemove = globalThis.confirm(`Remove submitted document "${target.name}"?`);
-    if (!shouldRemove) {
-      return;
-    }
-
+    if (!shouldRemove) return;
     const nextDocuments = officeState.documents.filter((_, index) => index !== indexToRemove);
     saveLocalState({ ...officeState, documents: nextDocuments });
   };
 
   const handleRunOCR = async () => {
-    if (!selectedOCRFile) {
-      return;
-    }
-
+    if (!selectedOCRFile) return;
     setIsOCRLoading(true);
-
     try {
       const formData = new FormData();
       formData.append('file', selectedOCRFile);
-
-      const response = await fetch('/api/ocr', {
-        method: 'POST',
-        body: formData,
-      });
-
+      const response = await fetch('/api/ocr', { method: 'POST', body: formData });
       const payload = (await response.json()) as { text?: string; error?: string };
-
-      if (!response.ok) {
-        throw new Error(payload.error || 'OCR request failed');
-      }
-
+      if (!response.ok) throw new Error(payload.error || 'OCR request failed');
       const extractedText = payload.text || '';
       const result = validateDocument(selectedOCRDocumentType, extractedText);
-
-      saveLocalState({
-        ...officeState,
-        ocrText: extractedText,
-      });
+      saveLocalState({ ...officeState, ocrText: extractedText });
       setValidationResult(result);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to process OCR.';
-      saveLocalState({
-        ...officeState,
-        ocrText: `OCR scan failed: ${message}`,
-      });
+      saveLocalState({ ...officeState, ocrText: `OCR scan failed: ${message}` });
       setValidationResult(null);
     } finally {
       setIsOCRLoading(false);
@@ -272,69 +271,12 @@ export default function OfficeClearanceDetailPage() {
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           <Card className="border-slate-200">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                {unreadCount > 0 && (
-                  <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs font-medium">
-                    <Bell className="h-3 w-3" />
-                    {unreadCount}
-                  </div>
-                )}
-                Status & Officer Remarks
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <div className="text-sm font-medium text-slate-600">Current Status</div>
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium capitalize gap-2 ${getStatusClass(status)}`}
-                  >
-                    {status === 'approved' && <CheckCircle2 className="h-4 w-4" />}
-                    {status === 'rejected' && <XCircle className="h-4 w-4" />}
-                    {status}
-                  </span>
-                </div>
-              </div>
-
-              {ownOfficeRecord?.rejectionReason && (
-                <div className="rounded-md bg-rose-50 p-3 border border-rose-200">
-                  <p className="text-sm font-medium text-rose-800">Rejection Reason:</p>
-                  <p className="text-sm text-rose-700 mt-1">{ownOfficeRecord.rejectionReason}</p>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <div className="text-sm font-medium text-slate-600">
-                  Officer Remarks
-                  {loadingNotes && <Loader2 className="inline h-3 w-3 animate-spin ml-1" />}
-                </div>
-                {notes.length === 0 ? (
-                  <p className="text-sm text-slate-500 italic">No remarks from officers yet</p>
-                ) : (
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {notes.map((note) => (
-                      <div
-                        key={note.id}
-                        className={`rounded-md border p-3 text-sm ${getNoteClass(note.note_type)}`}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-medium text-slate-800">{note.author_name}</span>
-                          <span className="text-xs text-slate-500">
-                            {format(new Date(note.created_at), 'MMM d, yyyy HH:mm')}
-                          </span>
-                        </div>
-                        <p className="text-slate-700">{note.content}</p>
-                        <span className="text-xs font-medium text-slate-600 mt-1 inline-block capitalize">
-                          {note.note_type}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <p className="text-xs text-slate-500">Submitted: {submittedDate}</p>
+            <CardHeader><CardTitle>Status</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${getStatusClass(status)}`}>
+                {status}
+              </span>
+              <p className="text-sm text-slate-600">Submission date: {submittedDate}</p>
               {ownOfficeRecord?.validationWarning && (
                 <p className="text-sm text-amber-600 flex items-center gap-1">
                   <AlertTriangle className="h-4 w-4" />
@@ -345,9 +287,7 @@ export default function OfficeClearanceDetailPage() {
           </Card>
 
           <Card className="border-slate-200">
-            <CardHeader>
-              <CardTitle>Notes</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle>Notes</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <textarea
                 className="min-h-28 w-full rounded-md border border-slate-200 p-3 text-sm outline-none focus:border-red-500"
@@ -362,15 +302,12 @@ export default function OfficeClearanceDetailPage() {
           </Card>
 
           <Card className="border-slate-200">
-            <CardHeader>
-              <CardTitle>Document Submission</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle>Document Submission</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <Input type="file" onChange={(event) => setSelectedDocumentFile(event.target.files?.[0] || null)} />
               <Button onClick={() => void handleSubmitDocument()} className="bg-red-600 hover:bg-red-700">
                 <UploadCloud className="mr-2 h-4 w-4" /> Submit Document
               </Button>
-
               <div className="space-y-2">
                 {officeState.documents.length === 0 ? (
                   <p className="text-sm text-slate-500">No local submissions yet.</p>
@@ -382,14 +319,8 @@ export default function OfficeClearanceDetailPage() {
                           <div className="font-medium text-slate-700">{document.name}</div>
                           <div className="text-xs text-slate-500">Submitted: {document.submittedAt}</div>
                         </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => handleRemoveDocument(index)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          Remove
+                        <Button type="button" size="sm" variant="destructive" onClick={() => handleRemoveDocument(index)}>
+                          <Trash2 className="h-3.5 w-3.5" /> Remove
                         </Button>
                       </div>
                     </div>
@@ -400,9 +331,7 @@ export default function OfficeClearanceDetailPage() {
           </Card>
 
           <Card className="border-slate-200">
-            <CardHeader>
-              <CardTitle>OCR AI Scanner</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle>OCR AI Scanner</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <div className="space-y-2">
                 <label htmlFor="ocr-document-type" className="text-sm font-medium text-slate-700">Document Type</label>
@@ -417,24 +346,18 @@ export default function OfficeClearanceDetailPage() {
                   </SelectContent>
                 </Select>
               </div>
-
               <Input type="file" onChange={(event) => setSelectedOCRFile(event.target.files?.[0] || null)} />
               <Button onClick={() => void handleRunOCR()} disabled={isOCRLoading} className="bg-red-600 hover:bg-red-700">
                 {isOCRLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ScanLine className="mr-2 h-4 w-4" />} Run OCR AI Scan
               </Button>
-
               <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
                 <div className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
                   Selected Type: <span className="text-slate-700 normal-case">{selectedOCRDocumentType}</span>
                 </div>
-
                 {validationResult && (
                   <div className="mb-3 rounded-md border border-slate-200 bg-white p-3 text-sm">
-                    <p className="text-slate-700">
-                      Matched Document Type: {validationResult.isMatch ? '✅' : '❌'}
-                    </p>
+                    <p className="text-slate-700">Matched Document Type: {validationResult.isMatch ? '✅' : '❌'}</p>
                     <p className="text-slate-700">Confidence Score: {validationResult.confidence}%</p>
-
                     {!validationResult.isMatch && (
                       <p className="mt-2 flex items-center gap-1 text-amber-600">
                         <AlertTriangle className="h-4 w-4" />
@@ -443,7 +366,6 @@ export default function OfficeClearanceDetailPage() {
                     )}
                   </div>
                 )}
-
                 <div className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
                   <FileText className="h-4 w-4" /> Extracted Text
                 </div>

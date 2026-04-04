@@ -1,16 +1,12 @@
 export const clearanceService = {
-  async getFacultyUsers() {
-    const res = await fetch('/api/users/faculty');
-    if (!res.ok) {
-      console.error('[clearanceService.getFacultyUsers]', await res.text());
-      return [];
-    }
-    const { data } = await res.json();
-    return data || [];
-  },
+  async getClearances(userId?: string, officeId?: string) {
+    const params = new URLSearchParams();
+    if (userId) params.set('userId', userId);
+    if (officeId) params.set('officeId', officeId);
 
-  async getClearances(userId?: string) {
-    const url = userId ? `/api/clearances?userId=${userId}` : '/api/clearances';
+    const url = params.toString()
+      ? `/api/clearances?${params.toString()}`
+      : '/api/clearances';
     const res = await fetch(url);
     if (!res.ok) {
       console.error('[clearanceService.getClearances]', await res.text());
@@ -20,30 +16,65 @@ export const clearanceService = {
     return data;
   },
 
-  async getCategories() {
-    const res = await fetch('/api/clearances/categories');
+  async getOffices() {
+    const res = await fetch('/api/offices');
     if (!res.ok) {
-      console.error('[clearanceService.getCategories]', await res.text());
+      console.error('[clearanceService.getOffices]', await res.text());
       return [];
     }
     const { data } = await res.json();
     return data;
   },
 
-  async uploadDocument(employeeId: string, employeeName: string, officeName: string) {
+  async uploadDocument(
+    userId: string,
+    officeId: number,
+    originalFilename?: string,
+    filePath?: string
+  ) {
     const res = await fetch('/api/clearances', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ employeeId, employeeName, officeName }),
+      body: JSON.stringify({
+        user_id: userId,
+        office_id: officeId,
+        original_filename: originalFilename ?? null,
+        file_path: filePath ?? null,
+      }),
     });
+
+    const text = await res.text();
+    const json = text ? JSON.parse(text) : {};
+
     if (!res.ok) {
-      const { error } = await res.json();
-      throw new Error(error ?? 'Failed to upload document');
+      throw new Error(json.error ?? 'Failed to upload document');
+    }
+    return json;
+  },
+
+  async getFileUrl(path: string): Promise<string> {
+    const res = await fetch(`/api/clearances/file?path=${encodeURIComponent(path)}`);
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error ?? 'Failed to get file URL');
+    return json.url;
+  },
+
+  async deleteDocument(id: string) {
+    const res = await fetch(`/api/clearances/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const text = await res.text();
+      const json = text ? JSON.parse(text) : {};
+      throw new Error(json.error ?? 'Failed to delete document');
     }
     return res.json();
   },
 
-  async updateStatus(id: string, status: string, rejectionReason?: string, reviewedBy?: string) {
+  async updateStatus(
+    id: string,
+    status: string,
+    rejectionReason?: string,
+    reviewedBy?: string
+  ) {
     const res = await fetch(`/api/clearances/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },

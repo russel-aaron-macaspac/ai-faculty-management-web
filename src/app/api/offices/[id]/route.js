@@ -8,8 +8,6 @@ export async function PUT(request, { params }) {
     const body = await request.json();
     const { name, description, isRequired, sortOrder } = body;
 
-    console.log("[CLEARANCE CATEGORIES PUT BODY]", { id, ...body });
-
     if (!name) {
       return NextResponse.json(
         { error: "name is required" },
@@ -18,26 +16,26 @@ export async function PUT(request, { params }) {
     }
 
     const { error } = await supabase
-      .from("clearance_categories")
+      .from("offices")
       .update({
         name,
         description:  description ?? null,
         is_required:  isRequired ?? false,
         sort_order:   sortOrder ?? 0,
       })
-      .eq("office_id ", id);
+      .eq("office_id", id);
 
     if (error) {
-      console.error("[CLEARANCE CATEGORIES PUT ERROR]", error);
+      console.error("[OFFICES PUT ERROR]", error);
       return NextResponse.json(
-        { error: "Failed to update category" },
+        { error: "Failed to update office" },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ message: "Category updated successfully" });
+    return NextResponse.json({ message: "Office updated successfully" });
   } catch (err) {
-    console.error("[CLEARANCE CATEGORIES PUT ERROR]", err);
+    console.error("[OFFICES PUT ERROR]", err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -50,24 +48,22 @@ export async function DELETE(request, { params }) {
     const supabase = createSupabaseAdminClient();
     const { id } = await params;
 
-    console.log("[CLEARANCE CATEGORIES DELETE]", { id });
-
     const { error } = await supabase
-      .from("clearance_categories")
+      .from("offices")
       .delete()
-      .eq("office_id ", id);
+      .eq("office_id", id);
 
     if (error) {
-      console.error("[CLEARANCE CATEGORIES DELETE ERROR]", error);
+      console.error("[OFFICES DELETE ERROR]", error);
       return NextResponse.json(
-        { error: "Failed to delete category" },
+        { error: "Failed to delete office" },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ message: "Category deleted successfully" });
+    return NextResponse.json({ message: "Office deleted successfully" });
   } catch (err) {
-    console.error("[CLEARANCE CATEGORIES DELETE ERROR]", err);
+    console.error("[OFFICES DELETE ERROR]", err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

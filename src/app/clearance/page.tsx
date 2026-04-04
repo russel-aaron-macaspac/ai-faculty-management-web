@@ -14,6 +14,22 @@ import { FACULTY_REQUIRED_OFFICES, toOfficeSlug } from '@/lib/clearanceOffices';
 import { isApprovalOfficer, getClearancePageInfo } from '@/lib/roleConfig';
 import { StoredUser } from '@/lib/stringUtils';
 
+const OFFICER_OFFICE_MAP: Record<string, number> = {
+  dlrc:         1,
+  pmo:          2,
+  laboratory:   3,
+  ict:          4,
+  ceso:         5,
+  programchair: 6,
+  dean:         7,
+  registrar:    8,
+  ovprel:       9,
+  ovpaa:        10,
+  account:      11,
+  treasury:     12,
+  hro:          13,
+};
+
 export default function ClearancePage() {
   const router = useRouter();
   const [records, setRecords] = useState<Clearance[]>([]);
@@ -24,69 +40,63 @@ export default function ClearancePage() {
   const [uploading, setUploading] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<StoredUser | null>(null);
+  const [docName, setDocName] = useState('Safety Training Certificate');
 
   const isFacultyUser = currentUser?.role === 'faculty';
   const isApprovalOfficer_ = isApprovalOfficer(currentUser?.role);
   const showActionColumn = isApprovalOfficer_;
 
-  const [docName, setDocName] = useState('Safety Training Certificate');
+  const getOfficeId = (role?: string): string | undefined => {
+    if (!role) return undefined;
+    const id = OFFICER_OFFICE_MAP[role];
+    return id !== undefined ? String(id) : undefined;
+  };
 
-  const loadData = async () => {
+  const loadData = async (role?: string) => {
     setLoading(true);
-    const data = await clearanceService.getClearances();
-    setRecords(data);
+    const officeId = isApprovalOfficer(role) ? getOfficeId(role) : undefined;
+    const data = await clearanceService.getClearances(undefined, officeId);
+    setRecords(data || []);
     setLoading(false);
   };
 
   useEffect(() => {
     const raw = localStorage.getItem('user');
-    if (!raw) {
-      return;
-    }
-
+    if (!raw) return;
     try {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setCurrentUser(JSON.parse(raw) as StoredUser);
+      const user = JSON.parse(raw) as StoredUser;
+      setCurrentUser(user);
+      void loadData(user.role);
     } catch {
-      // Ignore invalid local storage user payload.
+      // ignore
     }
-  }, []);
-
-  useEffect(() => {
-    const loadAll = async () => {
-      await loadData();
-
-      const users = await clearanceService.getFacultyUsers();
-      setFacultyUsers(users);
-    };
-
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadAll();
   }, []);
 
   const handleUpload = async (event: { preventDefault: () => void }) => {
     event.preventDefault();
     const employeeId = currentUser?.id ? String(currentUser.id) : '';
-    const employeeName = currentUser?.full_name || currentUser?.name || 'Unknown User';
-
-    if (!employeeId) {
-      return;
-    }
+    if (!employeeId) return;
 
     setUploading(true);
-    await clearanceService.uploadDocument(employeeId, employeeName, docName);
+    await clearanceService.uploadDocument(
+      employeeId,
+      0,
+      docName
+    );
     setUploading(false);
     setIsUploadOpen(false);
-    loadData();
+    void loadData(currentUser?.role);
   };
 
   const filtered = useMemo(() => {
+    if (!currentUser) return [];
     const term = searchTerm.toLowerCase();
-    const normalize = (value: string) => value.trim().toLowerCase().split(/\s+/).join(' ');
+    const normalize = (value?: string) => (value ?? '').trim().toLowerCase().split(/\s+/).join(' ');
+    const myOfficeId = getOfficeId(currentUser.role);
 
-    if (currentUser?.role === 'faculty') {
+    if (currentUser.role === 'faculty') {
       const accountId = currentUser.id ? String(currentUser.id) : '';
-      const accountName = normalize(currentUser.full_name || currentUser.name || '');
+      const accountName = normalize(currentUser.full_name || currentUser.name);
       const ownRecords = records.filter((record) => {
         const sameId = accountId !== '' && record.employeeId === accountId;
         const recordName = normalize(record.employeeName);
@@ -97,75 +107,45 @@ export default function ClearancePage() {
       });
 
       return FACULTY_REQUIRED_OFFICES.map((office, index) => {
-        const existing = ownRecords.find((row) => normalize(row.requiredDocument) === normalize(office));
-        if (existing) {
-          return existing;
-        }
-
+        const officeName = office;
+        const existing = ownRecords.find((row) => normalize(row.requiredDocument) === normalize(officeName));
+        if (existing) return existing;
         return {
           id: `required-${index}`,
           employeeId: accountId || 'N/A',
           employeeName: currentUser.full_name || currentUser.name || 'Faculty User',
-          requiredDocument: office,
+          requiredDocument: officeName,
           status: 'pending' as const,
         };
       }).filter((row) =>
-        row.requiredDocument.toLowerCase().includes(term) ||
-        row.employeeName.toLowerCase().includes(term)
+        (row.requiredDocument ?? '').toLowerCase().includes(term) ||
+        (row.employeeName ?? '').toLowerCase().includes(term)
       );
     }
 
-    if (isApprovalOfficer(currentUser?.role)) {
-      const facultyMap = new Map<string, Clearance[]>();
+    if (isApprovalOfficer(currentUser.role)) {
+      const officeRecords = records;
 
-      records.forEach((record) => {
+      const facultyMap = new Map<string, Clearance[]>();
+      officeRecords.forEach((record) => {
         const id = record.employeeId;
-        if (!facultyMap.has(id)) {
-          facultyMap.set(id, []);
-        }
+        if (!facultyMap.has(id)) facultyMap.set(id, []);
         facultyMap.get(id)!.push(record);
       });
 
-      const uniqueFaculty = Array.from(facultyMap.values()).map((recs) => {
-        const latestStatus = recs[0];
-        const hasPendingOrSubmitted = recs.some((r) => r.status === 'pending' || r.status === 'submitted');
-
+      return Array.from(facultyMap.values()).map((recs) => {
+        const latest = recs[0];
         return {
-          ...latestStatus,
+          ...latest,
           requiredDocument: `Clearance Request (${recs.length} documents)`,
           _allRecords: recs,
-          _hasPending: hasPendingOrSubmitted,
-          _hasRecord: true,
         };
-      });
-
-      const existingFacultyIds = new Set(uniqueFaculty.map((faculty) => faculty.employeeId));
-      const missingFacultyRows = facultyUsers
-        .filter((faculty) => !existingFacultyIds.has(faculty.id))
-        .map((faculty) => ({
-          id: `faculty-${faculty.id}`,
-          employeeId: faculty.id,
-          employeeName: faculty.name,
-          requiredDocument: 'No submission yet',
-          status: 'pending' as const,
-          submissionDate: null,
-          _allRecords: [],
-          _hasPending: false,
-          _hasRecord: false,
-        }));
-
-      const mergedFaculty = [...uniqueFaculty, ...missingFacultyRows].sort((a, b) =>
-        a.employeeName.localeCompare(b.employeeName)
-      );
-
-      return mergedFaculty.filter((faculty) =>
-        faculty.employeeName.toLowerCase().includes(term)
-      );
+      }).filter((faculty) => (faculty.employeeName ?? '').toLowerCase().includes(term));
     }
 
     return records.filter((record) =>
-      record.employeeName.toLowerCase().includes(term) ||
-      record.requiredDocument.toLowerCase().includes(term)
+      (record.employeeName ?? '').toLowerCase().includes(term) ||
+      (record.requiredDocument ?? '').toLowerCase().includes(term)
     );
   }, [records, searchTerm, currentUser, facultyUsers]);
 
@@ -191,19 +171,19 @@ export default function ClearancePage() {
   }, [filtered, isFacultyUser]);
 
   const handleDecision = async (record: Clearance, decision: 'approved' | 'rejected' | 'pending') => {
-  let rejectionReason: string | undefined;
+    if (!currentUser) return;
+    if (!record.id) return;
 
-  if (decision === 'rejected') {
-    const reason = globalThis.prompt('Enter rejection reason:');
-    if (!reason) return;
-    rejectionReason = reason;
-  }
+    let reason: string | undefined;
+    if (decision === 'rejected') {
+      reason = prompt('Enter rejection reason:') || undefined;
+    }
 
-  setActionLoadingId(record.id);
-  await clearanceService.updateStatus(record.id, decision, rejectionReason);
-  await loadData();
-  setActionLoadingId(null);
-};
+    setActionLoadingId(record.id);
+    await clearanceService.updateStatus(record.id, decision, reason);
+    await loadData(currentUser.role);
+    setActionLoadingId(null);
+  };
 
   const { title: pageTitle, subtitle: pageSubtitle } = getClearancePageInfo(currentUser?.role);
 
@@ -249,7 +229,10 @@ export default function ClearancePage() {
             {isApprovalOfficer_ ? (
               <span className="text-slate-800 font-semibold">{record.employeeName}</span>
             ) : (
-              <Link href={`/clearance/${toOfficeSlug(record.requiredDocument)}`} className="text-slate-800 hover:text-red-700 hover:underline">
+              <Link
+                href={`/clearance/${toOfficeSlug(record.requiredDocument)}`}
+                className="text-slate-800 hover:text-red-700 hover:underline"
+              >
                 {record.requiredDocument}
               </Link>
             )}

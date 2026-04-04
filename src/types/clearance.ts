@@ -14,6 +14,7 @@ export interface Clearance {
   additionalNotes?: string;
   documentType?: string;
   officeCategory?: string;
+  officeId?: string;
 }
 
 export interface ClearanceNote {
@@ -49,8 +50,8 @@ export interface ClearanceAuditLog {
 }
 
 export class ClearanceCategory {
-  id: string;
-  name: string;
+  id?: string;
+  name?: string;
   description?: string;
   is_required?: boolean;
   sort_order?: number;

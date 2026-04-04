@@ -11,7 +11,7 @@ const isUuid = (value) =>
 export async function POST(request, { params }) {
   try {
     const supabase = createSupabaseAdminClient();
-    const { id } = params;
+    const { id } = await params;
     const { remarks, reviewedBy, reviewedByName, reviewedByRole } = await request.json();
 
     if (!reviewedBy || !reviewedByName) {
