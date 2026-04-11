@@ -1,41 +1,51 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { isApprovalOfficer } from '@/lib/roleConfig';
+import { isApprovalOfficer, isFacultyLikeRole } from '@/lib/roleConfig';
 
 type StoredUser = {
   role?: string;
 };
 
-export default function ClearanceLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
-  const [allowed, setAllowed] = useState(false);
+type ClearanceLayoutProps = {
+  readonly children: React.ReactNode;
+};
 
-  useEffect(() => {
+export default function ClearanceLayout({ children }: ClearanceLayoutProps) {
+  const router = useRouter();
+  const user = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+
     const raw = localStorage.getItem('user');
     if (!raw) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(raw) as StoredUser;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const hasAccess = user ? user.role === 'admin' || isFacultyLikeRole(user.role) || isApprovalOfficer(user.role) : false;
+
+  useEffect(() => {
+    if (!user) {
       router.replace('/login');
       return;
     }
 
-    try {
-      const user = JSON.parse(raw) as StoredUser;
-      const hasAccess = user.role === 'admin' || user.role === 'faculty' || isApprovalOfficer(user.role);
-
-      if (!hasAccess) {
-        router.replace('/dashboard/staff');
-        return;
-      }
-
-      setAllowed(true);
-    } catch {
-      router.replace('/login');
+    if (!hasAccess) {
+      router.replace('/dashboard/staff');
     }
-  }, [router]);
+  }, [hasAccess, router, user]);
 
-  if (!allowed) {
+  if (!user || !hasAccess) {
     return null;
   }
 

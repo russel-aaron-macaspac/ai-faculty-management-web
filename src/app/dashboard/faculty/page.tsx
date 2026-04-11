@@ -38,15 +38,17 @@ export default function FacultyDashboardPage() {
 
     const ownClassesToday = schedules
       .filter((schedule) => {
-        if (schedule.type !== 'class') {
+        const scheduleType = schedule.type ?? 'class';
+        if (scheduleType !== 'class') {
           return false;
         }
 
-        if (schedule.dayOfWeek !== currentDay) {
+        const scheduleDay = schedule.dayOfWeek ?? schedule.day;
+        if (scheduleDay !== currentDay) {
           return false;
         }
 
-        return !!accountName && schedule.employeeName === accountName;
+        return !!accountName && (schedule.employeeName ?? schedule.facultyName) === accountName;
       })
       .sort((a, b) => (parseTimeToMinutes(a.startTime) ?? 0) - (parseTimeToMinutes(b.startTime) ?? 0));
 
@@ -73,10 +75,12 @@ export default function FacultyDashboardPage() {
       classCount: ownClassesToday.length,
       totalHoursLabel,
       nextClassTime: nextClass ? formatTimeToTwelveHour(nextClass.startTime) : 'No more today',
-      nextClassRoom: nextClass?.room || nextClass?.subjectOrRole || 'No upcoming class',
+      nextClassRoom: nextClass?.room?.name || nextClass?.subjectOrRole || nextClass?.subject?.name || 'No upcoming class',
       ownClassesToday,
     };
   }, [schedules, user]);
+
+  const isProgramChair = user?.role === 'program_chair';
 
   const mockAlerts = [
     {
@@ -96,7 +100,7 @@ export default function FacultyDashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Faculty Dashboard</h1>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">{isProgramChair ? 'Program Chair Dashboard' : 'Faculty Dashboard'}</h1>
         <p className="text-slate-500 mt-1">Hello, {(user as User & { full_name?: string } | null)?.full_name}. Here is your schedule and status for today.</p>
       </div>
 
@@ -125,10 +129,10 @@ export default function FacultyDashboardPage() {
                     <div key={schedule.id} className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-lg border border-slate-100 transition-colors">
                       <div className="flex-1">
                         <div className="font-medium text-slate-800">
-                          {formatTimeToTwelveHour(schedule.startTime)} - {formatTimeToTwelveHour(schedule.endTime)} {schedule.subjectOrRole}
+                          {formatTimeToTwelveHour(schedule.startTime)} - {formatTimeToTwelveHour(schedule.endTime)} {schedule.subjectOrRole ?? schedule.subject?.name}
                         </div>
                         <div className="text-xs text-slate-500">
-                          {schedule.room ? `Room ${schedule.room}` : 'Location TBD'}
+                          {schedule.room?.name ? `Room ${schedule.room.name}` : 'Location TBD'}
                         </div>
                       </div>
                       <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${status.color}`}>

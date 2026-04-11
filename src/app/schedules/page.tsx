@@ -1,388 +1,657 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Loader2, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
 import { Schedule } from '@/types/schedule';
-import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CalendarPlus, Trash2, Loader2, Search, AlertTriangle, AlertCircle, Edit2 } from 'lucide-react';
-import { User } from '@/types/user';
-import { parseTimeToMinutes, formatTimeToTwelveHour, subtractMinutesFromTime } from '@/lib/timeUtils';
+import { formatTimeToTwelveHour } from '@/lib/timeUtils';
+import { isFacultyLikeRole } from '@/lib/roleConfig';
 
-const scheduleSchema = z.object({
-  employeeId: z.string().min(1, { message: 'Employee is required' }),
-  employeeName: z.string().min(1, { message: 'Name is required' }),
-  type: z.enum(['class', 'shift']),
-  subjectOrRole: z.string().min(2, { message: 'Subject or Role is required' }),
-  room: z.string().optional(),
-  dayOfWeek: z.string().min(1, { message: 'Day is required' }),
-  startTime: z.string().min(4, { message: 'Start time is required' }),
-  endTime: z.string().min(4, { message: 'End time is required' }),
-});
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const APPROVAL_ROLES = new Set(['dean', 'ovpaa', 'registrar', 'hro']);
 
-const editScheduleSchema = z.object({
-  type: z.enum(['class', 'shift']),
-  subjectOrRole: z.string().min(2, { message: 'Subject or Role is required' }),
-  room: z.string().optional(),
-  dayOfWeek: z.string().min(1, { message: 'Day is required' }),
-  startTime: z.string().min(4, { message: 'Start time is required' }),
-  endTime: z.string().min(4, { message: 'End time is required' }),
-});
+type LocalUser = {
+  id: string;
+  role: string;
+  full_name?: string;
+  name?: string;
+};
+
+interface SchedulingMeta {
+  faculties: Array<{ id: string; name: string; role: string }>;
+  subjects: Array<{ id: string; code: string; name: string }>;
+  rooms: Array<{ id: string; name: string; capacity: number }>;
+}
 
 export default function SchedulesPage() {
-  const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [user, setUser] = useState<LocalUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [isEditOpen, setIsEditOpen] = useState(false);
-  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [pendingApprovals, setPendingApprovals] = useState<Schedule[]>([]);
+  const [meta, setMeta] = useState<SchedulingMeta>({ faculties: [], subjects: [], rooms: [] });
+  const [availabilityRows, setAvailabilityRows] = useState<Array<{ day: string; startTime: string; endTime: string }>>([]);
+  const [selectedFacultyId, setSelectedFacultyId] = useState<string>('');
+  const [selectedFacultyAvailability, setSelectedFacultyAvailability] = useState<Array<{ day: string; startTime: string; endTime: string }>>([]);
+  const [selectedFacultyLoading, setSelectedFacultyLoading] = useState(false);
+  const [conflictResult, setConflictResult] = useState<null | {
+    conflict_type: 'faculty' | 'room' | 'availability';
+    conflicts: Array<{ conflict_type: string; details: unknown[] }>;
+    suggestions: {
+      suggested_rooms: Array<{ id: string; name: string; capacity: number }>;
+      suggested_time_slots: Array<{ day: string; start_time: string; end_time: string }>;
+    };
+  }>(null);
 
-  useEffect(() => {
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setUser(JSON.parse(userStr));
-    }
-  }, []);
-
-  const form = useForm<z.infer<typeof scheduleSchema>>({
-    resolver: zodResolver(scheduleSchema),
-    defaultValues: {
-      employeeId: '',
-      employeeName: '',
-      type: 'class',
-      subjectOrRole: '',
-      room: '',
-      dayOfWeek: 'Monday',
-      startTime: '',
-      endTime: '',
-    },
+  const [assignment, setAssignment] = useState({
+    facultyId: '',
+    subjectId: '',
+    roomId: '',
+    day: 'Monday',
+    startTime: '',
+    endTime: '',
   });
 
-  const editForm = useForm<z.infer<typeof editScheduleSchema>>({
-    resolver: zodResolver(editScheduleSchema),
-    defaultValues: {
-      type: 'class',
-      subjectOrRole: '',
-      room: '',
-      dayOfWeek: 'Monday',
-      startTime: '',
-      endTime: '',
-    },
-  });
+  const currentUserName = user?.full_name || user?.name || '';
+  const isProgramChair = user?.role === 'program_chair';
+  const facultyLike = isFacultyLikeRole(user?.role);
+  const canApprove = APPROVAL_ROLES.has(user?.role || '');
+  let pageSubtitle = 'Review your schedule and manage your availability windows.';
+  if (isProgramChair) {
+    pageSubtitle = 'Assign faculty schedules with automatic conflict detection and AI suggestions.';
+  } else if (canApprove) {
+    pageSubtitle = 'Review and process schedules based on your approval stage.';
+  }
 
-  const loadData = async () => {
+  const loadData = async (currentUser?: LocalUser | null) => {
     setLoading(true);
-    const data = await scheduleService.getSchedules();
-    setSchedules(data);
-    setLoading(false);
+    try {
+      const [metaData, scheduleData] = await Promise.all([
+        scheduleService.getMetadata(),
+        scheduleService.getSchedules(),
+      ]);
+
+      setMeta(metaData);
+      setSchedules(scheduleData);
+
+      if (currentUser && APPROVAL_ROLES.has(currentUser.role)) {
+        const pending = await scheduleService.getPendingApprovals(currentUser.role);
+        setPendingApprovals(pending);
+      } else {
+        setPendingApprovals([]);
+      }
+
+      if (currentUser && isFacultyLikeRole(currentUser.role) && currentUser.id) {
+        try {
+          const entries = await scheduleService.getFacultyAvailability(String(currentUser.id));
+          setAvailabilityRows(entries.map((entry) => ({ day: entry.day, startTime: entry.startTime, endTime: entry.endTime })));
+        } catch {
+          setAvailabilityRows([]);
+        }
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadData();
+    const raw = localStorage.getItem('user');
+    const parsed = raw ? (JSON.parse(raw) as LocalUser) : null;
+    setUser(parsed);
+    void loadData(parsed);
   }, []);
 
-  const onSubmit = async (values: z.infer<typeof scheduleSchema>) => {
-    await scheduleService.createSchedule(values);
-    setIsAddOpen(false);
-    form.reset();
-    loadData();
-  };
+  useEffect(() => {
+    if (!isProgramChair || meta.faculties.length === 0) {
+      return;
+    }
 
-  const onEditSubmit = async (values: z.infer<typeof editScheduleSchema>) => {
-    if (!editingScheduleId) return;
-    await scheduleService.updateSchedule(editingScheduleId, values);
-    setIsEditOpen(false);
-    editForm.reset();
-    setEditingScheduleId(null);
-    loadData();
-  };
+    const nextSelectedFacultyId =
+      meta.faculties.find((faculty) => faculty.id === selectedFacultyId)?.id ||
+      meta.faculties[0]?.id ||
+      '';
 
-  const handleEdit = (schedule: Schedule) => {
-    setEditingScheduleId(schedule.id);
-    editForm.reset({
-      type: schedule.type,
-      subjectOrRole: schedule.subjectOrRole,
-      room: schedule.room || '',
-      dayOfWeek: schedule.dayOfWeek,
-      startTime: schedule.startTime,
-      endTime: schedule.endTime,
+    if (nextSelectedFacultyId && nextSelectedFacultyId !== selectedFacultyId) {
+      setSelectedFacultyId(nextSelectedFacultyId);
+      setAssignment((prev) => ({ ...prev, facultyId: nextSelectedFacultyId }));
+    }
+  }, [isProgramChair, meta.faculties, selectedFacultyId]);
+
+  useEffect(() => {
+    if (!isProgramChair || !selectedFacultyId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadSelectedFacultyAvailability = async () => {
+      setSelectedFacultyLoading(true);
+      try {
+        const entries = await scheduleService.getFacultyAvailability(selectedFacultyId);
+        if (cancelled) return;
+
+        setSelectedFacultyAvailability(
+          entries.map((entry) => ({ day: entry.day, startTime: entry.startTime, endTime: entry.endTime }))
+        );
+        setAssignment((prev) => ({ ...prev, facultyId: selectedFacultyId }));
+      } catch {
+        if (!cancelled) {
+          setSelectedFacultyAvailability([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setSelectedFacultyLoading(false);
+        }
+      }
+    };
+
+    void loadSelectedFacultyAvailability();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isProgramChair, selectedFacultyId]);
+
+  const visibleSchedules = useMemo(() => {
+    if (!facultyLike || !currentUserName) {
+      return schedules;
+    }
+
+    return schedules.filter((row) => {
+      const matchesId = user?.id && String(row.facultyId) === String(user.id);
+      const matchesName = (row.facultyName || '').toLowerCase() === currentUserName.toLowerCase();
+      return matchesId || matchesName;
     });
-    setIsEditOpen(true);
+  }, [schedules, facultyLike, currentUserName, user?.id]);
+
+  const addAvailabilityRow = () => {
+    setAvailabilityRows((rows) => [...rows, { day: 'Monday', startTime: '08:00', endTime: '10:00' }]);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this schedule?')) {
-      await scheduleService.deleteSchedule(id);
-      loadData();
+  const updateAvailabilityRow = (index: number, next: Partial<{ day: string; startTime: string; endTime: string }>) => {
+    setAvailabilityRows((rows) => rows.map((row, i) => (i === index ? { ...row, ...next } : row)));
+  };
+
+  const removeAvailabilityRow = (index: number) => {
+    setAvailabilityRows((rows) => rows.filter((_, i) => i !== index));
+  };
+
+  const handleSaveAvailability = async () => {
+    if (!user?.id) return;
+    setSaving(true);
+    try {
+      await scheduleService.saveFacultyAvailability(String(user.id), availabilityRows);
+      await loadData(user);
+    } finally {
+      setSaving(false);
     }
   };
 
-  const userName = (user as User & { full_name?: string | null })?.full_name ?? user?.name;
-
-  const filtered = schedules.filter(s => {
-    // If the user is not an admin, they can only see their own schedules
-    if (user && user.role !== 'admin' && userName && s.employeeName !== userName) {
-      return false;
+  const handleCreateSchedule = async () => {
+    if (!user) return;
+    if (!assignment.facultyId || !assignment.subjectId || !assignment.roomId || !assignment.startTime || !assignment.endTime) {
+      alert('Please complete all schedule fields.');
+      return;
     }
 
-    return s.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-           s.subjectOrRole.toLowerCase().includes(searchTerm.toLowerCase()) ||
-           s.dayOfWeek.toLowerCase().includes(searchTerm.toLowerCase());
-  });
+    setSaving(true);
+    try {
+      const result = await scheduleService.createSchedule({
+        ...assignment,
+        createdBy: currentUserName || user.role,
+        creatorRole: user.role,
+      });
+
+      if (!result.success) {
+        setConflictResult(result.conflict);
+        return;
+      }
+
+      setConflictResult(null);
+      setAssignment({
+        facultyId: '',
+        subjectId: '',
+        roomId: '',
+        day: 'Monday',
+        startTime: '',
+        endTime: '',
+      });
+      await loadData(user);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to create schedule');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleApprovalDecision = async (scheduleId: string, action: 'approve' | 'reject') => {
+    if (!user) return;
+    const remarks = action === 'reject' ? prompt('Please provide rejection remarks:', '') || '' : '';
+
+    setSaving(true);
+    try {
+      await scheduleService.submitApprovalDecision({
+        scheduleId,
+        role: user.role,
+        action,
+        remarks,
+        actorId: String(user.id),
+      });
+
+      await loadData(user);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to process approval decision');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const scheduleTableRows = (() => {
+    if (loading) {
+      return (
+        <TableRow>
+          <TableCell colSpan={6} className="text-center py-8 text-slate-500">
+            <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" /> Loading schedules...
+          </TableCell>
+        </TableRow>
+      );
+    }
+
+    if (visibleSchedules.length === 0) {
+      return (
+        <TableRow>
+          <TableCell colSpan={6} className="text-center py-8 text-slate-500">
+            No schedules found.
+          </TableCell>
+        </TableRow>
+      );
+    }
+
+    return visibleSchedules.map((item) => (
+      <TableRow key={item.id}>
+        <TableCell>{item.facultyName}</TableCell>
+        <TableCell>{item.subject?.code} - {item.subject?.name}</TableCell>
+        <TableCell>{item.room?.name}</TableCell>
+        <TableCell>{item.day}</TableCell>
+        <TableCell>
+          {formatTimeToTwelveHour(item.startTime)} - {formatTimeToTwelveHour(item.endTime)}
+        </TableCell>
+        <TableCell>
+          <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+            {item.status}
+          </span>
+        </TableCell>
+      </TableRow>
+    ));
+  })();
+
+  const selectedFacultyName = meta.faculties.find((faculty) => faculty.id === selectedFacultyId)?.name ?? 'Select a faculty member';
+
+  const selectedFacultyAvailabilityRows =
+    isProgramChair && selectedFacultyId ? selectedFacultyAvailability : availabilityRows;
+
+  let selectedFacultyAvailabilityContent: React.ReactNode;
+  if (selectedFacultyLoading) {
+    selectedFacultyAvailabilityContent = (
+      <div className="flex items-center gap-2 text-sm text-slate-500">
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading availability...
+      </div>
+    );
+  } else if (selectedFacultyAvailabilityRows.length === 0) {
+    selectedFacultyAvailabilityContent = (
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+        No saved availability for this faculty member.
+      </div>
+    );
+  } else {
+    selectedFacultyAvailabilityContent = (
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {selectedFacultyAvailabilityRows.map((row, index) => (
+          <div key={`${row.day}-${row.startTime}-${index}`} className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <div className="font-medium text-slate-900">{row.day}</div>
+            <div className="text-sm text-slate-500">
+              {formatTimeToTwelveHour(row.startTime)} - {formatTimeToTwelveHour(row.endTime)}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  let suggestedRoomsContent: React.ReactNode;
+  if (conflictResult?.suggestions.suggested_rooms.length === 0) {
+    suggestedRoomsContent = <li>No available room suggestions for this time slot.</li>;
+  } else {
+    suggestedRoomsContent = conflictResult?.suggestions.suggested_rooms.map((room) => (
+      <li key={room.id}>{room.name} (cap {room.capacity})</li>
+    ));
+  }
+
+  let suggestedTimeSlotsContent: React.ReactNode;
+  if (conflictResult?.suggestions.suggested_time_slots.length === 0) {
+    suggestedTimeSlotsContent = <li>No available time suggestions within faculty availability.</li>;
+  } else {
+    suggestedTimeSlotsContent = conflictResult?.suggestions.suggested_time_slots.map((slot, index) => (
+      <li key={`${slot.day}-${slot.start_time}-${index}`}>
+        {slot.day}: {formatTimeToTwelveHour(slot.start_time)} - {formatTimeToTwelveHour(slot.end_time)}
+      </li>
+    ));
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center flex-wrap gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">{user?.role === 'admin' ? 'Master Schedule' : 'My Schedule'}</h1>
-          <p className="text-slate-500 mt-1">See your scheduled classes and shifts.</p>
-        </div>
-        
-        {user?.role === 'admin' && (
-          <Dialog open={isAddOpen} onOpenChange={(open) => {
-            setIsAddOpen(open);
-            if (!open) form.reset();
-          }}>
-            <DialogTrigger>
-               <Button className="bg-red-600 hover:bg-red-700">
-                 <CalendarPlus className="mr-2 h-4 w-4" /> Add Schedule
-               </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
-               <DialogHeader>
-                  <DialogTitle>Add New Schedule</DialogTitle>
-               </DialogHeader>
-               <Form {...form}>
-                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                   <div className="grid grid-cols-2 gap-4">
-                      <FormField control={form.control} name="employeeId" render={({ field }) => (
-                        <FormItem><FormLabel>Employee ID (Mock)</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                      )} />
-                      <FormField control={form.control} name="employeeName" render={({ field }) => (
-                        <FormItem><FormLabel>Employee Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                      )} />
-                   </div>
-                   
-                   <FormField control={form.control} name="type" render={({ field }) => (
-                     <FormItem>
-                       <FormLabel>Schedule Type</FormLabel>
-                       <Select onValueChange={field.onChange} defaultValue={field.value}>
-                         <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                         <SelectContent>
-                           <SelectItem value="class">Class (Faculty)</SelectItem>
-                           <SelectItem value="shift">Shift (Staff)</SelectItem>
-                         </SelectContent>
-                       </Select>
-                       <FormMessage />
-                     </FormItem>
-                   )} />
-
-                   <div className="grid grid-cols-2 gap-4">
-                      <FormField control={form.control} name="subjectOrRole" render={({ field }) => (
-                        <FormItem><FormLabel>Subject / Role</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                      )} />
-                      <FormField control={form.control} name="room" render={({ field }) => (
-                        <FormItem><FormLabel>Room (Optional)</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                      )} />
-                   </div>
-
-                   <FormField control={form.control} name="dayOfWeek" render={({ field }) => (
-                     <FormItem>
-                       <FormLabel>Day of Week</FormLabel>
-                       <Select onValueChange={field.onChange} defaultValue={field.value}>
-                         <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                         <SelectContent>
-                           {['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(d => (
-                              <SelectItem key={d} value={d}>{d}</SelectItem>
-                           ))}
-                         </SelectContent>
-                       </Select>
-                       <FormMessage />
-                     </FormItem>
-                   )} />
-
-                   <div className="grid grid-cols-2 gap-4">
-                      <FormField control={form.control} name="startTime" render={({ field }) => (
-                        <FormItem><FormLabel>Start Time</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>
-                      )} />
-                      <FormField control={form.control} name="endTime" render={({ field }) => (
-                        <FormItem><FormLabel>End Time</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>
-                      )} />
-                   </div>
-
-                   <div className="flex justify-end pt-4">
-                      <Button type="submit" disabled={form.formState.isSubmitting}>
-                        {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Add to Schedule
-                      </Button>
-                   </div>
-                 </form>
-               </Form>
-            </DialogContent>
-          </Dialog>
-        )}
-
-        {user?.role === 'admin' && (
-          <Dialog open={isEditOpen} onOpenChange={(open) => {
-            setIsEditOpen(open);
-            if (!open) {
-              editForm.reset();
-              setEditingScheduleId(null);
-            }
-          }}>
-            <DialogContent className="sm:max-w-[425px]">
-               <DialogHeader>
-                  <DialogTitle>Edit Schedule</DialogTitle>
-               </DialogHeader>
-               <Form {...editForm}>
-                 <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4">
-                   <FormField control={editForm.control} name="type" render={({ field }) => (
-                     <FormItem>
-                       <FormLabel>Schedule Type</FormLabel>
-                       <Select onValueChange={field.onChange} value={field.value}>
-                         <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                         <SelectContent>
-                           <SelectItem value="class">Class (Faculty)</SelectItem>
-                           <SelectItem value="shift">Shift (Staff)</SelectItem>
-                         </SelectContent>
-                       </Select>
-                       <FormMessage />
-                     </FormItem>
-                   )} />
-
-                   <div className="grid grid-cols-2 gap-4">
-                      <FormField control={editForm.control} name="subjectOrRole" render={({ field }) => (
-                        <FormItem><FormLabel>Subject / Role</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                      )} />
-                      <FormField control={editForm.control} name="room" render={({ field }) => (
-                        <FormItem><FormLabel>Room (Optional)</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                      )} />
-                   </div>
-
-                   <FormField control={editForm.control} name="dayOfWeek" render={({ field }) => (
-                     <FormItem>
-                       <FormLabel>Day of Week</FormLabel>
-                       <Select onValueChange={field.onChange} value={field.value}>
-                         <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                         <SelectContent>
-                           {['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(d => (
-                              <SelectItem key={d} value={d}>{d}</SelectItem>
-                           ))}
-                         </SelectContent>
-                       </Select>
-                       <FormMessage />
-                     </FormItem>
-                   )} />
-
-                   <div className="grid grid-cols-2 gap-4">
-                      <FormField control={editForm.control} name="startTime" render={({ field }) => (
-                        <FormItem><FormLabel>Start Time</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>
-                      )} />
-                      <FormField control={editForm.control} name="endTime" render={({ field }) => (
-                        <FormItem><FormLabel>End Time</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>
-                      )} />
-                   </div>
-
-                   <div className="flex justify-end pt-4">
-                      <Button type="submit" disabled={editForm.formState.isSubmitting}>
-                        {editForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Save Changes
-                      </Button>
-                   </div>
-                 </form>
-               </Form>
-            </DialogContent>
-          </Dialog>
-        )}
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Scheduling</h1>
+        <p className="text-slate-500 mt-1">{pageSubtitle}</p>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex items-center gap-2">
-           <Search className="h-5 w-5 text-slate-400" />
-           <Input 
-             placeholder="Search by name, subject, or day..." 
-             className="hidden md:block max-w-sm border-0 focus-visible:ring-0 px-0"
-             value={searchTerm}
-             onChange={(e) => setSearchTerm(e.target.value)}
-           />
-        </div>
-        
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-slate-50">
-              <TableHead>Employee</TableHead>
-              <TableHead>Event</TableHead>
-              <TableHead>Time / Location</TableHead>
-              <TableHead>Status</TableHead>
-              {user?.role === 'admin' && <TableHead className="text-right">Actions</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center py-10 text-slate-500">
-                  <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-red-500" />
-                  Loading schedules...
-                </TableCell>
-              </TableRow>
-            ) : filtered.length === 0 ? (
-              <TableRow>
-                 <TableCell colSpan={5} className="text-center py-10 text-slate-500">
-                   No schedules found.
-                 </TableCell>
-              </TableRow>
-            ) : filtered.map((s) => (
-              <TableRow key={s.id} className={s.conflictWarning ? 'bg-rose-50/50' : ''}>
-                <TableCell>
-                  <div className="font-medium text-slate-900">{s.employeeName}</div>
-                  <div className="text-xs text-slate-500 capitalize">{s.type}</div>
-                </TableCell>
-                <TableCell>
-                  <div className="text-sm font-medium">{s.subjectOrRole}</div>
-                  <div className="text-xs text-slate-500">{s.dayOfWeek}</div>
-                </TableCell>
-                <TableCell>
-                  <div className="text-sm">{formatTimeToTwelveHour(s.startTime)} - {formatTimeToTwelveHour(s.endTime)}</div>
-                  <div className="text-xs text-slate-500">{s.room || 'N/A'}</div>
-                </TableCell>
-                <TableCell>
-                  {s.conflictWarning ? (
-                     <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-800">
-                        <AlertTriangle className="h-3 w-3" /> Conflict
-                     </div>
-                  ) : (
-                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
-                        Clear
-                     </span>
-                  )}
-                </TableCell>
-                {user?.role === 'admin' && (
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(s)}>
-                        <Edit2 className="h-4 w-4 text-slate-500 hover:text-blue-600" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(s.id)}>
-                        <Trash2 className="h-4 w-4 text-slate-500 hover:text-rose-600" />
-                      </Button>
+      {isProgramChair && (
+        <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+          <Card>
+            <CardHeader>
+              <CardTitle>Faculty List</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {meta.faculties.length === 0 ? (
+                <div className="text-sm text-slate-500">No faculty records available.</div>
+              ) : (
+                meta.faculties.map((faculty) => {
+                  const isSelected = faculty.id === selectedFacultyId;
+
+                  return (
+                    <button
+                      key={faculty.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedFacultyId(faculty.id);
+                        setAssignment((prev) => ({ ...prev, facultyId: faculty.id }));
+                      }}
+                      className={`w-full rounded-lg border px-3 py-3 text-left transition-colors ${
+                        isSelected
+                          ? 'border-red-300 bg-red-50 text-red-900'
+                          : 'border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="font-medium">{faculty.name}</div>
+                      <div className="text-xs text-slate-500">Click to view saved availability</div>
+                    </button>
+                  );
+                })
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Program Chair Scheduling</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 md:col-span-2 lg:col-span-3">
+                    <div className="text-xs uppercase tracking-wide text-slate-500">Selected Faculty</div>
+                    <div className="text-sm font-medium text-slate-900">{selectedFacultyName}</div>
+                  </div>
+
+                  <div>
+                    <div className="text-sm font-medium">Subject</div>
+                    <Select
+                      value={assignment.subjectId}
+                      onValueChange={(value) => setAssignment((prev) => ({ ...prev, subjectId: value || '' }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select subject" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {meta.subjects.map((subject) => (
+                          <SelectItem key={subject.id} value={subject.id}>
+                            {subject.code} - {subject.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <div className="text-sm font-medium">Room</div>
+                    <Select
+                      value={assignment.roomId}
+                      onValueChange={(value) => setAssignment((prev) => ({ ...prev, roomId: value || '' }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select room" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {meta.rooms.map((room) => (
+                          <SelectItem key={room.id} value={room.id}>
+                            {room.name} (cap {room.capacity})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div>
+                    <div className="text-sm font-medium">Day</div>
+                    <Select value={assignment.day} onValueChange={(value) => setAssignment((prev) => ({ ...prev, day: value || 'Monday' }))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DAYS.map((day) => (
+                          <SelectItem key={day} value={day}>
+                            {day}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <div className="text-sm font-medium">Start Time</div>
+                    <Input
+                      type="time"
+                      value={assignment.startTime}
+                      onChange={(event) => setAssignment((prev) => ({ ...prev, startTime: event.target.value }))}
+                    />
+                  </div>
+
+                  <div>
+                    <div className="text-sm font-medium">End Time</div>
+                    <Input
+                      type="time"
+                      value={assignment.endTime}
+                      onChange={(event) => setAssignment((prev) => ({ ...prev, endTime: event.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <Button onClick={handleCreateSchedule} disabled={saving}>
+                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Create Schedule
+                </Button>
+
+                {conflictResult && (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-amber-900 font-medium">
+                      <AlertTriangle className="h-4 w-4" />
+                      Conflict detected: {conflictResult.conflict_type}
                     </div>
-                  </TableCell>
+                    <div className="text-sm text-amber-800">
+                      Found {conflictResult.conflicts.length} conflict group(s). Adjust room/time before retrying.
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <h3 className="text-sm font-semibold text-slate-800">Suggested Rooms</h3>
+                        <ul className="text-sm text-slate-700 list-disc pl-5">
+                          {suggestedRoomsContent}
+                        </ul>
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-semibold text-slate-800">Suggested Time Slots</h3>
+                        <ul className="text-sm text-slate-700 list-disc pl-5">
+                          {suggestedTimeSlotsContent}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
                 )}
-              </TableRow>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>{selectedFacultyName} Availability</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {selectedFacultyAvailabilityContent}
+                <div className="text-xs text-slate-500">
+                  Click a faculty name on the left to inspect their saved availability before assigning a schedule.
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {facultyLike && !isProgramChair && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Faculty Availability</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {availabilityRows.map((row, index) => (
+              <div key={`${row.day}-${index}`} className="grid gap-3 md:grid-cols-4 items-end">
+                <div>
+                  <div className="text-sm font-medium">Day</div>
+                  <Select value={row.day} onValueChange={(value) => updateAvailabilityRow(index, { day: value || 'Monday' })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DAYS.map((day) => (
+                        <SelectItem key={day} value={day}>
+                          {day}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <div className="text-sm font-medium">Start</div>
+                  <Input
+                    type="time"
+                    value={row.startTime}
+                    onChange={(event) => updateAvailabilityRow(index, { startTime: event.target.value })}
+                  />
+                </div>
+                <div>
+                  <div className="text-sm font-medium">End</div>
+                  <Input
+                    type="time"
+                    value={row.endTime}
+                    onChange={(event) => updateAvailabilityRow(index, { endTime: event.target.value })}
+                  />
+                </div>
+                <Button variant="outline" onClick={() => removeAvailabilityRow(index)}>
+                  Remove
+                </Button>
+              </div>
             ))}
-          </TableBody>
-        </Table>
-      </div>
+
+            <div className="flex gap-3">
+              <Button type="button" variant="outline" onClick={addAvailabilityRow}>
+                Add Availability
+              </Button>
+              <Button type="button" onClick={handleSaveAvailability} disabled={saving}>
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save Availability
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {canApprove && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Approval Dashboard</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Faculty</TableHead>
+                  <TableHead>Subject</TableHead>
+                  <TableHead>Schedule</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pendingApprovals.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-slate-500 py-8">
+                      No pending schedules for your role.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  pendingApprovals.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell>{item.facultyName}</TableCell>
+                      <TableCell>{item.subject?.code} - {item.subject?.name}</TableCell>
+                      <TableCell>
+                        {item.day} {formatTimeToTwelveHour(item.startTime)} - {formatTimeToTwelveHour(item.endTime)}
+                      </TableCell>
+                      <TableCell>{item.status}</TableCell>
+                      <TableCell className="text-right space-x-2">
+                        <Button
+                          size="sm"
+                          className="bg-emerald-600 hover:bg-emerald-700"
+                          onClick={() => handleApprovalDecision(item.id, 'approve')}
+                        >
+                          <CheckCircle2 className="mr-1 h-4 w-4" /> Approve
+                        </Button>
+                        <Button size="sm" variant="destructive" onClick={() => handleApprovalDecision(item.id, 'reject')}>
+                          <XCircle className="mr-1 h-4 w-4" /> Reject
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{facultyLike ? 'My Schedule' : 'Master Schedule'}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Faculty</TableHead>
+                <TableHead>Subject</TableHead>
+                <TableHead>Room</TableHead>
+                <TableHead>Day</TableHead>
+                <TableHead>Time</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {scheduleTableRows}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 }

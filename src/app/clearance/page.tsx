@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input';
 import { UploadCloud, CheckCircle2, AlertTriangle, FileText, Loader2, Search, Check, X, Clock } from 'lucide-react';
 import { FACULTY_REQUIRED_OFFICES, toOfficeSlug } from '@/lib/clearanceOffices';
-import { isApprovalOfficer, getClearancePageInfo } from '@/lib/roleConfig';
+import { isApprovalOfficer, getClearancePageInfo, isFacultyLikeRole } from '@/lib/roleConfig';
 import { StoredUser } from '@/lib/stringUtils';
 
 const OFFICER_OFFICE_MAP: Record<string, number> = {
@@ -42,7 +42,7 @@ export default function ClearancePage() {
   const [currentUser, setCurrentUser] = useState<StoredUser | null>(null);
   const [docName, setDocName] = useState('Safety Training Certificate');
 
-  const isFacultyUser = currentUser?.role === 'faculty';
+  const isFacultyUser = isFacultyLikeRole(currentUser?.role);
   const isApprovalOfficer_ = isApprovalOfficer(currentUser?.role);
   const showActionColumn = isApprovalOfficer_;
 
@@ -94,7 +94,7 @@ export default function ClearancePage() {
     const normalize = (value?: string) => (value ?? '').trim().toLowerCase().split(/\s+/).join(' ');
     const myOfficeId = getOfficeId(currentUser.role);
 
-    if (currentUser.role === 'faculty') {
+    if (isFacultyLikeRole(currentUser.role)) {
       const accountId = currentUser.id ? String(currentUser.id) : '';
       const accountName = normalize(currentUser.full_name || currentUser.name);
       const ownRecords = records.filter((record) => {

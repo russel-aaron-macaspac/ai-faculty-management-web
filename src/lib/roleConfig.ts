@@ -161,7 +161,7 @@ export const getDashboardPathForRole = (role: string | undefined): string => {
     return '/dashboard/admin';
   }
 
-  if (role === 'faculty') {
+  if (role === 'faculty' || role === 'program_chair') {
     return '/dashboard/faculty';
   }
 
@@ -177,7 +177,7 @@ export const getDashboardPathForRole = (role: string | undefined): string => {
  * Helper: Get clearance page title and subtitle
  */
 export const getClearancePageInfo = (role: string | undefined): { title: string; subtitle: string } => {
-  if (role === 'faculty') {
+  if (role === 'faculty' || role === 'program_chair') {
     return {
       title: 'Clearance Offices',
       subtitle: 'Track required office and department signatures for your clearance.',
@@ -216,3 +216,7 @@ export type ApprovalOfficerId =
   | 'account'
   | 'treasury'
   | 'hro';
+
+export const isFacultyLikeRole = (role: string | undefined): boolean => {
+  return role === 'faculty' || role === 'program_chair';
+};

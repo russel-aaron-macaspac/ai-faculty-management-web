@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { User } from '@/types/user';
-import { isApprovalOfficer } from '@/lib/roleConfig';
+import { isApprovalOfficer, isFacultyLikeRole } from '@/lib/roleConfig';
 
 export default function ProfilePage() {
   const [user, setUser] = useState<User | null>(null);
@@ -31,9 +31,9 @@ export default function ProfilePage() {
   let department = 'Operations';
   let position = 'System Administrator';
 
-  if (user.role === 'faculty') {
+  if (isFacultyLikeRole(user.role)) {
     department = 'Computer Science';
-    position = 'Associate Professor';
+    position = user.role === 'program_chair' ? 'Program Chair' : 'Associate Professor';
   } else if (isApprovalOfficer(user.role)) {
     department = 'Administration';
     position = 'Officer';

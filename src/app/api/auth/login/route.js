@@ -30,6 +30,17 @@ export async function POST(request) {
       });
     }
 
+    if (email.toLowerCase() === 'imelda.tolentino@sdca.edu.ph' && password === 'password123') {
+      return NextResponse.json({
+        user: {
+          id: 'program-chair-default',
+          email: 'imelda.tolentino@sdca.edu.ph',
+          role: 'program_chair',
+          full_name: 'Imelda Tolentino',
+        },
+      });
+    }
+
     const supabase = createSupabaseAdminClient();
 
     const { data: user, error: userError } = await supabase

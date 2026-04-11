@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { User } from '@/types/user';
 import { authService } from '@/services/authService';
-import { isApprovalOfficer, getApprovalOfficerConfig } from '@/lib/roleConfig';
+import { isApprovalOfficer, getApprovalOfficerConfig, isFacultyLikeRole } from '@/lib/roleConfig';
 
 interface SidebarProps {
   user: User | null;
@@ -54,7 +54,7 @@ export function Sidebar({ user }: Readonly<SidebarProps>) {
   ];
 
   let links = adminLinks;
-  if (user?.role === 'faculty') {
+  if (isFacultyLikeRole(user?.role)) {
     links = facultyLinks;
   } else if (isApprovalOfficer(user?.role)) {
     // Dynamically create links for approval officers
