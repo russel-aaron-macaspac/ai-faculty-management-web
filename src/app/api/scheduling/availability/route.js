@@ -1,6 +1,11 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { NextResponse } from "next/server";
 
+function isValidUUID(uuid) {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(uuid);
+}
+
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -12,10 +17,24 @@ export async function GET(request) {
 
     const supabase = createSupabaseAdminClient();
 
+    let actualFacultyId = facultyId;
+    if (!isValidUUID(facultyId)) {
+      const { data: user, error: userError } = await supabase
+        .from("users")
+        .select("supabase_id")
+        .eq("user_id", parseInt(facultyId))
+        .single();
+
+      if (userError || !user) {
+        return NextResponse.json({ error: "Invalid facultyId" }, { status: 400 });
+      }
+      actualFacultyId = user.supabase_id;
+    }
+
     const { data, error } = await supabase
       .from("faculty_availability")
       .select("id, faculty_id, day, start_time, end_time")
-      .eq("faculty_id", facultyId)
+      .eq("faculty_id", actualFacultyId)
       .order("day", { ascending: true })
       .order("start_time", { ascending: true });
 
@@ -44,8 +63,12 @@ export async function PUT(request) {
     const body = await request.json();
     const { facultyId, entries } = body;
 
-    if (!facultyId || !Array.isArray(entries)) {
-      return NextResponse.json({ error: "facultyId and entries are required" }, { status: 400 });
+    if (!facultyId) {
+      return NextResponse.json({ error: "facultyId is required" }, { status: 400 });
+    }
+
+    if (!Array.isArray(entries)) {
+      return NextResponse.json({ error: "entries must be an array" }, { status: 400 });
     }
 
     for (const entry of entries) {
@@ -60,10 +83,25 @@ export async function PUT(request) {
 
     const supabase = createSupabaseAdminClient();
 
+
+    let actualFacultyId = facultyId;
+    if (!isValidUUID(facultyId)) {
+      const { data: user, error: userError } = await supabase
+        .from("users")
+        .select("supabase_id")
+        .eq("user_id", parseInt(facultyId))
+        .single();
+
+      if (userError || !user) {
+        return NextResponse.json({ error: "Invalid facultyId" }, { status: 400 });
+      }
+      actualFacultyId = user.supabase_id;
+    }
+
     const { error: deleteError } = await supabase
       .from("faculty_availability")
       .delete()
-      .eq("faculty_id", facultyId);
+      .eq("faculty_id", actualFacultyId);
 
     if (deleteError) {
       console.error("[AVAILABILITY PUT DELETE ERROR]", deleteError);
@@ -75,7 +113,7 @@ export async function PUT(request) {
     }
 
     const payload = entries.map((entry) => ({
-      faculty_id: facultyId,
+      faculty_id: actualFacultyId,
       day: entry.day,
       start_time: entry.startTime,
       end_time: entry.endTime,

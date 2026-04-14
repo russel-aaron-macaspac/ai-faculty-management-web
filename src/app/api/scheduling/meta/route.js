@@ -9,7 +9,7 @@ export async function GET() {
       await Promise.all([
         supabase
           .from("users")
-          .select("user_id, first_name, middle_name, last_name, role")
+          .select("user_id, supabase_id, first_name, middle_name, last_name, role")
           .in("role", ["faculty", "program_chair"])
           .eq("status", "active")
           .order("last_name", { ascending: true }),
@@ -26,7 +26,7 @@ export async function GET() {
       faculties: (faculties || [])
         .filter((f) => f.role === 'faculty')
         .map((f) => ({
-        id: String(f.user_id),
+        id: f.supabase_id,
         name: [f.first_name, f.middle_name, f.last_name].filter(Boolean).join(" "),
         role: f.role,
         })),
