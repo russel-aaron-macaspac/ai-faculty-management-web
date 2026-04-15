@@ -15,6 +15,18 @@ import { isFacultyLikeRole } from '@/lib/roleConfig';
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const APPROVAL_ROLES = new Set(['dean', 'ovpaa', 'registrar', 'hro']);
 
+const getSchedulingSubtitle = (isProgramChair: boolean, canApprove: boolean): string => {
+  if (isProgramChair) {
+    return 'Assign faculty schedules with automatic conflict detection and AI suggestions.';
+  }
+
+  if (canApprove) {
+    return 'Review and process schedules based on your approval stage.';
+  }
+
+  return 'Review your schedule and manage your availability windows.';
+};
+
 type LocalUser = {
   id: string;
   role: string;
@@ -56,17 +68,16 @@ export default function SchedulesPage() {
     startTime: '',
     endTime: '',
   });
+  const [newSubjectCode, setNewSubjectCode] = useState('');
+  const [newSubjectName, setNewSubjectName] = useState('');
+  const [newRoomName, setNewRoomName] = useState('');
+  const [newRoomCapacity, setNewRoomCapacity] = useState('');
 
   const currentUserName = user?.full_name || user?.name || '';
   const isProgramChair = user?.role === 'program_chair';
   const facultyLike = isFacultyLikeRole(user?.role);
   const canApprove = APPROVAL_ROLES.has(user?.role || '');
-  let pageSubtitle = 'Review your schedule and manage your availability windows.';
-  if (isProgramChair) {
-    pageSubtitle = 'Assign faculty schedules with automatic conflict detection and AI suggestions.';
-  } else if (canApprove) {
-    pageSubtitle = 'Review and process schedules based on your approval stage.';
-  }
+  const pageSubtitle = getSchedulingSubtitle(isProgramChair, canApprove);
 
   const loadData = async (currentUser?: LocalUser | null) => {
     setLoading(true);
@@ -246,6 +257,129 @@ export default function SchedulesPage() {
       await loadData(user);
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to process approval decision');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCreateSubject = async () => {
+    if (!newSubjectCode.trim() || !newSubjectName.trim()) {
+      alert('Enter both subject code and subject name.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await scheduleService.createSubject({
+        code: newSubjectCode.trim(),
+        name: newSubjectName.trim(),
+      });
+
+      setNewSubjectCode('');
+      setNewSubjectName('');
+      await loadData(user);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to create subject');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdateSubject = async (id: string, currentCode: string, currentName: string) => {
+    const codeInput = prompt('Subject code', currentCode);
+    if (codeInput === null) return;
+
+    const nameInput = prompt('Subject name', currentName);
+    if (nameInput === null) return;
+
+    setSaving(true);
+    try {
+      await scheduleService.updateSubject(id, {
+        code: codeInput.trim(),
+        name: nameInput.trim(),
+      });
+      await loadData(user);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to update subject');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteSubject = async (id: string) => {
+    if (!confirm('Delete this subject?')) return;
+
+    setSaving(true);
+    try {
+      await scheduleService.deleteSubject(id);
+      await loadData(user);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to delete subject');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCreateRoom = async () => {
+    const capacity = Number(newRoomCapacity);
+    if (!newRoomName.trim() || Number.isNaN(capacity) || capacity <= 0) {
+      alert('Enter room name and a valid capacity.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await scheduleService.createRoom({
+        name: newRoomName.trim(),
+        capacity,
+      });
+
+      setNewRoomName('');
+      setNewRoomCapacity('');
+      await loadData(user);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to create room');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdateRoom = async (id: string, currentName: string, currentCapacity?: number) => {
+    const nameInput = prompt('Room name', currentName);
+    if (nameInput === null) return;
+
+    const capacityInput = prompt('Capacity', String(currentCapacity ?? ''));
+    if (capacityInput === null) return;
+
+    const capacity = Number(capacityInput);
+    if (Number.isNaN(capacity) || capacity <= 0) {
+      alert('Capacity must be a positive number.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await scheduleService.updateRoom(id, {
+        name: nameInput.trim(),
+        capacity,
+      });
+      await loadData(user);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to update room');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteRoom = async (id: string) => {
+    if (!confirm('Delete this room?')) return;
+
+    setSaving(true);
+    try {
+      await scheduleService.deleteRoom(id);
+      await loadData(user);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to delete room');
     } finally {
       setSaving(false);
     }
@@ -513,6 +647,99 @@ export default function SchedulesPage() {
                 {selectedFacultyAvailabilityContent}
                 <div className="text-xs text-slate-500">
                   Click a faculty name on the left to inspect their saved availability before assigning a schedule.
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Manage Subjects and Rooms</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-3">
+                  <div className="text-sm font-semibold text-slate-800">Add Subject</div>
+                  <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_140px]">
+                    <Input
+                      placeholder="Code (e.g. CS101)"
+                      value={newSubjectCode}
+                      onChange={(event) => setNewSubjectCode(event.target.value)}
+                    />
+                    <Input
+                      placeholder="Subject name"
+                      value={newSubjectName}
+                      onChange={(event) => setNewSubjectName(event.target.value)}
+                    />
+                    <Button type="button" onClick={handleCreateSubject} disabled={saving}>Add Subject</Button>
+                  </div>
+                  <div className="space-y-2">
+                    {meta.subjects.length === 0 ? (
+                      <div className="text-sm text-slate-500">No subjects yet.</div>
+                    ) : (
+                      meta.subjects.map((subject) => (
+                        <div key={subject.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
+                          <div className="text-sm text-slate-800">
+                            <span className="font-medium">{subject.code}</span> - {subject.name}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleUpdateSubject(subject.id, subject.code, subject.name)}
+                            >
+                              Edit
+                            </Button>
+                            <Button size="sm" variant="destructive" onClick={() => handleDeleteSubject(subject.id)}>
+                              Delete
+                            </Button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="text-sm font-semibold text-slate-800">Add Room</div>
+                  <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_140px]">
+                    <Input
+                      placeholder="Room name"
+                      value={newRoomName}
+                      onChange={(event) => setNewRoomName(event.target.value)}
+                    />
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder="Capacity"
+                      value={newRoomCapacity}
+                      onChange={(event) => setNewRoomCapacity(event.target.value)}
+                    />
+                    <Button type="button" onClick={handleCreateRoom} disabled={saving}>Add Room</Button>
+                  </div>
+                  <div className="space-y-2">
+                    {meta.rooms.length === 0 ? (
+                      <div className="text-sm text-slate-500">No rooms yet.</div>
+                    ) : (
+                      meta.rooms.map((room) => (
+                        <div key={room.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
+                          <div className="text-sm text-slate-800">
+                            <span className="font-medium">{room.name}</span> (cap {room.capacity})
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleUpdateRoom(room.id, room.name, room.capacity)}
+                            >
+                              Edit
+                            </Button>
+                            <Button size="sm" variant="destructive" onClick={() => handleDeleteRoom(room.id)}>
+                              Delete
+                            </Button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
