@@ -1,5 +1,9 @@
 import { Server as SocketIOServer } from 'socket.io';
 import { createSupabaseAdminClient } from '@/lib/supabase/server-client';
+import {
+  analyzeScanWithSchedule,
+  logValidationAlert,
+} from '@/lib/attendance/aiSchedulerValidation';
 
 // Store active devices and sockets
 const activeDevices = new Map();
@@ -118,26 +122,15 @@ export async function handleRFIDScan(socket: any, scanData: any) {
       return;
     }
 
-    // Get user's current schedule to determine expected status
-    const today = new Date().toISOString().split('T')[0];
-    const dayOfWeek = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+    const today = new Date(scanTimestamp).toISOString().split('T')[0];
+    const aiResponse = await analyzeScanWithSchedule({
+      supabase,
+      userId: user.user_id,
+      deviceId,
+      scanTimestamp,
+    });
 
-    const { data: schedule } = await supabase
-      .from('schedules')
-      .select('start_time, end_time')
-      .eq('employee_id', user.user_id)
-      .eq('day_of_week', dayOfWeek)
-      .single();
-
-    let status = 'present';
-    if (schedule?.start_time) {
-      const [h, m, s] = schedule.start_time.split(':').map(Number);
-      const shiftStart = new Date(
-        `${today}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s ?? 0).padStart(2, '0')}`
-      );
-      shiftStart.setMinutes(shiftStart.getMinutes() + 15); // 15 min grace period
-      status = new Date() > shiftStart ? 'late' : 'present';
-    }
+    const status = aiResponse.status === 'late' ? 'late' : 'present';
 
     const { data: openAttendance, error: openAttendanceError } = await supabase
       .from('attendance')
@@ -183,16 +176,26 @@ export async function handleRFIDScan(socket: any, scanData: any) {
       attendanceStatus: status,
     };
 
+    const successfulScanEvent = {
+      ...successfulScan,
+      analysis: aiResponse,
+    };
+
     await supabase.from('rfid_scans').insert(successfulScan);
+    await logValidationAlert(supabase, {
+      userId: user.user_id,
+      deviceId,
+      aiResponse,
+    });
 
     // Emit to device and listeners
     socket.emit('scan_result', {
-      ...successfulScan,
+      ...successfulScanEvent,
       success: true,
     });
 
     // Broadcast to all connected clients (live page, dashboard, etc.)
-    socket.broadcast.emit('rfid_scan', successfulScan);
+    socket.broadcast.emit('rfid_scan', successfulScanEvent);
 
     console.log(
       `RFID Scan: ${user.first_name} ${user.last_name} at ${scanTimestamp} from device ${deviceId}`

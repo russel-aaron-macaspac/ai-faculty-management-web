@@ -1,6 +1,10 @@
 import { createSupabaseAdminClient } from '@/lib/supabase/server-client';
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
+import {
+  analyzeScanWithSchedule,
+  logValidationAlert,
+} from '@/lib/attendance/aiSchedulerValidation';
 
 function todayDate() {
   return new Date().toISOString().split('T')[0];
@@ -142,7 +146,8 @@ async function applyAttendanceLog(
   supabase: ReturnType<typeof createSupabaseAdminClient>,
   resolvedUserId: number | null,
   deviceId: string,
-  scanTimestamp: string
+  scanTimestamp: string,
+  attendanceStatus: AttendanceStatus
 ): Promise<AttendanceResult> {
   if (!resolvedUserId) {
     return { action: 'NONE', status: 'present' };
@@ -171,7 +176,7 @@ async function applyAttendanceLog(
       log_date: today,
       rfid_uid: randomUUID(),
       time_in: now,
-      status: 'present',
+      status: attendanceStatus,
       remarks: `RFID scan via ${deviceId}`,
     });
 
@@ -179,7 +184,7 @@ async function applyAttendanceLog(
       throw insertAttendanceError;
     }
 
-    return { action: 'TIME-IN', status: 'present' };
+    return { action: 'TIME-IN', status: attendanceStatus };
   }
 
   if (existingLog.time_in && !existingLog.time_out) {
@@ -204,7 +209,7 @@ async function applyAttendanceLog(
     log_date: today,
     rfid_uid: randomUUID(),
     time_in: now,
-    status: 'present',
+    status: attendanceStatus,
     remarks: `RFID scan via ${deviceId}`,
   });
 
@@ -212,7 +217,7 @@ async function applyAttendanceLog(
     throw newShiftError;
   }
 
-  return { action: 'TIME-IN', status: 'present' };
+  return { action: 'TIME-IN', status: attendanceStatus };
 }
 
 export async function GET(request: NextRequest) {
@@ -295,7 +300,23 @@ export async function POST(request: NextRequest) {
     const normalizedUID = normalizeUid(String(uid));
     const scanTimestamp = typeof timestamp === 'string' && timestamp ? timestamp : new Date().toISOString();
     const { resolvedUserId, resolvedUser } = await resolveUserFromScan(supabase, normalizedUID, userId);
-    const attendance = await applyAttendanceLog(supabase, resolvedUserId, deviceId, scanTimestamp);
+    const aiResponse =
+      resolvedUserId === null
+        ? null
+        : await analyzeScanWithSchedule({
+            supabase,
+            userId: resolvedUserId,
+            deviceId,
+            scanTimestamp,
+          });
+    const attendanceStatus: AttendanceStatus = aiResponse?.status === 'late' ? 'late' : 'present';
+    const attendance = await applyAttendanceLog(
+      supabase,
+      resolvedUserId,
+      deviceId,
+      scanTimestamp,
+      attendanceStatus
+    );
 
     const fallbackReason = resolvedUserId ? null : 'Card not registered or user inactive';
 
@@ -316,10 +337,19 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error;
 
+    if (resolvedUserId !== null && aiResponse) {
+      await logValidationAlert(supabase, {
+        userId: resolvedUserId,
+        deviceId,
+        aiResponse,
+      });
+    }
+
     return NextResponse.json({
       success: true,
       scan,
       attendance,
+      analysis: aiResponse,
       user: resolvedUserId
         ? {
             id: resolvedUserId,

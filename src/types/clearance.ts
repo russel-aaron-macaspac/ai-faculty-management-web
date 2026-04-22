@@ -33,7 +33,13 @@ export interface ClearanceNotification {
   user_id: string;
   title: string;
   message: string;
-  type: 'clearance_submitted' | 'clearance_approved' | 'clearance_rejected' | 'clearance_note_added';
+  type:
+    | 'clearance_submitted'
+    | 'clearance_approved'
+    | 'clearance_rejected'
+    | 'clearance_note_added'
+    | 'schedule_anomaly'
+    | 'unauthorized_access';
   related_id?: string;
   is_read: boolean;
   created_at: string;
