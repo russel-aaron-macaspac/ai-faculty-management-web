@@ -14,33 +14,6 @@ export async function POST(request) {
       );
     }
 
-    // Check approval officers dynamically
-    const officer = APPROVAL_OFFICERS.find(
-      o => o.email.toLowerCase() === email.toLowerCase()
-    );
-
-    if (officer && password === 'password123') {
-      return NextResponse.json({
-        user: {
-          id: `${officer.id}-1`,
-          email: officer.email,
-          role: officer.id,
-          full_name: officer.name,
-        },
-      });
-    }
-
-    if (email.toLowerCase() === 'imelda.tolentino@sdca.edu.ph' && password === 'password123') {
-      return NextResponse.json({
-        user: {
-          id: 'program-chair-default',
-          email: 'imelda.tolentino@sdca.edu.ph',
-          role: 'program_chair',
-          full_name: 'Imelda Tolentino',
-        },
-      });
-    }
-
     const supabase = createSupabaseAdminClient();
 
     const { data: user, error: userError } = await supabase

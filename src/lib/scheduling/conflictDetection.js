@@ -65,8 +65,26 @@ function findFreeSlots({ availabilityRows, occupiedRows, durationMinutes }) {
   return slots.slice(0, 10);
 }
 
+/**
+ * Helper: if caller provided numeric userId but we need the user's supabase_id (uuid),
+ * fetch it from users table. Returns null if not found.
+ */
+async function resolveUserUuidIfNeeded(supabase, { userId, userUuid }) {
+  if (userUuid) return userUuid;
+  if (!userId) return null;
+
+  const { data, error } = await supabase
+    .from("users")
+    .select("supabase_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data?.supabase_id ?? null;
+}
+
 export async function detectScheduleConflicts(supabase, payload) {
-  const { facultyId, roomId, day, startTime, endTime, excludeScheduleId } = payload;
+  const { userId = null, userUuid = null, roomId, day, startTime, endTime, excludeScheduleId } = payload;
 
   if (!DAY_VALUES.has(day)) {
     return {
@@ -76,9 +94,10 @@ export async function detectScheduleConflicts(supabase, payload) {
     };
   }
 
+  // Fetch all schedules for the day (exclude rejected)
   const baseQuery = supabase
     .from("schedules")
-    .select("id, faculty_id, subject_id, room_id, day, start_time, end_time, status")
+    .select("id, faculty_id, faculty_id_uuid, subject_id, room_id, day, start_time, end_time, status")
     .eq("day", day)
     .neq("status", "rejected");
 
@@ -93,21 +112,34 @@ export async function detectScheduleConflicts(supabase, payload) {
     overlaps(startTime, endTime, String(row.start_time).slice(0, 5), String(row.end_time).slice(0, 5))
   );
 
-  const facultyConflicts = overlappingRows.filter((row) => String(row.faculty_id) === String(facultyId));
-  const roomConflicts = overlappingRows.filter((row) => row.room_id === roomId);
+  const facultyConflicts = overlappingRows.filter((row) => {
+    if (userId != null && String(row.faculty_id) === String(userId)) return true;
+    if (userUuid != null && row.faculty_id_uuid && String(row.faculty_id_uuid) === String(userUuid)) return true;
+    return false;
+  });
+  const roomConflicts = overlappingRows.filter((row) => String(row.room_id) === String(roomId));
 
-  const { data: availabilityRows, error: availabilityError } = await supabase
-    .from("faculty_availability")
-    .select("id, day, start_time, end_time")
-    .eq("faculty_id", facultyId)
-    .eq("day", day);
+  let availabilityRows = [];
+  try {
+    const resolvedUuid = await resolveUserUuidIfNeeded(supabase, { userId, userUuid });
+    if (resolvedUuid) {
+      const { data: availData, error: availabilityError } = await supabase
+        .from("faculty_availability")
+        .select("id, day, start_time, end_time")
+        .eq("faculty_id", resolvedUuid)
+        .eq("day", day);
 
-  if (availabilityError) {
-    throw availabilityError;
+      if (availabilityError) throw availabilityError;
+      availabilityRows = availData || [];
+    } else {
+      // No uuid available: treat as no availability rows (will mark as conflict)
+      availabilityRows = [];
+    }
+  } catch (err) {
+    throw err;
   }
 
-  const availabilityList = availabilityRows || [];
-  const withinAvailability = availabilityList.some(
+  const withinAvailability = availabilityRows.some(
     (row) =>
       startTime >= String(row.start_time).slice(0, 5) &&
       endTime <= String(row.end_time).slice(0, 5)
@@ -131,19 +163,19 @@ export async function detectScheduleConflicts(supabase, payload) {
   if (!withinAvailability) {
     conflicts.push({
       conflict_type: "availability",
-      details: availabilityList,
+      details: availabilityRows,
     });
   }
 
   return {
     hasConflict: conflicts.length > 0,
-    conflict_type: conflicts[0]?.conflict_type,
+    conflict_type: conflicts[0]?.conflict_type ?? null,
     conflicts,
   };
 }
 
 export async function generateConflictSuggestions(supabase, payload) {
-  const { facultyId, day, startTime, endTime } = payload;
+  const { userId = null, userUuid = null, day, startTime, endTime } = payload;
 
   const { data: overlappingSchedules, error: overlapError } = await supabase
     .from("schedules")
@@ -172,26 +204,53 @@ export async function generateConflictSuggestions(supabase, payload) {
 
   const suggestedRooms = (allRooms || []).filter((room) => !occupiedRoomIds.has(room.id));
 
-  const { data: facultyAvailability, error: availabilityError } = await supabase
-    .from("faculty_availability")
-    .select("id, day, start_time, end_time")
-    .eq("faculty_id", facultyId)
-    .eq("day", day)
-    .order("start_time", { ascending: true });
+  const resolvedUuid = await resolveUserUuidIfNeeded(supabase, { userId, userUuid });
 
-  if (availabilityError) {
-    throw availabilityError;
-  }
+  let facultyAvailability = [];
+  let facultyDaySchedules = [];
+  try {
+    if (resolvedUuid) {
+      const { data: availabilityData, error: availabilityError } = await supabase
+        .from("faculty_availability")
+        .select("id, day, start_time, end_time")
+        .eq("faculty_id", resolvedUuid)
+        .eq("day", day)
+        .order("start_time", { ascending: true });
 
-  const { data: facultyDaySchedules, error: facultySchedulesError } = await supabase
-    .from("schedules")
-    .select("start_time, end_time")
-    .eq("faculty_id", facultyId)
-    .eq("day", day)
-    .neq("status", "rejected");
+      if (availabilityError) throw availabilityError;
+      facultyAvailability = availabilityData || [];
 
-  if (facultySchedulesError) {
-    throw facultySchedulesError;
+      const { data: facultySchedulesData, error: facultySchedulesError } = await supabase
+        .from("schedules")
+        .select("start_time, end_time")
+        .eq("faculty_id_uuid", resolvedUuid)
+        .eq("day", day)
+        .neq("status", "rejected");
+
+      if (facultySchedulesError) throw facultySchedulesError;
+      facultyDaySchedules = facultySchedulesData || [];
+    } else if (userId) {
+      // If no uuid but we have userId, try integer-based availability/schedules as fallback
+      const { data: availabilityData, error: availabilityError } = await supabase
+        .from("faculty_availability")
+        .select("id, day, start_time, end_time")
+        .eq("faculty_id", null) // intentionally no-op; schema expects uuid so skip
+        .limit(0);
+
+      facultyAvailability = [];
+      const { data: facultySchedulesData, error: facultySchedulesError } = await supabase
+        .from("schedules")
+        .select("start_time, end_time")
+        .eq("faculty_id", userId)
+        .eq("day", day)
+        .neq("status", "rejected");
+
+      if (facultySchedulesError) throw facultySchedulesError;
+      facultyDaySchedules = facultySchedulesData || [];
+    }
+  } catch (err) {
+    console.error("[GENERATE SUGGESTIONS ERROR]", err);
+    return { suggested_rooms: [], suggested_time_slots: [] };
   }
 
   const duration = toMinutes(endTime) - toMinutes(startTime);

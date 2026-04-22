@@ -40,6 +40,15 @@ interface SchedulingMeta {
   rooms: Array<{ id: string; name: string; capacity: number }>;
   sections: Array<{ id: string; name: string }>;
 }
+export function getSelectedLabel<T extends { id?: string | number }>(
+  items: T[] | undefined,
+  id: string | number | null | undefined,
+  labelFn: (item: T) => string
+): string {
+  if (!items || id == null || id === "") return "";
+  const found = items.find((it) => String((it as any).id) === String(id));
+  return found ? labelFn(found) : "";
+}
 
 export default function SchedulesPage() {
   const [user, setUser] = useState<LocalUser | null>(null);
@@ -70,6 +79,23 @@ export default function SchedulesPage() {
     startTime: '',
     endTime: '',
   });
+  const subjectLabel = getSelectedLabel(
+  meta.subjects,
+  assignment.subjectId,
+  (s) => `${s.code} - ${s.name}`
+);
+
+const roomLabel = getSelectedLabel(
+  meta.rooms,
+  assignment.roomId,
+  (r) => `${r.name} (cap ${r.capacity})`
+);
+
+const sectionLabel = getSelectedLabel(
+  meta.sections,
+  assignment.section,
+  (s) => s.name
+);
   const [newSubjectCode, setNewSubjectCode] = useState('');
   const [newSubjectName, setNewSubjectName] = useState('');
   const [newRoomName, setNewRoomName] = useState('');
@@ -594,58 +620,72 @@ export default function SchedulesPage() {
                   <div>
                     <div className="text-sm font-medium">Subject</div>
                     <Select
-                      value={assignment.subjectId}
-                      onValueChange={(value) => setAssignment((prev) => ({ ...prev, subjectId: value || '' }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select subject" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {meta.subjects.map((subject) => (
-                          <SelectItem key={subject.id} value={subject.id}>
-                            {subject.code} - {subject.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+  value={assignment.subjectId}
+  onValueChange={(value) =>
+    setAssignment((prev) => ({ ...prev, subjectId: value || '' }))
+  }
+>
+  <SelectTrigger>
+    <SelectValue>
+      {subjectLabel || "Select subject"}
+    </SelectValue>
+  </SelectTrigger>
+
+  <SelectContent>
+    {meta.subjects.map((subject) => (
+      <SelectItem key={subject.id} value={subject.id}>
+        {subject.code} - {subject.name}
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
                   </div>
 
                   <div>
                     <div className="text-sm font-medium">Room</div>
                     <Select
-                      value={assignment.roomId}
-                      onValueChange={(value) => setAssignment((prev) => ({ ...prev, roomId: value || '' }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select room" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {meta.rooms.map((room) => (
-                          <SelectItem key={room.id} value={room.id}>
-                            {room.name} (cap {room.capacity})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+  value={assignment.roomId}
+  onValueChange={(value) =>
+    setAssignment((prev) => ({ ...prev, roomId: value || '' }))
+  }
+>
+  <SelectTrigger>
+    <SelectValue>
+      {roomLabel || "Select room"}
+    </SelectValue>
+  </SelectTrigger>
+
+  <SelectContent>
+    {meta.rooms.map((room) => (
+      <SelectItem key={room.id} value={room.id}>
+        {room.name} (cap {room.capacity})
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
                   </div>
 
                   <div>
                     <div className="text-sm font-medium">Section</div>
                     <Select
-                      value={assignment.section}
-                      onValueChange={(value) => setAssignment((prev) => ({ ...prev, section: value || '' }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select section" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {meta.sections.map((section) => (
-                          <SelectItem key={section.id} value={section.name}>
-                            {section.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+  value={assignment.section}
+  onValueChange={(value) =>
+    setAssignment((prev) => ({ ...prev, section: value || '' }))
+  }
+>
+  <SelectTrigger>
+    <SelectValue>
+      {sectionLabel || "Select section"}
+    </SelectValue>
+  </SelectTrigger>
+  <SelectContent>
+    {meta.sections.map((section) => (
+      <SelectItem key={section.id} value={section.name}>
+        {section.name}
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
                   </div>
                 </div>
 

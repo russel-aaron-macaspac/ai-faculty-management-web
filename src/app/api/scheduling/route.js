@@ -1,76 +1,193 @@
+// route.js
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { NextResponse } from "next/server";
 import { detectScheduleConflicts, generateConflictSuggestions } from "@/lib/scheduling/conflictDetection";
 import { getInitialStatusForCreator } from "@/lib/scheduling/approvalWorkflow";
 
+/* SELECT fragments for GET */
 const BASE_SCHEDULE_SELECT = `
-        id,
-        faculty_id,
-        subject_id,
-        room_id,
-        day,
-        start_time,
-        end_time,
-        status,
-        created_by,
-        approved_by,
-        approved_at,
-        remarks,
-        faculty:users!schedules_faculty_id_fkey (
-          user_id,
-          first_name,
-          middle_name,
-          last_name
-        ),
-        subject:subjects!schedules_subject_id_fkey (
-          id,
-          code,
-          name
-        ),
-        room:rooms!schedules_room_id_fkey (
-          id,
-          name,
-          capacity
-        )
-      `;
+  id,
+  faculty_id,
+  subject_id,
+  room_id,
+  day,
+  start_time,
+  end_time,
+  status,
+  created_by,
+  approved_by,
+  approved_at,
+  remarks,
+  faculty:users!schedules_faculty_id_fkey (
+    user_id,
+    employee_no,
+    supabase_id,
+    first_name,
+    middle_name,
+    last_name,
+    email
+  ),
+  subject:subjects!schedules_subject_id_fkey (
+    id,
+    code,
+    name
+  ),
+  room:rooms!schedules_room_id_fkey (
+    id,
+    name,
+    capacity
+  )
+`;
 
 const SCHEDULE_SELECT_WITH_SECTION = `
-        id,
-        faculty_id,
-        section,
-        subject_id,
-        room_id,
-        day,
-        start_time,
-        end_time,
-        status,
-        created_by,
-        approved_by,
-        approved_at,
-        remarks,
-        faculty:users!schedules_faculty_id_fkey (
-          user_id,
-          first_name,
-          middle_name,
-          last_name
-        ),
-        subject:subjects!schedules_subject_id_fkey (
-          id,
-          code,
-          name
-        ),
-        room:rooms!schedules_room_id_fkey (
-          id,
-          name,
-          capacity
-        )
-      `;
+  id,
+  faculty_id,
+  section,
+  subject_id,
+  room_id,
+  day,
+  start_time,
+  end_time,
+  status,
+  created_by,
+  approved_by,
+  approved_at,
+  remarks,
+  faculty:users!schedules_faculty_id_fkey (
+    user_id,
+    employee_no,
+    supabase_id,
+    first_name,
+    middle_name,
+    last_name,
+    email
+  ),
+  subject:subjects!schedules_subject_id_fkey (
+    id,
+    code,
+    name
+  ),
+  room:rooms!schedules_room_id_fkey (
+    id,
+    name,
+    capacity
+  )
+`;
 
+/* Helpers */
 function isMissingSectionColumnError(error) {
   const message = `${error?.message || ""} ${error?.details || ""}`.toLowerCase();
   return message.includes("column") && message.includes("section") && message.includes("does not exist");
 }
 
+function looksLikeInteger(value) {
+  if (value == null) return false;
+  return /^-?\d+$/.test(String(value));
+}
+
+function looksLikeUUID(value) {
+  if (value == null) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value));
+}
+
+/* Safe candidate search */
+async function findUserCandidates(supabase, term, limit = 8) {
+  if (!term) return [];
+  const t = String(term).trim();
+  const orFilter = `first_name.ilike.%${t}%,last_name.ilike.%${t}%,email.ilike.%${t}%,employee_no.ilike.%${t}%`;
+
+  const { data, error } = await supabase
+    .from("users")
+    .select("user_id, employee_no, supabase_id, first_name, middle_name, last_name, email")
+    .or(orFilter)
+    .limit(limit);
+
+  if (error) {
+    console.error("[FIND USER CANDIDATES ERROR]", error);
+    return [];
+  }
+  return data || [];
+}
+
+/* Resolver */
+async function resolveUserIdentifier(supabase, identifier) {
+  if (!identifier) return { userId: null, userUuid: null, debug: "no identifier provided", candidates: [] };
+  const s = String(identifier).trim();
+
+  // numeric user_id
+  if (looksLikeInteger(s)) {
+    const { data, error } = await supabase
+      .from("users")
+      .select("user_id, supabase_id, employee_no, first_name, last_name, email")
+      .eq("user_id", parseInt(s, 10))
+      .maybeSingle();
+    if (!error && data) return { userId: data.user_id, userUuid: data.supabase_id ?? null, debug: "matched user_id", candidates: [] };
+  }
+
+  // employee_no
+  {
+    const { data, error } = await supabase
+      .from("users")
+      .select("user_id, supabase_id, employee_no, first_name, last_name, email")
+      .ilike("employee_no", s)
+      .maybeSingle();
+    if (!error && data) return { userId: data.user_id, userUuid: data.supabase_id ?? null, debug: "matched employee_no", candidates: [] };
+  }
+
+  // supabase_id
+  if (looksLikeUUID(s)) {
+    const { data, error } = await supabase
+      .from("users")
+      .select("user_id, supabase_id, employee_no, first_name, last_name, email")
+      .eq("supabase_id", s)
+      .maybeSingle();
+    if (!error && data) return { userId: data.user_id, userUuid: data.supabase_id ?? null, debug: "matched supabase_id", candidates: [] };
+  }
+
+  // email
+  if (s.includes("@")) {
+    const { data, error } = await supabase
+      .from("users")
+      .select("user_id, supabase_id, employee_no, first_name, last_name, email")
+      .ilike("email", s)
+      .maybeSingle();
+    if (!error && data) return { userId: data.user_id, userUuid: data.supabase_id ?? null, debug: "matched email", candidates: [] };
+  }
+
+  // exact first + last
+  const parts = s.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    const first = parts[0];
+    const last = parts[parts.length - 1];
+    const { data, error } = await supabase
+      .from("users")
+      .select("user_id, supabase_id, employee_no, first_name, last_name, email")
+      .ilike("first_name", first)
+      .ilike("last_name", last)
+      .maybeSingle();
+    if (!error && data) return { userId: data.user_id, userUuid: data.supabase_id ?? null, debug: "matched first+last", candidates: [] };
+  }
+
+  // loose candidates
+  const candidates = await findUserCandidates(supabase, s, 8);
+  if (candidates && candidates.length === 1) {
+    const c = candidates[0];
+    return { userId: c.user_id ?? null, userUuid: c.supabase_id ?? null, debug: "single loose match auto-selected", candidates: [] };
+  }
+
+  return { userId: null, userUuid: null, debug: "no match", candidates: candidates || [] };
+}
+
+/* Normalize HH:MM (returns "HH:MM") */
+function normalizeHHMM(t) {
+  if (!t) return t;
+  const parts = String(t).trim().split(":");
+  const hh = (parts[0] || "0").padStart(2, "0");
+  const mm = (parts[1] || "00").padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+/* GET handler */
 export async function GET(request) {
   try {
     const supabase = createSupabaseAdminClient();
@@ -132,8 +249,6 @@ export async function GET(request) {
         facultyName,
         subject: row.subject,
         room: row.room,
-
-        // Backward-compatible fields used by existing widgets
         employeeName: facultyName,
         dayOfWeek: row.day,
         subjectOrRole: row.subject?.name || "",
@@ -148,6 +263,7 @@ export async function GET(request) {
   }
 }
 
+/* POST handler */
 export async function POST(request) {
   try {
     const body = await request.json();
@@ -160,26 +276,131 @@ export async function POST(request) {
       );
     }
 
-    if (startTime >= endTime) {
+    // Normalize times to HH:MM
+    const normalizedStart = normalizeHHMM(startTime);
+    const normalizedEnd = normalizeHHMM(endTime);
+
+    if (normalizedStart >= normalizedEnd) {
       return NextResponse.json({ error: "startTime must be before endTime" }, { status: 400 });
     }
 
     const supabase = createSupabaseAdminClient();
 
-    const conflictResult = await detectScheduleConflicts(supabase, {
-      facultyId,
-      roomId,
-      day,
-      startTime,
-      endTime,
-    });
+    console.info("[SCHEDULING POST] raw facultyId:", facultyId, "createdBy:", createdBy);
+
+    let resolvedFaculty = { userId: null, userUuid: null, debug: null, candidates: [] };
+    if (looksLikeUUID(facultyId)) {
+      const { data: byUuid, error: uuidErr } = await supabase
+        .from("users")
+        .select("user_id, supabase_id, employee_no, first_name, middle_name, last_name, email")
+        .eq("supabase_id", facultyId)
+        .maybeSingle();
+      if (!uuidErr && byUuid) {
+        resolvedFaculty = { userId: byUuid.user_id, userUuid: byUuid.supabase_id, debug: "matched supabase_id direct", candidates: [] };
+      }
+    }
+    if (!resolvedFaculty.userId && !resolvedFaculty.userUuid) {
+      resolvedFaculty = await resolveUserIdentifier(supabase, facultyId);
+    }
+
+    if (!resolvedFaculty.userId && resolvedFaculty.userUuid && looksLikeUUID(resolvedFaculty.userUuid)) {
+      const { data: byUuid, error: uuidErr } = await supabase
+        .from("users")
+        .select("user_id, supabase_id")
+        .eq("supabase_id", resolvedFaculty.userUuid)
+        .maybeSingle();
+      if (!uuidErr && byUuid) resolvedFaculty.userId = byUuid.user_id;
+    }
+
+    if (!resolvedFaculty.userId && !resolvedFaculty.userUuid) {
+      const candidates = resolvedFaculty.candidates && resolvedFaculty.candidates.length ? resolvedFaculty.candidates : await findUserCandidates(supabase, facultyId, 8);
+      return NextResponse.json(
+        {
+          error: "Faculty not found",
+          debug: resolvedFaculty.debug,
+          received: facultyId,
+          candidates: candidates.map((c) => ({
+            user_id: c.user_id,
+            employee_no: c.employee_no,
+            supabase_id: c.supabase_id,
+            name: [c.first_name, c.middle_name, c.last_name].filter(Boolean).join(" "),
+            email: c.email,
+          })),
+        },
+        { status: 400 }
+      );
+    }
+
+    let resolvedCreator = { userId: null, userUuid: null, debug: null, candidates: [] };
+    if (looksLikeInteger(createdBy)) {
+      const { data, error } = await supabase
+        .from("users")
+        .select("user_id, supabase_id")
+        .eq("user_id", parseInt(createdBy, 10))
+        .maybeSingle();
+      if (!error && data) resolvedCreator = { userId: data.user_id, userUuid: data.supabase_id ?? null, debug: "matched creator by numeric user_id", candidates: [] };
+    }
+    if (!resolvedCreator.userId && looksLikeUUID(createdBy)) {
+      const { data: byUuid, error: uuidErr } = await supabase
+        .from("users")
+        .select("user_id, supabase_id")
+        .eq("supabase_id", createdBy)
+        .maybeSingle();
+      if (!uuidErr && byUuid) resolvedCreator = { userId: byUuid.user_id, userUuid: byUuid.supabase_id, debug: "matched creator supabase_id", candidates: [] };
+    }
+    if (!resolvedCreator.userId && !resolvedCreator.userUuid) {
+      resolvedCreator = await resolveUserIdentifier(supabase, createdBy);
+    }
+    if (!resolvedCreator.userId && resolvedCreator.userUuid && looksLikeUUID(resolvedCreator.userUuid)) {
+      const { data: byUuid, error: uuidErr } = await supabase
+        .from("users")
+        .select("user_id, supabase_id")
+        .eq("supabase_id", resolvedCreator.userUuid)
+        .maybeSingle();
+      if (!uuidErr && byUuid) resolvedCreator.userId = byUuid.user_id;
+    }
+    if (!resolvedCreator.userId) {
+      const candidates = resolvedCreator.candidates && resolvedCreator.candidates.length ? resolvedCreator.candidates : await findUserCandidates(supabase, createdBy, 8);
+      return NextResponse.json(
+        {
+          error: "Creator not found",
+          debug: resolvedCreator.debug,
+          received: createdBy,
+          candidates: candidates.map((c) => ({
+            user_id: c.user_id,
+            employee_no: c.employee_no,
+            supabase_id: c.supabase_id,
+            name: [c.first_name, c.middle_name, c.last_name].filter(Boolean).join(" "),
+            email: c.email,
+          })),
+        },
+        { status: 400 }
+      );
+    }
+    console.info("[SCHEDULING POST] resolvedFaculty:", resolvedFaculty);
+    console.info("[SCHEDULING POST] resolvedCreator:", resolvedCreator);
+    let conflictResult = { hasConflict: false };
+    try {
+      conflictResult = await detectScheduleConflicts(supabase, {
+        userId: resolvedFaculty.userId ?? null,
+        userUuid: resolvedFaculty.userUuid ?? null,
+        roomId,
+        day,
+        startTime: normalizedStart,
+        endTime: normalizedEnd,
+      });
+    } catch (confErr) {
+      console.error("[CONFLICT DETECTION ERROR]", confErr);
+      return NextResponse.json({ error: "Conflict detection failed", details: String(confErr) }, { status: 500 });
+    }
 
     if (conflictResult.hasConflict) {
       const suggestions = await generateConflictSuggestions(supabase, {
-        facultyId,
+        userId: resolvedFaculty.userId ?? null,
+        userUuid: resolvedFaculty.userUuid ?? null,
         day,
-        startTime,
-        endTime,
+        startTime: normalizedStart,
+        endTime: normalizedEnd,
       });
 
       return NextResponse.json(
@@ -194,38 +415,44 @@ export async function POST(request) {
     }
 
     const insertPayload = {
-      faculty_id: facultyId,
+      faculty_id: resolvedFaculty.userId ?? undefined,
       subject_id: subjectId,
       room_id: roomId,
       day,
-      start_time: startTime,
-      end_time: endTime,
+      start_time: normalizedStart,
+      end_time: normalizedEnd,
       status: getInitialStatusForCreator(creatorRole),
-      created_by: createdBy,
+      created_by: resolvedCreator.userId ?? undefined,
       ...(section ? { section } : {}),
     };
+
+    if (resolvedFaculty.userUuid && looksLikeUUID(resolvedFaculty.userUuid)) {
+      insertPayload.faculty_id_uuid = resolvedFaculty.userUuid;
+    }
+
+    Object.keys(insertPayload).forEach((k) => {
+      if (insertPayload[k] === undefined) delete insertPayload[k];
+    });
+
+    console.info("[SCHEDULING POST] insertPayload:", insertPayload);
 
     let { data: inserted, error: insertError } = await supabase
       .from("schedules")
       .insert(insertPayload)
       .select("id")
-      .single();
+      .maybeSingle();
 
     if (insertError && section && isMissingSectionColumnError(insertError)) {
+      const fallbackPayload = { ...insertPayload };
+      delete fallbackPayload.section;
+
+      console.info("[SCHEDULING POST] retrying insert without section:", fallbackPayload);
+
       const fallbackInsert = await supabase
         .from("schedules")
-        .insert({
-          faculty_id: facultyId,
-          subject_id: subjectId,
-          room_id: roomId,
-          day,
-          start_time: startTime,
-          end_time: endTime,
-          status: getInitialStatusForCreator(creatorRole),
-          created_by: createdBy,
-        })
+        .insert(fallbackPayload)
         .select("id")
-        .single();
+        .maybeSingle();
 
       inserted = fallbackInsert.data;
       insertError = fallbackInsert.error;
@@ -233,7 +460,13 @@ export async function POST(request) {
 
     if (insertError) {
       console.error("[SCHEDULING POST ERROR]", insertError);
-      return NextResponse.json({ error: "Failed to create schedule" }, { status: 500 });
+      console.error("[SCHEDULING POST PAYLOAD]", insertPayload);
+      return NextResponse.json({ error: "Failed to create schedule", details: insertError.message }, { status: 500 });
+    }
+
+    if (!inserted) {
+      console.error("[SCHEDULING POST ERROR] No row returned after insert");
+      return NextResponse.json({ error: "Schedule insert returned no data" }, { status: 500 });
     }
 
     return NextResponse.json({ message: "Schedule created", id: inserted.id }, { status: 201 });
