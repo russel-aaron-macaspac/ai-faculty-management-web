@@ -8,6 +8,8 @@ import { CalendarDays, Clock, FileCheck2, GraduationCap } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
 import { Schedule } from '@/types/schedule';
 import { parseTimeToMinutes, formatTimeToTwelveHour, getTimeStatus } from '@/lib/timeUtils';
+import { attendanceService } from '@/services/attendanceService';
+import { Attendance } from '@/types/attendance';
 
 export default function FacultyDashboardPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -82,20 +84,39 @@ export default function FacultyDashboardPage() {
 
   const isProgramChair = user?.role === 'program_chair';
 
-  const mockAlerts = [
-    {
-      id: '1',
-      type: 'info' as const,
-      title: 'Upcoming Class Reminder',
-      message: 'CS101 Intro to Programming begins in 15 minutes at Room 302.',
-    },
-    {
-      id: '2',
-      type: 'success' as const,
-      title: 'Clearance Approved',
-      message: 'Your Annual Medical Certificate has been verified and approved by HR.',
+  const [myAttendance, setMyAttendance] = useState<Attendance | null>(null);
+
+  useEffect(() => {
+    const loadAttendance = async () => {
+      if (!user) return;
+      try {
+        const today = new Date().toISOString().slice(0, 10);
+        const records = await attendanceService.getAttendance(today, String(user.id));
+        setMyAttendance(records.length > 0 ? records[0] : null);
+      } catch {
+        setMyAttendance(null);
+      }
+    };
+
+    void loadAttendance();
+  }, [user]);
+
+  const computedAlerts = () => {
+    const alerts: any[] = [];
+
+    // upcoming class reminder
+    const nextClass = todayStats.ownClassesToday[0];
+    if (nextClass) {
+      alerts.push({ id: 'upcoming-class', type: 'info' as const, title: 'Upcoming Class Reminder', message: `${nextClass.subjectOrRole ?? nextClass.subject?.name} begins at ${formatTimeToTwelveHour(nextClass.startTime)} in ${nextClass.room?.name ?? 'TBD'}.` });
     }
-  ];
+
+    // attendance alert for late / anomaly
+    if (myAttendance && myAttendance.status === 'late') {
+      alerts.push({ id: 'late-arrival', type: 'warning' as const, title: 'Late Arrival Detected', message: `You clocked in at ${myAttendance.timeIn}.` });
+    }
+
+    return alerts;
+  };
 
   return (
     <div className="space-y-6">
@@ -113,7 +134,7 @@ export default function FacultyDashboardPage() {
 
       <div className="grid gap-6 md:grid-cols-7">
         <div className="md:col-span-4 lg:col-span-5 space-y-6">
-          <AIAlerts alerts={mockAlerts} />
+          <AIAlerts alerts={computedAlerts()} />
           
           <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
             <h3 className="font-semibold text-slate-800 mb-4">My Schedule Today</h3>
@@ -147,11 +168,11 @@ export default function FacultyDashboardPage() {
         </div>
 
         <div className="md:col-span-3 lg:col-span-2 space-y-6">
-           <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm text-center">
-              <h3 className="font-semibold text-slate-800 mb-2">My Attendance</h3>
-              <div className="text-3xl font-bold text-emerald-500 my-4">Present</div>
-              <div className="text-sm text-slate-500">Clocked in at 08:45 AM</div>
-           </div>
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm text-center">
+          <h3 className="font-semibold text-slate-800 mb-2">My Attendance</h3>
+          <div className="text-3xl font-bold text-emerald-500 my-4">{myAttendance ? myAttendance.status : 'No record'}</div>
+          <div className="text-sm text-slate-500">{myAttendance ? `Clocked in at ${myAttendance.timeIn || '—'}` : 'No attendance found for today'}</div>
+        </div>
         </div>
       </div>
     </div>
