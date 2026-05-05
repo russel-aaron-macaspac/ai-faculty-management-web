@@ -651,7 +651,14 @@ export default function AttendancePage() {
               type="date"
               className="w-auto h-9"
               value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
+              max={format(new Date(), 'yyyy-MM-dd')}
+              onChange={(e) => {
+                const selected = e.target.value;
+                const today = format(new Date(), 'yyyy-MM-dd');
+
+              if (selected > today) return;
+              setFilterDate(selected);
+              }}
             />
             {activeScannedUserId && (
               <Button
