@@ -22,8 +22,14 @@ import { getDashboardPathForRole } from '@/lib/roleConfig';
 import { Loader2 } from 'lucide-react';
 
 const loginSchema = z.object({
-  email: z.email({ message: 'Invalid email address' }),
-  password: z.string().min(6, { message: 'Password must be at least 6 characters' }),
+  email: z
+    .string()
+    .trim()
+    .min(1, { message: 'Email address is required.' })
+    .refine((value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value), {
+      message: 'Enter a valid school email address.',
+    }),
+  password: z.string().min(1, { message: 'Password is required.' }).min(6, { message: 'Password must be at least 6 characters long.' }),
 });
 
 export default function LoginPage() {
@@ -42,6 +48,7 @@ export default function LoginPage() {
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
+    mode: 'onTouched',
     defaultValues: {
       email: '',
       password: '',
@@ -56,8 +63,16 @@ export default function LoginPage() {
       localStorage.setItem('user', JSON.stringify(response.user));
       router.push(getDashboardPathForRole(response.user.role));
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Login failed';
-      setError(message);
+      const message = err instanceof Error ? err.message : '';
+      let nextError = 'Unable to sign in right now. Please try again.';
+
+      if (message) {
+        nextError = /invalid|credential|password|email/i.test(message)
+          ? 'Incorrect email or password. Check your credentials and try again.'
+          : message;
+      }
+
+      setError(nextError);
     } finally {
       setIsLoading(false);
     }

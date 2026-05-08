@@ -33,7 +33,6 @@ const OFFICER_OFFICE_MAP: Record<string, number> = {
 export default function ClearancePage() {
   const router = useRouter();
   const [records, setRecords] = useState<Clearance[]>([]);
-  const [facultyUsers, setFacultyUsers] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -41,6 +40,7 @@ export default function ClearancePage() {
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<StoredUser | null>(null);
   const [docName, setDocName] = useState('Safety Training Certificate');
+  const [uploadError, setUploadError] = useState('');
 
   const isFacultyUser = isFacultyLikeRole(currentUser?.role);
   const isApprovalOfficer_ = isApprovalOfficer(currentUser?.role);
@@ -49,7 +49,7 @@ export default function ClearancePage() {
   const getOfficeId = (role?: string): string | undefined => {
     if (!role) return undefined;
     const id = OFFICER_OFFICE_MAP[role];
-    return id !== undefined ? String(id) : undefined;
+    return id === undefined ? undefined : String(id);
   };
 
   const loadData = async (role?: string) => {
@@ -74,26 +74,36 @@ export default function ClearancePage() {
 
   const handleUpload = async (event: { preventDefault: () => void }) => {
     event.preventDefault();
+    setUploadError('');
+
+    if (!docName.trim()) {
+      setUploadError('Enter a document name before submitting.');
+      return;
+    }
+
     const employeeId = currentUser?.id ? String(currentUser.id) : '';
-    if (!employeeId) return;
+    if (!employeeId) {
+      setUploadError('Your account is missing a user ID. Please log in again.');
+      return;
+    }
 
     setUploading(true);
-    await clearanceService.uploadDocument(
-      employeeId,
-      0,
-      docName
-    );
-    setUploading(false);
-    setIsUploadOpen(false);
-    void loadData(currentUser?.role);
+    try {
+      await clearanceService.uploadDocument(employeeId, 0, docName.trim());
+      setIsUploadOpen(false);
+      setDocName('Safety Training Certificate');
+      void loadData(currentUser?.role);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : 'Unable to submit this document. Please try again.');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const filtered = useMemo(() => {
     if (!currentUser) return [];
     const term = searchTerm.toLowerCase();
     const normalize = (value?: string) => (value ?? '').trim().toLowerCase().split(/\s+/).join(' ');
-    const myOfficeId = getOfficeId(currentUser.role);
-
     if (isFacultyLikeRole(currentUser.role)) {
       const accountId = currentUser.id ? String(currentUser.id) : '';
       const accountName = normalize(currentUser.full_name || currentUser.name);
@@ -147,7 +157,7 @@ export default function ClearancePage() {
       (record.employeeName ?? '').toLowerCase().includes(term) ||
       (record.requiredDocument ?? '').toLowerCase().includes(term)
     );
-  }, [records, searchTerm, currentUser, facultyUsers]);
+  }, [records, searchTerm, currentUser]);
 
   const facultyStatusTotals = useMemo(() => {
     if (!isFacultyUser) {
@@ -310,8 +320,21 @@ export default function ClearancePage() {
               <form onSubmit={handleUpload} className="space-y-4 pt-4">
                 <div className="space-y-2">
                   <label htmlFor="clearance-doc-name" className="text-sm font-medium">Document Name</label>
-                  <Input id="clearance-doc-name" value={docName} onChange={e => setDocName(e.target.value)} required />
+                  <Input
+                    id="clearance-doc-name"
+                    value={docName}
+                    onChange={(event) => {
+                      setDocName(event.target.value);
+                      if (uploadError) setUploadError('');
+                    }}
+                    required
+                    aria-describedby="clearance-doc-name-help"
+                  />
+                  <p id="clearance-doc-name-help" className="text-xs text-slate-500">
+                    Use the title shown on the clearance document so office staff can match it quickly.
+                  </p>
                 </div>
+                {uploadError && <p className="text-sm text-rose-600">{uploadError}</p>}
                 <div className="flex justify-end pt-4">
                   <Button type="submit" disabled={uploading}>
                     {uploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

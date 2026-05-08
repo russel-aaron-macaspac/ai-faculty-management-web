@@ -54,6 +54,11 @@ export default function SchedulesPage() {
   const [user, setUser] = useState<LocalUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [assignmentError, setAssignmentError] = useState('');
+  const [subjectError, setSubjectError] = useState('');
+  const [roomError, setRoomError] = useState('');
+  const [sectionError, setSectionError] = useState('');
+  const [availabilityError, setAvailabilityError] = useState('');
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<Schedule[]>([]);
   const [meta, setMeta] = useState<SchedulingMeta>({ faculties: [], subjects: [], rooms: [], sections: [] });
@@ -222,7 +227,18 @@ const sectionLabel = getSelectedLabel(
   };
 
   const handleSaveAvailability = async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setAvailabilityError('Sign in again before saving availability.');
+      return;
+    }
+
+    const invalidRow = availabilityRows.find((row) => !row.day || !row.startTime || !row.endTime || row.startTime >= row.endTime);
+    if (invalidRow) {
+      setAvailabilityError('Each availability row needs a day, a start time, and an end time that is later than the start time.');
+      return;
+    }
+
+    setAvailabilityError('');
     setSaving(true);
     try {
       await scheduleService.saveFacultyAvailability(String(user.id), availabilityRows);
@@ -235,10 +251,16 @@ const sectionLabel = getSelectedLabel(
   const handleCreateSchedule = async () => {
     if (!user) return;
     if (!assignment.facultyId || !assignment.section || !assignment.subjectId || !assignment.roomId || !assignment.startTime || !assignment.endTime) {
-      alert('Please complete all schedule fields.');
+      setAssignmentError('Choose a faculty member, subject, room, section, day, start time, and end time before creating the schedule.');
       return;
     }
 
+    if (assignment.startTime >= assignment.endTime) {
+      setAssignmentError('End time must be later than the start time.');
+      return;
+    }
+
+    setAssignmentError('');
     setSaving(true);
     try {
       const result = await scheduleService.createSchedule({
@@ -264,7 +286,7 @@ const sectionLabel = getSelectedLabel(
       });
       await loadData(user);
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to create schedule');
+      setAssignmentError(error instanceof Error ? error.message : 'Unable to create the schedule. Please review the selected values and try again.');
     } finally {
       setSaving(false);
     }
@@ -294,10 +316,11 @@ const sectionLabel = getSelectedLabel(
 
   const handleCreateSubject = async () => {
     if (!newSubjectCode.trim() || !newSubjectName.trim()) {
-      alert('Enter both subject code and subject name.');
+      setSubjectError('Enter both a subject code and a subject name.');
       return;
     }
 
+    setSubjectError('');
     setSaving(true);
     try {
       await scheduleService.createSubject({
@@ -309,7 +332,7 @@ const sectionLabel = getSelectedLabel(
       setNewSubjectName('');
       await loadData(user);
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to create subject');
+      setSubjectError(error instanceof Error ? error.message : 'Unable to create the subject. Please check the code and name, then try again.');
     } finally {
       setSaving(false);
     }
@@ -353,10 +376,11 @@ const sectionLabel = getSelectedLabel(
   const handleCreateRoom = async () => {
     const capacity = Number(newRoomCapacity);
     if (!newRoomName.trim() || Number.isNaN(capacity) || capacity <= 0) {
-      alert('Enter room name and a valid capacity.');
+      setRoomError('Enter a room name and a capacity greater than zero.');
       return;
     }
 
+    setRoomError('');
     setSaving(true);
     try {
       await scheduleService.createRoom({
@@ -368,7 +392,7 @@ const sectionLabel = getSelectedLabel(
       setNewRoomCapacity('');
       await loadData(user);
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to create room');
+      setRoomError(error instanceof Error ? error.message : 'Unable to create the room. Please review the name and capacity and try again.');
     } finally {
       setSaving(false);
     }
@@ -417,10 +441,11 @@ const sectionLabel = getSelectedLabel(
 
   const handleCreateSection = async () => {
     if (!newSectionName.trim()) {
-      alert('Enter a section name.');
+      setSectionError('Enter a section name before saving.');
       return;
     }
 
+    setSectionError('');
     setSaving(true);
     try {
       await scheduleService.createSection({
@@ -430,7 +455,7 @@ const sectionLabel = getSelectedLabel(
       setNewSectionName('');
       await loadData(user);
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to create section');
+      setSectionError(error instanceof Error ? error.message : 'Unable to create the section. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -729,6 +754,8 @@ const sectionLabel = getSelectedLabel(
                   {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Create Schedule
                 </Button>
 
+                {assignmentError && <p className="text-sm text-rose-600">{assignmentError}</p>}
+
                 {conflictResult && (
                   <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 space-y-3">
                     <div className="flex items-center gap-2 text-amber-900 font-medium">
@@ -789,6 +816,7 @@ const sectionLabel = getSelectedLabel(
                     />
                     <Button type="button" onClick={handleCreateSubject} disabled={saving}>Add Subject</Button>
                   </div>
+                  {subjectError && <p className="text-sm text-rose-600">{subjectError}</p>}
                   <div className="space-y-2">
                     {meta.subjects.length === 0 ? (
                       <div className="text-sm text-slate-500">No subjects yet.</div>
@@ -833,6 +861,7 @@ const sectionLabel = getSelectedLabel(
                     />
                     <Button type="button" onClick={handleCreateRoom} disabled={saving}>Add Room</Button>
                   </div>
+                  {roomError && <p className="text-sm text-rose-600">{roomError}</p>}
                   <div className="space-y-2">
                     {meta.rooms.length === 0 ? (
                       <div className="text-sm text-slate-500">No rooms yet.</div>
@@ -870,6 +899,7 @@ const sectionLabel = getSelectedLabel(
                     />
                     <Button type="button" onClick={handleCreateSection} disabled={saving}>Add Section</Button>
                   </div>
+                  {sectionError && <p className="text-sm text-rose-600">{sectionError}</p>}
                   <div className="space-y-2">
                     {meta.sections.length === 0 ? (
                       <div className="text-sm text-slate-500">No sections yet.</div>
@@ -955,6 +985,7 @@ const sectionLabel = getSelectedLabel(
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save Availability
               </Button>
             </div>
+            {availabilityError && <p className="text-sm text-rose-600">{availabilityError}</p>}
           </CardContent>
         </Card>
       )}

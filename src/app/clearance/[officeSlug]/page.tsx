@@ -3,13 +3,13 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { AlertTriangle, FileText, Loader2, ScanLine, Save, UploadCloud, ArrowLeft, Trash2, Bell, CheckCircle2, XCircle } from 'lucide-react';
+import { AlertTriangle, FileText, Loader2, ScanLine, Save, UploadCloud, ArrowLeft, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { clearanceService } from '@/services/clearanceService';
-import { Clearance, ClearanceNote } from '@/types/clearance';
+import { Clearance } from '@/types/clearance';
 import { fromOfficeSlug } from '@/lib/clearanceOffices';
 import { StoredUser, normalize } from '@/lib/stringUtils';
 import { 
@@ -18,8 +18,6 @@ import {
   SubmittedDocument,
   DocumentValidationResult 
 } from '@/lib/documentTypes';
-import { useClearanceNotifications } from '@/hooks/useClearanceNotifications';
-import { format } from 'date-fns';
 
 type OfficeLocalState = {
   notes: string;
@@ -76,13 +74,6 @@ export default function OfficeClearanceDetailPage() {
   const [records, setRecords] = useState<Clearance[]>([]);
   const [offices, setOffices] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
-  const [notes, setNotes] = useState<ClearanceNote[]>([]);
-  const [loadingNotes, setLoadingNotes] = useState(false);
-
-  const { unreadCount } = useClearanceNotifications(
-    currentUser?.id ? String(currentUser.id) : null
-  );
-
   const storageKey = `clearance-office-${officeSlug}`;
   const [officeState, setOfficeState] = useState<OfficeLocalState>(() => loadSavedState(storageKey));
   const [selectedDocumentFile, setSelectedDocumentFile] = useState<File | null>(null);
@@ -90,6 +81,8 @@ export default function OfficeClearanceDetailPage() {
   const [selectedOCRDocumentType, setSelectedOCRDocumentType] = useState(DOCUMENT_TYPES[0]);
   const [isOCRLoading, setIsOCRLoading] = useState(false);
   const [validationResult, setValidationResult] = useState<DocumentValidationResult | null>(null);
+  const [documentError, setDocumentError] = useState('');
+  const [ocrError, setOcrError] = useState('');
 
   const officeData = useMemo(() => {
     if (!officeName || offices.length === 0) return null;
@@ -100,12 +93,6 @@ export default function OfficeClearanceDetailPage() {
 
   const handleOCRDocumentTypeChange = (value: string | null) => {
     setSelectedOCRDocumentType(value ?? DOCUMENT_TYPES[0]);
-  };
-
-  const getNoteClass = (noteType: string) => {
-    if (noteType === 'remark') return 'bg-blue-50 border-blue-200';
-    if (noteType === 'validation') return 'bg-amber-50 border-amber-200';
-    return 'bg-slate-50 border-slate-200';
   };
 
   useEffect(() => {
@@ -135,7 +122,6 @@ export default function OfficeClearanceDetailPage() {
     void load();
   }, []);
 
-  // Fetch remarks when the own office record changes
   const ownOfficeRecord = useMemo(() => {
     const accountId = currentUser?.id ? String(currentUser.id) : '';
     const accountName = normalize(currentUser?.full_name || currentUser?.name || '');
@@ -152,24 +138,6 @@ export default function OfficeClearanceDetailPage() {
     });
   }, [records, currentUser, officeName]);
 
-  useEffect(() => {
-    if (ownOfficeRecord?.id) {
-      setLoadingNotes(true);
-      clearanceService
-        .getClearanceNotes(ownOfficeRecord.id)
-        .then((data) => {
-          setNotes(data || []);
-        })
-        .catch((error) => {
-          console.error('Error fetching notes:', error);
-          setNotes([]);
-        })
-        .finally(() => {
-          setLoadingNotes(false);
-        });
-    }
-  }, [ownOfficeRecord?.id]);
-
   const saveLocalState = (nextState: OfficeLocalState) => {
     localStorage.setItem(storageKey, JSON.stringify(nextState));
     setOfficeState(nextState);
@@ -180,17 +148,21 @@ export default function OfficeClearanceDetailPage() {
   };
 
   const handleSubmitDocument = async () => {
-    if (!selectedDocumentFile) return;
+    setDocumentError('');
+    if (!selectedDocumentFile) {
+      setDocumentError('Choose a file before submitting the document.');
+      return;
+    }
 
     const userId = currentUser?.id ? String(currentUser.id) : '';
     if (!userId) {
-      alert('User ID is missing. Please log in again.');
+      setDocumentError('Your user ID is missing. Please log in again.');
       return;
     }
 
     if (!officeData?.id) {
       console.error('Office not found for slug:', officeSlug, '| officeName:', officeName, '| offices:', offices);
-      alert('Office not found. Please contact the administrator.');
+      setDocumentError('Office not found. Please contact the administrator.');
       return;
     }
 
@@ -207,13 +179,14 @@ export default function OfficeClearanceDetailPage() {
       ];
 
       setSelectedDocumentFile(null);
+      setDocumentError('');
       saveLocalState({ ...officeState, documents: nextDocuments });
 
       const data = await clearanceService.getClearances();
       setRecords(data);
     } catch (err) {
       console.error('Failed to submit document:', err);
-      alert(err instanceof Error ? err.message : 'Failed to submit document');
+      setDocumentError(err instanceof Error ? err.message : 'Failed to submit document. Please try again.');
     }
   };
 
@@ -227,7 +200,11 @@ export default function OfficeClearanceDetailPage() {
   };
 
   const handleRunOCR = async () => {
-    if (!selectedOCRFile) return;
+    setOcrError('');
+    if (!selectedOCRFile) {
+      setOcrError('Choose a file before running OCR.');
+      return;
+    }
     setIsOCRLoading(true);
     try {
       const formData = new FormData();
@@ -243,6 +220,7 @@ export default function OfficeClearanceDetailPage() {
       const message = error instanceof Error ? error.message : 'Failed to process OCR.';
       saveLocalState({ ...officeState, ocrText: `OCR scan failed: ${message}` });
       setValidationResult(null);
+      setOcrError(message);
     } finally {
       setIsOCRLoading(false);
     }
@@ -304,7 +282,15 @@ export default function OfficeClearanceDetailPage() {
           <Card className="border-slate-200">
             <CardHeader><CardTitle>Document Submission</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              <Input type="file" onChange={(event) => setSelectedDocumentFile(event.target.files?.[0] || null)} />
+              <Input
+                type="file"
+                onChange={(event) => {
+                  setSelectedDocumentFile(event.target.files?.[0] || null);
+                  if (documentError) setDocumentError('');
+                }}
+              />
+              <p className="text-xs text-slate-500">Attach a file that matches the selected office requirement before submitting.</p>
+              {documentError && <p className="text-sm text-rose-600">{documentError}</p>}
               <Button onClick={() => void handleSubmitDocument()} className="bg-red-600 hover:bg-red-700">
                 <UploadCloud className="mr-2 h-4 w-4" /> Submit Document
               </Button>
@@ -346,7 +332,15 @@ export default function OfficeClearanceDetailPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <Input type="file" onChange={(event) => setSelectedOCRFile(event.target.files?.[0] || null)} />
+              <Input
+                type="file"
+                onChange={(event) => {
+                  setSelectedOCRFile(event.target.files?.[0] || null);
+                  if (ocrError) setOcrError('');
+                }}
+              />
+              <p className="text-xs text-slate-500">Run OCR only after selecting a document file to inspect its contents.</p>
+              {ocrError && <p className="text-sm text-rose-600">{ocrError}</p>}
               <Button onClick={() => void handleRunOCR()} disabled={isOCRLoading} className="bg-red-600 hover:bg-red-700">
                 {isOCRLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ScanLine className="mr-2 h-4 w-4" />} Run OCR AI Scan
               </Button>

@@ -15,10 +15,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Plus, Pencil, Trash2, Loader2, Search } from 'lucide-react';
 
 const facultySchema = z.object({
-  fullName: z.string().min(2, { message: 'Name is required' }),
-  email: z.string().email({ message: 'Invalid email' }),
-  department: z.string().min(2, { message: 'Department is required' }),
-  phone: z.string().min(5, { message: 'Phone is required' }),
+  fullName: z.string().trim().min(1, { message: 'Enter the faculty member’s full name.' }).min(2, { message: 'Full name should include at least 2 characters.' }),
+  email: z
+    .string()
+    .trim()
+    .min(1, { message: 'Enter a faculty email address.' })
+    .refine((value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value), {
+      message: 'Enter a valid email address.',
+    }),
+  department: z.string().trim().min(1, { message: 'Enter the faculty department.' }).min(2, { message: 'Department should include at least 2 characters.' }),
+  phone: z.string().trim().min(1, { message: 'Enter a contact number.' }).min(5, { message: 'Contact number should include at least 5 characters.' }),
   status: z.enum(['active', 'on_leave', 'inactive']),
 });
 
@@ -28,6 +34,7 @@ export default function FacultyPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof facultySchema>>({
     resolver: zodResolver(facultySchema),
@@ -53,11 +60,19 @@ export default function FacultyPage() {
   }, []);
 
   const onSubmit = async (values: z.infer<typeof facultySchema>) => {
-    if (editingId) {
-      await facultyService.updateFaculty(editingId, values);
-    } else {
-      await facultyService.createFaculty(values);
+    setFormError(null);
+
+    try {
+      if (editingId) {
+        await facultyService.updateFaculty(editingId, values);
+      } else {
+        await facultyService.createFaculty(values);
+      }
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Unable to save this faculty record. Please review the form and try again.');
+      return;
     }
+
     setIsAddOpen(false);
     setEditingId(null);
     form.reset();
@@ -100,6 +115,7 @@ export default function FacultyPage() {
           setIsAddOpen(open);
           if (!open) {
              setEditingId(null);
+             setFormError(null);
              form.reset({ fullName: '', email: '', department: '', phone: '', status: 'active' });
           }
         }}>
@@ -108,12 +124,17 @@ export default function FacultyPage() {
                <Plus className="mr-2 h-4 w-4" /> Add Faculty
             </button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-106.25">
             <DialogHeader>
               <DialogTitle>{editingId ? 'Edit Faculty' : 'Add New Faculty'}</DialogTitle>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                {formError && (
+                  <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                    {formError}
+                  </div>
+                )}
                 <FormField control={form.control} name="fullName" render={({ field }) => (
                   <FormItem><FormLabel>Full Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
@@ -176,23 +197,35 @@ export default function FacultyPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center py-10 text-slate-500">
-                  <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-red-500" />
-                  Loading faculty data...
-                </TableCell>
-              </TableRow>
-            ) : filtered.length === 0 ? (
-              <TableRow>
-                 <TableCell colSpan={5} className="text-center py-10 text-slate-500">
-                   No faculty members found.
-                 </TableCell>
-              </TableRow>
-            ) : filtered.map((f) => {
-              const statusClassName = f.status === 'active' ? 'bg-emerald-100 text-emerald-800' :
-                f.status === 'on_leave' ? 'bg-amber-100 text-amber-800' :
-                'bg-slate-100 text-slate-800';
+            {(() => {
+              if (loading) {
+                return (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-10 text-slate-500">
+                      <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-red-500" />
+                      Loading faculty data...
+                    </TableCell>
+                  </TableRow>
+                );
+              }
+
+              if (filtered.length === 0) {
+                return (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-10 text-slate-500">
+                      No faculty members found.
+                    </TableCell>
+                  </TableRow>
+                );
+              }
+
+              return filtered.map((f) => {
+              let statusClassName = 'bg-slate-100 text-slate-800';
+              if (f.status === 'active') {
+                statusClassName = 'bg-emerald-100 text-emerald-800';
+              } else if (f.status === 'on_leave') {
+                statusClassName = 'bg-amber-100 text-amber-800';
+              }
               
               return (
               <TableRow key={f.id}>
@@ -222,7 +255,8 @@ export default function FacultyPage() {
                 </TableCell>
               </TableRow>
             );
-            })}
+              });
+            })()}
           </TableBody>
         </Table>
       </div>

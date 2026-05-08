@@ -12,11 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { 
   DOCUMENT_TYPES, 
   validateDocument,
-  SubmittedDocument,
   DocumentValidationResult 
 } from '@/lib/documentTypes';
 import { Clearance, ClearanceNote } from '@/types/clearance';
-import { getRequiredOfficeForOfficer } from '@/lib/roleConfig';
 import { clearanceService } from '@/services/clearanceService';
 import { format } from 'date-fns';
 
@@ -73,6 +71,8 @@ export default function FacultyDetailPage() {
   const [validationResult, setValidationResult] = useState<DocumentValidationResult | null>(null);
   const [ocrText, setOcrText] = useState('');
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [ocrError, setOcrError] = useState('');
+  const [actionError, setActionError] = useState('');
 
   // Dialog states for approval/rejection
   const [isApproveDialogOpen, setIsApproveDialogOpen] = useState(false);
@@ -106,14 +106,6 @@ export default function FacultyDetailPage() {
     return records.find((record) => record.employeeId === employeeId);
   }, [records, employeeId]);
 
-  const officerOfficeName = useMemo(() => {
-    return getRequiredOfficeForOfficer(currentUser?.role);
-  }, [currentUser?.role]);
-
-  const facultyName = useMemo(() => {
-    return facultyRecord?.employeeName || `Faculty (${employeeId})`;
-  }, [facultyRecord?.employeeName, employeeId]);
-
   useEffect(() => {
     if (facultyRecord?.id) {
       setLoadingNotes(true);
@@ -132,22 +124,6 @@ export default function FacultyDetailPage() {
     }
   }, [facultyRecord?.id]);
 
-  const facultyDocumentsData = useMemo(() => {
-    if (!facultyRecord) return [];
-    
-    const storageKey = `faculty-documents-${employeeId}`;
-    const raw = localStorage.getItem(storageKey);
-    if (!raw) {
-      return [];
-    }
-
-    try {
-      return JSON.parse(raw) as SubmittedDocument[];
-    } catch {
-      return [];
-    }
-  }, [facultyRecord, employeeId]);
-
   const currentOfficeId = currentUser?.role
     ? OFFICER_OFFICE_MAP[currentUser.role]
     : undefined;
@@ -156,7 +132,7 @@ export default function FacultyDetailPage() {
     if (currentUser === null) return;
     const load = async () => {
       setLoading(true);
-      const officeId = currentOfficeId !== undefined ? String(currentOfficeId) : undefined;
+      const officeId = currentOfficeId ? String(currentOfficeId) : undefined;
       const data = await clearanceService.getClearances(undefined, officeId);
       setRecords(data || []);
       setLoading(false);
@@ -187,7 +163,11 @@ export default function FacultyDetailPage() {
   };
 
   const handleRunOCR = async () => {
-    if (!selectedOCRFile) return;
+    setOcrError('');
+    if (!selectedOCRFile) {
+      setOcrError('Choose a file before running OCR.');
+      return;
+    }
     setIsOCRLoading(true);
     try {
       const formData = new FormData();
@@ -203,40 +183,10 @@ export default function FacultyDetailPage() {
       const message = error instanceof Error ? error.message : 'Failed to process OCR.';
       setOcrText(`OCR scan failed: ${message}`);
       setValidationResult(null);
+      setOcrError(message);
     } finally {
       setIsOCRLoading(false);
     }
-  };
-
-  const resolveTargetRecord = async (): Promise<Clearance> => {
-    if (facultyRecord) {
-      return facultyRecord;
-    }
-
-    if (!officerOfficeName) {
-      throw new Error('No office is mapped to your approval role.');
-    }
-
-    const officeId = currentOfficeId || OFFICER_OFFICE_MAP[currentUser?.role || ''] || 1;
-
-    await clearanceService.uploadDocument(employeeId, officeId, facultyName, officerOfficeName);
-
-    const refreshed = await clearanceService.getClearances();
-    setRecords(refreshed);
-
-    const normalize = (value: string) => value.trim().toLowerCase().split(/\s+/).join(' ');
-    const matched =
-      refreshed.find(
-        (record: Clearance) =>
-          record.employeeId === employeeId &&
-          normalize(record.requiredDocument) === normalize(officerOfficeName)
-      ) || refreshed.find((record: Clearance) => record.employeeId === employeeId);
-
-    if (!matched) {
-      throw new Error('Unable to create a clearance record for this faculty user.');
-    }
-
-    return matched;
   };
 
   const applyDecision = async (targetRecord: Clearance, decision: 'approved' | 'rejected' | 'pending') => {
@@ -244,33 +194,47 @@ export default function FacultyDetailPage() {
     const reviewerName = currentUser?.full_name || currentUser?.name || 'Officer';
     const reviewerRole = currentUser?.role || 'approval_officer';
 
-    if (decision === 'approved') {
-      await clearanceService.approveClearance(
-        targetRecord.id,
-        approvalRemarks,
-        reviewerId,
-        reviewerName,
-        reviewerRole
-      );
-      setIsApproveDialogOpen(false);
-      setApprovalRemarks('');
+    if (decision === 'rejected' && !rejectionReason.trim()) {
+      setActionError('Enter a rejection reason before confirming the decision.');
       return;
     }
 
-    if (decision === 'rejected') {
-      await clearanceService.rejectClearance(
-        targetRecord.id,
-        rejectionReason,
-        reviewerId,
-        reviewerName,
-        reviewerRole
-      );
-      setIsRejectDialogOpen(false);
-      setRejectionReason('');
-      return;
-    }
+    setActionError('');
+    setActionLoadingId(targetRecord.id);
 
-    await clearanceService.updateStatus(targetRecord.id, 'pending');
+    try {
+      if (decision === 'approved') {
+        await clearanceService.approveClearance(
+          targetRecord.id,
+          approvalRemarks,
+          reviewerId,
+          reviewerName,
+          reviewerRole
+        );
+        setIsApproveDialogOpen(false);
+        setApprovalRemarks('');
+        return;
+      }
+
+      if (decision === 'rejected') {
+        await clearanceService.rejectClearance(
+          targetRecord.id,
+          rejectionReason,
+          reviewerId,
+          reviewerName,
+          reviewerRole
+        );
+        setIsRejectDialogOpen(false);
+        setRejectionReason('');
+        return;
+      }
+
+      await clearanceService.updateStatus(targetRecord.id, 'pending');
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Unable to update this decision. Please try again.');
+    } finally {
+      setActionLoadingId(null);
+    }
   };
 
   const handleDecision = async (decision: 'approved' | 'rejected' | 'pending') => {
@@ -288,7 +252,7 @@ export default function FacultyDetailPage() {
     // ✅ Only update the single record for this office — not all faculty records
     await clearanceService.updateStatus(facultyRecord.id, decision, rejectionReason);
 
-    const officeId = currentOfficeId !== undefined ? String(currentOfficeId) : undefined;
+    const officeId = currentOfficeId ? String(currentOfficeId) : undefined;
     const data = await clearanceService.getClearances(undefined, officeId);
     setRecords(data || []);
     setActionLoadingId(null);
@@ -388,19 +352,22 @@ export default function FacultyDetailPage() {
                         onChange={(e) => setApprovalRemarks(e.target.value)}
                         rows={4}
                       />
+                      <p className="mt-2 text-xs text-slate-500">Optional. Add context that will help the faculty member understand the approval.</p>
                     </div>
+                    {actionError && <p className="text-sm text-rose-600">{actionError}</p>}
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
                         onClick={() => {
                           setIsApproveDialogOpen(false);
                           setApprovalRemarks('');
+                          setActionError('');
                         }}
                       >
                         Cancel
                       </Button>
                       <Button
-                        onClick={() => void handleDecision('approved')}
+                        onClick={() => void applyDecision(facultyRecord, 'approved')}
                         disabled={actionLoadingId === actionTargetId}
                         className="bg-emerald-600 hover:bg-emerald-700"
                       >
@@ -438,19 +405,22 @@ export default function FacultyDetailPage() {
                         onChange={(e) => setRejectionReason(e.target.value)}
                         rows={4}
                       />
+                      <p className="mt-2 text-xs text-slate-500">Required. Give a specific reason so the faculty member knows what to fix.</p>
                     </div>
+                    {actionError && <p className="text-sm text-rose-600">{actionError}</p>}
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
                         onClick={() => {
                           setIsRejectDialogOpen(false);
                           setRejectionReason('');
+                          setActionError('');
                         }}
                       >
                         Cancel
                       </Button>
                       <Button
-                        onClick={() => void handleDecision('rejected')}
+                        onClick={() => void applyDecision(facultyRecord, 'rejected')}
                         disabled={!rejectionReason.trim() || actionLoadingId === actionTargetId}
                         variant="destructive"
                       >
@@ -467,21 +437,21 @@ export default function FacultyDetailPage() {
                 <CardContent className="space-y-3">
                   <div className="space-y-2">
                     <Button
-                      onClick={() => void handleDecision('approved')}
+                      onClick={() => setIsApproveDialogOpen(true)}
                       disabled={actionLoadingId === facultyRecord?.id || facultyRecord?.status === 'approved'}
                       className="w-full bg-emerald-600 hover:bg-emerald-700"
                     >
-                      {actionLoadingId === facultyRecord?.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                      Approve Clearance
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
+                      Open Approve Dialog
                     </Button>
                     <Button
-                      onClick={() => void handleDecision('rejected')}
+                      onClick={() => setIsRejectDialogOpen(true)}
                       disabled={actionLoadingId === facultyRecord?.id || facultyRecord?.status === 'rejected'}
                       variant="destructive"
                       className="w-full"
                     >
-                      {actionLoadingId === facultyRecord?.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <X className="mr-2 h-4 w-4" />}
-                      Reject Clearance
+                      <X className="mr-2 h-4 w-4" />
+                      Open Reject Dialog
                     </Button>
                     <Button
                       onClick={() => void handleDecision('pending')}
@@ -578,6 +548,8 @@ export default function FacultyDetailPage() {
               </Select>
             </div>
             <Input type="file" onChange={(event) => setSelectedOCRFile(event.target.files?.[0] || null)} />
+            <p className="text-xs text-slate-500">Choose a document file before running OCR so the validator can inspect its contents.</p>
+            {ocrError && <p className="text-sm text-rose-600">{ocrError}</p>}
             <Button onClick={() => void handleRunOCR()} disabled={isOCRLoading} className="bg-red-600 hover:bg-red-700">
               {isOCRLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ScanLine className="mr-2 h-4 w-4" />} Run OCR AI Scan
             </Button>
