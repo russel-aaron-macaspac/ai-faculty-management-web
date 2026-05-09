@@ -13,6 +13,7 @@ import { UploadCloud, CheckCircle2, AlertTriangle, FileText, Loader2, Search, Ch
 import { FACULTY_REQUIRED_OFFICES, toOfficeSlug } from '@/lib/clearanceOffices';
 import { isApprovalOfficer, getClearancePageInfo, isFacultyLikeRole } from '@/lib/roleConfig';
 import { StoredUser } from '@/lib/stringUtils';
+import { toast } from '@/lib/toast';
 
 const OFFICER_OFFICE_MAP: Record<string, number> = {
   dlrc:         1,
@@ -93,8 +94,11 @@ export default function ClearancePage() {
       setIsUploadOpen(false);
       setDocName('Safety Training Certificate');
       void loadData(currentUser?.role);
+  toast({ title: 'Upload submitted', description: 'Document uploaded for review.', type: 'success' });
     } catch (error) {
-      setUploadError(error instanceof Error ? error.message : 'Unable to submit this document. Please try again.');
+  const msg = error instanceof Error ? error.message : 'Unable to submit this document. Please try again.';
+  setUploadError(msg);
+  toast({ title: 'Upload failed', description: msg, type: 'error' });
     } finally {
       setUploading(false);
     }
@@ -190,9 +194,15 @@ export default function ClearancePage() {
     }
 
     setActionLoadingId(record.id);
-    await clearanceService.updateStatus(record.id, decision, reason);
-    await loadData(currentUser.role);
-    setActionLoadingId(null);
+    try {
+      await clearanceService.updateStatus(record.id, decision, reason);
+      await loadData(currentUser.role);
+      toast({ title: 'Decision saved', description: `Record ${decision}.`, type: decision === 'approved' ? 'success' : decision === 'rejected' ? 'error' : 'info' });
+    } catch (err) {
+      toast({ title: 'Decision failed', description: err instanceof Error ? err.message : 'Failed to update status', type: 'error' });
+    } finally {
+      setActionLoadingId(null);
+    }
   };
 
   const { title: pageTitle, subtitle: pageSubtitle } = getClearancePageInfo(currentUser?.role);

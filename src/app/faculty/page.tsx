@@ -13,6 +13,7 @@ import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Pencil, Trash2, Loader2, Search } from 'lucide-react';
+import { toast } from '@/lib/toast';
 
 const facultySchema = z.object({
   fullName: z.string().trim().min(1, { message: 'Enter the faculty member’s full name.' }).min(2, { message: 'Full name should include at least 2 characters.' }),
@@ -65,11 +66,15 @@ export default function FacultyPage() {
     try {
       if (editingId) {
         await facultyService.updateFaculty(editingId, values);
+        toast({ title: 'Faculty updated', description: 'Faculty record saved successfully.', type: 'success' });
       } else {
         await facultyService.createFaculty(values);
+        toast({ title: 'Faculty created', description: 'New faculty record added.', type: 'success' });
       }
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'Unable to save this faculty record. Please review the form and try again.');
+      const msg = error instanceof Error ? error.message : 'Unable to save this faculty record. Please review the form and try again.';
+      setFormError(msg);
+      toast({ title: 'Save failed', description: msg, type: 'error' });
       return;
     }
 
@@ -93,7 +98,12 @@ export default function FacultyPage() {
 
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this faculty member?')) {
-      await facultyService.deleteFaculty(id);
+      try {
+        await facultyService.deleteFaculty(id);
+        toast({ title: 'Deleted', description: 'Faculty record deleted.', type: 'info' });
+      } catch (err) {
+        toast({ title: 'Delete failed', description: err instanceof Error ? err.message : 'Failed to delete faculty.', type: 'error' });
+      }
       loadData();
     }
   };
