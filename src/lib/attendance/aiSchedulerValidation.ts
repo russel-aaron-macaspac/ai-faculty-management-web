@@ -144,6 +144,201 @@ export function calculateAverages(
   };
 }
 
+async function getRecentAttendanceLogs(
+  supabase: SupabaseClient,
+  userId: number,
+  fromDate: string
+): Promise<AttendanceLogRecord[]> {
+  const logsResponse = await supabase
+    .from('attendance_logs')
+    .select('time_in, time_out, log_date')
+    .eq('user_id', userId)
+    .gte('log_date', fromDate)
+    .not('time_in', 'is', null)
+    .order('log_date', { ascending: false })
+    .limit(120);
+
+  if (!logsResponse.error && logsResponse.data) {
+    return logsResponse.data as AttendanceLogRecord[];
+  }
+
+  const attendanceFallback = await supabase
+    .from('attendance')
+    .select('time_in, time_out, date')
+    .eq('user_id', userId)
+    .gte('date', fromDate)
+    .not('time_in', 'is', null)
+    .order('date', { ascending: false })
+    .limit(120);
+
+  if (attendanceFallback.error || !attendanceFallback.data) {
+    return [];
+  }
+
+  return (attendanceFallback.data as Array<{ time_in?: string; time_out?: string; date?: string }>).map(
+    (row) => ({
+      time_in: row.time_in ?? null,
+      time_out: row.time_out ?? null,
+      log_date: row.date ?? null,
+    })
+  );
+}
+
+async function getRecentUserScans(
+  supabase: SupabaseClient,
+  userId: number,
+  fromTimestamp: string
+): Promise<UserScanRecord[]> {
+  const { data, error } = await supabase
+    .from('rfid_scans')
+    .select('timestamp')
+    .eq('user_id', userId)
+    .gte('timestamp', fromTimestamp)
+    .order('timestamp', { ascending: false })
+    .limit(20);
+
+  if (error || !data) {
+    return [];
+  }
+
+  return data as UserScanRecord[];
+}
+
+export async function getTodaySchedule(
+  supabase: SupabaseClient,
+  userId: number,
+  scanTimestamp: string
+): Promise<ScheduleInfo | null> {
+  const scanDate = new Date(scanTimestamp);
+  const dayName = scanDate.toLocaleDateString('en-US', { weekday: 'long' });
+  const scanMinutes = toMinutesFromTimestamp(scanTimestamp) ?? 0;
+
+  const { data: facultyRecord } = await supabase
+    .from('users')
+    .select('supabase_id')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  const facultyUuid =
+    facultyRecord &&
+    typeof (facultyRecord as { supabase_id?: unknown }).supabase_id === 'string' &&
+    (facultyRecord as { supabase_id?: string }).supabase_id
+      ? (facultyRecord as { supabase_id?: string }).supabase_id
+      : null;
+
+  let modernQuery = supabase
+    .from('schedules')
+    .select(
+      `
+      faculty_id,
+      faculty_id_uuid,
+      day,
+      start_time,
+      end_time,
+      status,
+      room_id,
+      room:rooms!schedules_room_id_fkey (
+        id,
+        name
+      )
+    `
+    )
+    .eq('day', dayName)
+    .neq('status', 'rejected')
+    .order('start_time', { ascending: true });
+
+  if (facultyUuid) {
+    modernQuery = modernQuery.or(`faculty_id.eq.${userId},faculty_id_uuid.eq.${facultyUuid}`);
+  } else {
+    modernQuery = modernQuery.eq('faculty_id', userId);
+  }
+
+  // modernResponse may have different shapes depending on whether the `status` column exists in the DB.
+  // Use `any` here to accept both variants and handle shape normalization below.
+  let modernResponse: any = await modernQuery;
+
+  if (modernResponse.error && isMissingColumnError(modernResponse.error, 'status')) {
+    let fallbackModernQuery = supabase
+      .from('schedules')
+      .select(
+        `
+        faculty_id,
+        faculty_id_uuid,
+        day,
+        start_time,
+        end_time,
+        room_id,
+        room:rooms!schedules_room_id_fkey (
+          id,
+          name
+        )
+      `
+      )
+      .eq('day', dayName)
+      .order('start_time', { ascending: true });
+
+    if (facultyUuid) {
+      fallbackModernQuery = fallbackModernQuery.or(`faculty_id.eq.${userId},faculty_id_uuid.eq.${facultyUuid}`);
+    } else {
+      fallbackModernQuery = fallbackModernQuery.eq('faculty_id', userId);
+    }
+
+    modernResponse = await fallbackModernQuery;
+  }
+
+  if (!modernResponse.error && modernResponse.data) {
+    const schedules = (modernResponse.data as Array<Record<string, unknown>>).map((row) => {
+      const roomValue = Array.isArray(row.room) ? row.room[0] : row.room;
+      const roomRecord = roomValue as { id?: string | number; name?: string } | null;
+
+      return {
+        startTime: (row.start_time as string | null) ?? null,
+        endTime: (row.end_time as string | null) ?? null,
+        roomId:
+          toStringValue(row.room_id) ??
+          (roomRecord?.id !== undefined && roomRecord?.id !== null ? String(roomRecord.id) : null),
+        roomName: roomRecord?.name ?? null,
+      } as ScheduleInfo;
+    });
+
+    return pickScheduleForScan(schedules, scanMinutes);
+  }
+
+  const legacyResponse = await supabase
+    .from('schedules')
+    .select(
+      `
+      user_id,
+      day_of_week,
+      room,
+      shift:shifts!schedules_shift_id_fkey (
+        start_time,
+        end_time
+      )
+    `
+    )
+    .eq('user_id', userId)
+    .eq('day_of_week', dayName);
+
+  if (!legacyResponse.error && legacyResponse.data) {
+    const schedules = (legacyResponse.data as Array<Record<string, unknown>>).map((row) => {
+      const shiftValue = Array.isArray(row.shift) ? row.shift[0] : row.shift;
+      const shift = shiftValue as { start_time?: string | null; end_time?: string | null } | null;
+
+      return {
+        startTime: shift?.start_time ?? null,
+        endTime: shift?.end_time ?? null,
+        roomId: toStringValue(row.room),
+        roomName: toStringValue(row.room),
+      } as ScheduleInfo;
+    });
+
+    return pickScheduleForScan(schedules, scanMinutes);
+  }
+
+  return null;
+}
+
 export async function getDeviceRoom(
   supabase: SupabaseClient,
   deviceId: string

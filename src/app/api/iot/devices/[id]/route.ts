@@ -1,9 +1,10 @@
 import { createSupabaseAdminClient } from '@/lib/supabase/server-client';
 import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, _ctx: any) {
   try {
-    const { id } = params;
+  const params = (arguments[1] && (arguments[1] as any).params) || {};
+  const { id } = params;
     const supabase = createSupabaseAdminClient();
 
     const { data: device, error } = await supabase
@@ -32,9 +33,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, _ctx: any) {
   try {
-    const { id } = params;
+  const params = (arguments[1] && (arguments[1] as any).params) || {};
+  const { id } = params;
     const body = await request.json();
 
     const supabase = createSupabaseAdminClient();
@@ -64,9 +66,10 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, _ctx: any) {
   try {
-    const { id } = params;
+  const params = (arguments[1] && (arguments[1] as any).params) || {};
+  const { id } = params;
     const supabase = createSupabaseAdminClient();
 
     const { error } = await supabase.from('rfid_devices').delete().eq('device_id', id);

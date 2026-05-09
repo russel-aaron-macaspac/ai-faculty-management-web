@@ -1,4 +1,8 @@
 export const clearanceService = {
+  isUuid(value: string) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  },
+
   async getClearances(userId?: string, officeId?: string) {
     const params = new URLSearchParams();
     if (userId) params.set('userId', userId);
@@ -9,7 +13,7 @@ export const clearanceService = {
       : '/api/clearances';
     const res = await fetch(url);
     if (!res.ok) {
-      console.error('[clearanceService.getClearances]', await res.text());
+      console.warn('[clearanceService.getClearances]', await res.text());
       return [];
     }
     const { data } = await res.json();
@@ -19,7 +23,7 @@ export const clearanceService = {
   async getOffices() {
     const res = await fetch('/api/offices');
     if (!res.ok) {
-      console.error('[clearanceService.getOffices]', await res.text());
+      console.warn('[clearanceService.getOffices]', await res.text());
       return [];
     }
     const { data } = await res.json();
@@ -137,10 +141,14 @@ export const clearanceService = {
   },
 
   async getNotifications(userId: string, unreadOnly: boolean = false) {
+    if (!clearanceService.isUuid(userId)) {
+      return [];
+    }
+
     const url = `/api/notifications?userId=${userId}&unreadOnly=${unreadOnly}`;
     const res = await fetch(url);
     if (!res.ok) {
-      console.error('[clearanceService.getNotifications]', await res.text());
+      console.warn('[clearanceService.getNotifications]', await res.text());
       return [];
     }
     const { notifications } = await res.json();
@@ -161,6 +169,10 @@ export const clearanceService = {
   },
 
   async markAllNotificationsAsRead(userId: string) {
+    if (!clearanceService.isUuid(userId)) {
+      return null;
+    }
+
     const res = await fetch('/api/notifications', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },

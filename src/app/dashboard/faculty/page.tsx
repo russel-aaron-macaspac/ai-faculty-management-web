@@ -8,6 +8,8 @@ import { CalendarDays, Clock, FileCheck2, GraduationCap } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
 import { Schedule } from '@/types/schedule';
 import { parseTimeToMinutes, formatTimeToTwelveHour, getTimeStatus } from '@/lib/timeUtils';
+import { attendanceService } from '@/services/attendanceService';
+import { Attendance } from '@/types/attendance';
 
 export default function FacultyDashboardPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -82,20 +84,62 @@ export default function FacultyDashboardPage() {
 
   const isProgramChair = user?.role === 'program_chair';
 
-  const mockAlerts = [
-    {
-      id: '1',
-      type: 'info' as const,
-      title: 'Upcoming Class Reminder',
-      message: 'CS101 Intro to Programming begins in 15 minutes at Room 302.',
-    },
-    {
-      id: '2',
-      type: 'success' as const,
-      title: 'Clearance Approved',
-      message: 'Your Annual Medical Certificate has been verified and approved by HR.',
+  const [myAttendance, setMyAttendance] = useState<Attendance | null>(null);
+
+  useEffect(() => {
+    const loadAttendance = async () => {
+      if (!user) return;
+      try {
+        const today = new Date().toISOString().slice(0, 10);
+        const records = await attendanceService.getAttendance(today, String(user.id));
+        setMyAttendance(records.length > 0 ? records[0] : null);
+      } catch {
+        setMyAttendance(null);
+      }
+    };
+
+    void loadAttendance();
+  }, [user]);
+
+  const computedAlerts = () => {
+    const alerts: any[] = [];
+
+    // upcoming class reminder
+    const nextClass = todayStats.ownClassesToday[0];
+    if (nextClass) {
+      alerts.push({ id: 'upcoming-class', type: 'info' as const, title: 'Upcoming Class Reminder', message: `${nextClass.subjectOrRole ?? nextClass.subject?.name} begins at ${formatTimeToTwelveHour(nextClass.startTime)} in ${nextClass.room?.name ?? 'TBD'}.` });
     }
-  ];
+
+    // attendance alert for late / anomaly
+    if (myAttendance && myAttendance.status === 'late') {
+      alerts.push({ id: 'late-arrival', type: 'warning' as const, title: 'Late Arrival Detected', message: `You clocked in at ${myAttendance.timeIn}.` });
+    }
+
+    return alerts;
+  };
+
+  const [insights, setInsights] = useState<any[] | null>(null);
+  const [insightsMeta, setInsightsMeta] = useState<any | null>(null);
+
+  useEffect(() => {
+    const fetchInsights = async () => {
+      try {
+        const stored = localStorage.getItem('user');
+        const userObj = stored ? JSON.parse(stored) : null;
+        const userId = userObj?.id ? String(userObj.id) : undefined;
+        const url = userId ? `/api/ai/insights?user_id=${encodeURIComponent(userId)}` : '/api/ai/insights';
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) return;
+        const payload = await res.json();
+        if (Array.isArray(payload.alerts)) setInsights(payload.alerts);
+        if (payload.meta) setInsightsMeta(payload.meta);
+      } catch (e) {
+        // ignore, keep client-side computed alerts
+      }
+    };
+
+    void fetchInsights();
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -113,7 +157,7 @@ export default function FacultyDashboardPage() {
 
       <div className="grid gap-6 md:grid-cols-7">
         <div className="md:col-span-4 lg:col-span-5 space-y-6">
-          <AIAlerts alerts={mockAlerts} />
+          <AIAlerts alerts={insights ?? computedAlerts()} />
           
           <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
             <h3 className="font-semibold text-slate-800 mb-4">My Schedule Today</h3>
@@ -147,11 +191,25 @@ export default function FacultyDashboardPage() {
         </div>
 
         <div className="md:col-span-3 lg:col-span-2 space-y-6">
-           <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm text-center">
-              <h3 className="font-semibold text-slate-800 mb-2">My Attendance</h3>
-              <div className="text-3xl font-bold text-emerald-500 my-4">Present</div>
-              <div className="text-sm text-slate-500">Clocked in at 08:45 AM</div>
-           </div>
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm text-center">
+          <h3 className="font-semibold text-slate-800 mb-2">My Attendance</h3>
+          <div className="text-3xl font-bold text-emerald-500 my-4">{myAttendance ? myAttendance.status : 'No record'}</div>
+          <div className="text-sm text-slate-500">{myAttendance ? `Clocked in at ${myAttendance.timeIn || '—'}` : 'No attendance found for today'}</div>
+        </div>
+        {insightsMeta?.latenessSeries && (
+          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+            <h3 className="font-semibold text-slate-800 mb-2">Lateness (14d)</h3>
+            <div className="text-sm text-slate-600 mb-2">Recent late arrivals per day</div>
+            <div className="flex gap-2 flex-wrap text-xs text-slate-700">
+              {insightsMeta.latenessSeries.map((s: { date: string; lateCount: number }) => (
+                <div key={s.date} className="p-2 bg-slate-50 rounded-md border border-slate-100">
+                  <div className="font-medium">{s.lateCount}</div>
+                  <div className="text-[10px] text-slate-500">{s.date.slice(5)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         </div>
       </div>
     </div>

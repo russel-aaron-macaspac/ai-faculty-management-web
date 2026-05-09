@@ -6,9 +6,16 @@ import { AIAlerts } from '@/components/dashboard/AIAlerts';
 import { AttendanceSummary } from '@/components/dashboard/AttendanceSummary';
 import { Users, UserSquare2, CalendarDays, FileCheck2 } from 'lucide-react';
 import { User } from '@/types/user';
+import { facultyService } from '@/services/facultyService';
+import { scheduleService } from '@/services/scheduleService';
+import { clearanceService } from '@/services/clearanceService';
 
 export default function AdminDashboardPage() {
   const [user, setUser] = useState<User | null>(null);
+  const [facultyCount, setFacultyCount] = useState<number | null>(null);
+  const [staffCount, setStaffCount] = useState<number | null>(null);
+  const [activeClasses, setActiveClasses] = useState<number | null>(null);
+  const [clearanceCompletion, setClearanceCompletion] = useState<{ percent: number; pending: number } | null>(null);
 
   useEffect(() => {
     const userStr = localStorage.getItem('user');
@@ -18,27 +25,58 @@ export default function AdminDashboardPage() {
     }
   }, []);
 
-  const mockAlerts = [
-    {
-      id: '1',
-      type: 'warning' as const,
-      title: 'Schedule Conflict Detected',
-      message: 'Prof. Bob Wilson (MATH201) and Dr. Alice Brown (CS101) are scheduled in Room 302 at overlapping times.',
-      recommendation: 'Reassign MATH201 to Room 305 (currently available).'
-    },
-    {
-      id: '2',
-      type: 'insight' as const,
-      title: 'Workload Optimization',
-      message: 'IT Department staff are averaging 12% more overtime than other departments this month.',
-    },
-    {
-      id: '3',
-      type: 'info' as const,
-      title: 'Clearance Deadline Approaching',
-      message: '15 faculty members have pending contract renewal documents due next week.',
+  const mockAlerts: any[] = [];
+
+  useEffect(() => {
+    const loadKPIs = async () => {
+      try {
+        const faculties = await facultyService.getFaculty();
+        setFacultyCount(faculties.length);
+
+        // staff count isn't modeled explicitly; keep as placeholder
+        setStaffCount(null);
+
+        const schedules = await scheduleService.getSchedules();
+        const now = new Date();
+        const nowMinutes = now.getHours() * 60 + now.getMinutes();
+        const active = schedules.filter((s) => {
+          const parse = (t?: string) => {
+            if (!t) return null;
+            const [hh, mm] = t.split(':').map(Number);
+            return hh * 60 + mm;
+          };
+          const start = parse(s.startTime);
+          const end = parse(s.endTime);
+          return start !== null && end !== null && start <= nowMinutes && nowMinutes <= end;
+        }).length;
+        setActiveClasses(active);
+
+        const clearances = await clearanceService.getClearances();
+        const pending = clearances.filter((c: any) => c.status === 'submitted' || c.status === 'pending').length;
+        const total = clearances.length || 1;
+        const percent = Math.round(((total - pending) / total) * 100);
+        setClearanceCompletion({ percent, pending });
+      } catch (e) {
+        // ignore failures; show placeholders
+      }
+    };
+
+    void loadKPIs();
+  }, []);
+
+  const computedAlerts = () => {
+    const alerts: any[] = [];
+
+    if (clearanceCompletion && clearanceCompletion.pending > 20) {
+      alerts.push({ id: 'c1', type: 'warning' as const, title: 'High Pending Clearances', message: `${clearanceCompletion.pending} pending clearances need attention.`, recommendation: 'Allocate more reviewers to clear the queue.' });
     }
-  ];
+
+    if (activeClasses && activeClasses > 50) {
+      alerts.push({ id: 's1', type: 'insight' as const, title: 'High number of active classes', message: `${activeClasses} classes are active now.`, recommendation: undefined });
+    }
+
+    return alerts;
+  };
 
   return (
     <div className="space-y-6">
@@ -49,16 +87,16 @@ export default function AdminDashboardPage() {
 
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Total Faculty" value="124" description="12 on leave" icon={Users} trend="up" trendValue="2%" href="/faculty" />
-        <StatCard title="Total Staff" value="48" icon={UserSquare2} trend="neutral" trendValue="0%" href="/staff" />
-        <StatCard title="Active Classes" value="32" description="Happening right now" icon={CalendarDays} trend="up" trendValue="5%" href="/schedules" />
-        <StatCard title="Clearance Completion" value="89%" description="Pending: 15" icon={FileCheck2} trend="up" trendValue="4%" href="/clearance" />
+  <StatCard title="Total Faculty" value={facultyCount ?? '...'} description={undefined} icon={Users} trend={facultyCount ? 'up' : undefined} trendValue={facultyCount ? `${facultyCount}` : undefined} href="/faculty" />
+  <StatCard title="Total Staff" value={staffCount ?? '...'} icon={UserSquare2} trend={staffCount ? 'neutral' : undefined} trendValue={staffCount ? `${staffCount}` : undefined} href="/staff" />
+  <StatCard title="Active Classes" value={activeClasses ?? '...'} description="Happening right now" icon={CalendarDays} trend={activeClasses ? 'up' : undefined} trendValue={activeClasses ? `${activeClasses}` : undefined} href="/schedules" />
+  <StatCard title="Clearance Completion" value={clearanceCompletion ? `${clearanceCompletion.percent}%` : '...'} description={clearanceCompletion ? `Pending: ${clearanceCompletion.pending}` : undefined} icon={FileCheck2} trend="up" trendValue={clearanceCompletion ? `${clearanceCompletion.percent}%` : undefined} href="/clearance" />
       </div>
 
       <div className="grid gap-6 md:grid-cols-7">
         {/* Main Content Area */}
         <div className="md:col-span-4 lg:col-span-5 space-y-6">
-          <AIAlerts alerts={mockAlerts} />
+          <AIAlerts alerts={computedAlerts()} />
           
           <div className="grid gap-6 md:grid-cols-2">
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
