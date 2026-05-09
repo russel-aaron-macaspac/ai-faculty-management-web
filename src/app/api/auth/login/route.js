@@ -1,7 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { APPROVAL_OFFICERS } from "@/lib/roleConfig";
 
 export async function POST(request) {
   try {

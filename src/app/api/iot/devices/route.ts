@@ -1,6 +1,5 @@
 import { createSupabaseAdminClient } from '@/lib/supabase/server-client';
 import { NextRequest, NextResponse } from 'next/server';
-import { RFIDDevice } from '@/types/device';
 
 export async function GET() {
   try {
