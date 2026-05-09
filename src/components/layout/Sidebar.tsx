@@ -13,6 +13,7 @@ import {
   FileCheck2, 
   BarChart3,
   LogOut,
+  LockIcon,
 } from 'lucide-react';
 import { User } from '@/types/user';
 import { authService } from '@/services/authService';
@@ -42,6 +43,8 @@ export function Sidebar({ user }: Readonly<SidebarProps>) {
     { href: '/attendance', label: 'Attendance Monitoring', icon: Clock },
     { href: '/clearance', label: 'Clearance Compliance', icon: FileCheck2 },
     { href: '/reports', label: 'Reports', icon: BarChart3 },
+    { href: '/dashboard/profile', label: 'My Profile', icon: UserSquare2 },
+    { href: '/dashboard/changepassword', label: 'Change Password', icon: LockIcon },
   ];
 
   // Faculty Links
@@ -51,6 +54,7 @@ export function Sidebar({ user }: Readonly<SidebarProps>) {
     { href: '/schedules', label: 'My Schedule', icon: Calendar },
     { href: '/attendance', label: 'Attendance', icon: Clock },
     { href: '/clearance', label: 'Clearance Status', icon: FileCheck2 },
+    { href: '/dashboard/changepassword', label: 'Change Password', icon: LockIcon },
   ];
 
   let links = adminLinks;
