@@ -189,7 +189,12 @@ export default function FacultyDetailPage() {
     }
   };
 
-  const applyDecision = async (targetRecord: Clearance, decision: 'approved' | 'rejected' | 'pending') => {
+  const applyDecision = async (targetRecord: Clearance | undefined, decision: 'approved' | 'rejected' | 'pending') => {
+    if (!targetRecord?.id) {
+      setActionError('No record selected for this action.');
+      return;
+    }
+
     const reviewerId = currentUser?.id ? String(currentUser.id) : '';
     const reviewerName = currentUser?.full_name || currentUser?.name || 'Officer';
     const reviewerRole = currentUser?.role || 'approval_officer';

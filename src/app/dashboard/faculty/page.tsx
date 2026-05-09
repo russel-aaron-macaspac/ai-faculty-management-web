@@ -201,7 +201,7 @@ export default function FacultyDashboardPage() {
             <h3 className="font-semibold text-slate-800 mb-2">Lateness (14d)</h3>
             <div className="text-sm text-slate-600 mb-2">Recent late arrivals per day</div>
             <div className="flex gap-2 flex-wrap text-xs text-slate-700">
-              {insightsMeta.latenessSeries.map((s) => (
+              {insightsMeta.latenessSeries.map((s: { date: string; lateCount: number }) => (
                 <div key={s.date} className="p-2 bg-slate-50 rounded-md border border-slate-100">
                   <div className="font-medium">{s.lateCount}</div>
                   <div className="text-[10px] text-slate-500">{s.date.slice(5)}</div>
