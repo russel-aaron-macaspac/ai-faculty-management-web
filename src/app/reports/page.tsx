@@ -1,5 +1,6 @@
 'use client';
 
+import { RouteGuard } from '@/components/RouteGuard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Download, TrendingUp, Users, Clock, FileCheck2, Filter } from 'lucide-react';
@@ -7,7 +8,8 @@ import { Progress } from '@/components/ui/progress';
 
 export default function ReportsPage() {
   return (
-    <div className="space-y-6">
+    <RouteGuard requiredRoles={['admin']} fallbackPath="/dashboard/faculty">
+      <div className="space-y-6">
       <div className="flex justify-between items-center flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Analytics & Reports</h1>
@@ -153,5 +155,6 @@ export default function ReportsPage() {
       </div>
 
     </div>
+    </RouteGuard>
   );
 }

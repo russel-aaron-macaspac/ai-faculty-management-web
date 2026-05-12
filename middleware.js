@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 const publicRoutes = ["/login", "/"];
 
 const roleBasedRoutes = {
-  admin: ["/dashboard/admin", "/users", "/schedules", "/clearance"],
+  admin: ["/dashboard/admin", "/users", "/schedules", "/clearance", "/reports"],
   faculty: ["/dashboard/faculty", "/attendance", "/schedules"],
   staff: ["/dashboard/faculty", "/attendance"],
 };
