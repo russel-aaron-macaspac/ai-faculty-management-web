@@ -61,10 +61,11 @@ export function Sidebar({ user }: Readonly<SidebarProps>) {
   if (isFacultyLikeRole(user?.role)) {
     links = facultyLinks;
   } else if (isApprovalOfficer(user?.role)) {
-    // Dynamically create links for approval officers
+    // Dynamically create links for approval officers. Link to the officer-specific dashboard path
     const officerConfig = getApprovalOfficerConfig(user?.role as string);
     if (officerConfig) {
-      links = createMenuLinks(officerConfig.dashboardPath, officerConfig.label);
+      const officerDashboardPath = `${officerConfig.dashboardPath}/${officerConfig.id}`;
+      links = createMenuLinks(officerDashboardPath, officerConfig.label);
     }
   }
 

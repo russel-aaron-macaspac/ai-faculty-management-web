@@ -1,6 +1,7 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import { APPROVAL_OFFICERS } from '@/lib/roleConfig';
 
 export async function POST(request) {
   try {
@@ -43,11 +44,21 @@ export async function POST(request) {
       .update({ last_login: new Date().toISOString() })
       .eq("user_id", user.user_id);
 
+    // If the DB role is 'staff' but the email belongs to a configured approval officer,
+    // map the frontend role to the approval officer id so the UI shows approval features.
+    let frontendRole = user.role;
+    if (user.role === 'staff' && user.email) {
+      const match = APPROVAL_OFFICERS.find((o) => o.email.toLowerCase() === String(user.email).toLowerCase());
+      if (match) {
+        frontendRole = match.id;
+      }
+    }
+
     return NextResponse.json({
       user: {
         id: user.user_id,
         email: user.email,
-        role: user.role,
+        role: frontendRole,
         full_name: [user.first_name, user.middle_name, user.last_name]
           .filter(Boolean)
           .join(" "),

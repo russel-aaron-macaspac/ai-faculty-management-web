@@ -167,7 +167,8 @@ export const getDashboardPathForRole = (role: string | undefined): string => {
 
   const officer = role ? getApprovalOfficerConfig(role) : undefined;
   if (officer) {
-    return officer.dashboardPath;
+  // return officer-specific dashboard path, e.g. /dashboard/approval/dlrc
+  return `${officer.dashboardPath}/${officer.id}`;
   }
 
   return '/login';
