@@ -1,5 +1,6 @@
 'use client';
 
+import { RouteGuard } from '@/components/RouteGuard';
 import { useEffect, useState } from 'react';
 import { StatCard } from '@/components/dashboard/StatCards';
 import { AIAlerts } from '@/components/dashboard/AIAlerts';
@@ -11,6 +12,14 @@ import { scheduleService } from '@/services/scheduleService';
 import { clearanceService } from '@/services/clearanceService';
 
 export default function AdminDashboardPage() {
+  return (
+    <RouteGuard requiredRoles={['admin']} fallbackPath="/dashboard/faculty">
+      <AdminDashboardContent />
+    </RouteGuard>
+  );
+}
+
+function AdminDashboardContent() {
   const [user, setUser] = useState<User | null>(null);
   const [facultyCount, setFacultyCount] = useState<number | null>(null);
   const [staffCount, setStaffCount] = useState<number | null>(null);
