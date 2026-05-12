@@ -151,11 +151,7 @@ export async function handleRFIDScan(socket: any, scanData: any) {
         reason: aiResponse.message,
       });
 
-      await logValidationAlert(supabase, {
-        userId: user.user_id,
-        deviceId,
-        aiResponse,
-      });
+  await logValidationAlert(supabase, user.user_id, deviceId, aiResponse);
 
       socket.emit('scan_result', {
         ...blockedScan,
@@ -218,11 +214,7 @@ export async function handleRFIDScan(socket: any, scanData: any) {
     };
 
     await supabase.from('rfid_scans').insert(successfulScan);
-    await logValidationAlert(supabase, {
-      userId: user.user_id,
-      deviceId,
-      aiResponse,
-    });
+  await logValidationAlert(supabase, user.user_id, deviceId, aiResponse);
 
     // Emit to device and listeners
     socket.emit('scan_result', {

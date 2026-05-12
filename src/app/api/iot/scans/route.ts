@@ -414,11 +414,7 @@ export async function POST(request: NextRequest) {
     if (error) throw error;
 
     if (resolvedUserId !== null && aiResponse) {
-      await logValidationAlert(supabase, {
-        userId: resolvedUserId,
-        deviceId,
-        aiResponse,
-      });
+      await logValidationAlert(supabase, resolvedUserId, deviceId, aiResponse);
     }
 
     return NextResponse.json({

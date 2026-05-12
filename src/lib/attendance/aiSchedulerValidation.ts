@@ -1,5 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+// Detect missing-column errors from Postgres/Supabase responses.
+function isMissingColumnError(err: unknown, columnName: string): boolean {
+  try {
+    if (!err || typeof err !== 'object') return false;
+    const anyErr = err as any;
+    const msg = (anyErr?.message ?? anyErr?.details ?? '').toString().toLowerCase();
+    return msg.includes('column') && msg.includes(columnName.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 type AttendanceLogRecord = {
   time_in?: string | null;
   time_out?: string | null;
@@ -108,6 +120,43 @@ const plusMinutes = (iso: string, mins: number) => {
   d.setMinutes(d.getMinutes() + mins);
   return d.toISOString();
 };
+
+function toStringValue(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  try {
+    return String(value);
+  } catch {
+    return null;
+  }
+}
+
+function pickScheduleForScan(schedules: ScheduleInfo[], scanMinutes: number): ScheduleInfo | null {
+  if (!schedules || schedules.length === 0) return null;
+
+  // Prefer a schedule that contains the scan time
+  for (const s of schedules) {
+    const start = toMinutesFromClock(s.startTime);
+    const end = toMinutesFromClock(s.endTime);
+    if (start !== null && end !== null && scanMinutes >= start && scanMinutes <= end) {
+      return s;
+    }
+  }
+
+  // Otherwise choose the closest start time
+  let best: ScheduleInfo | null = null;
+  let bestDelta = Infinity;
+  for (const s of schedules) {
+    const start = toMinutesFromClock(s.startTime);
+    if (start === null) continue;
+    const delta = Math.abs(scanMinutes - start);
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      best = s;
+    }
+  }
+
+  return best ?? schedules[0] ?? null;
+}
 
 export function calculateAverages(
   logs: AttendanceLogRecord[]
