@@ -61,11 +61,17 @@ export function Sidebar({ user }: Readonly<SidebarProps>) {
   if (isFacultyLikeRole(user?.role)) {
     links = facultyLinks;
   } else if (isApprovalOfficer(user?.role)) {
-    // Dynamically create links for approval officers. Link to the officer-specific dashboard path
+    // Approval officers: create a tailored menu without the Work Schedule entry
     const officerConfig = getApprovalOfficerConfig(user?.role as string);
     if (officerConfig) {
       const officerDashboardPath = `${officerConfig.dashboardPath}/${officerConfig.id}`;
-      links = createMenuLinks(officerDashboardPath, officerConfig.label);
+      links = [
+        { href: officerDashboardPath, label: 'Dashboard', icon: LayoutDashboard },
+        { href: '/dashboard/profile', label: 'My Profile', icon: UserSquare2 },
+        { href: '/attendance', label: 'Attendance', icon: Clock },
+        { href: '/clearance', label: officerConfig.label, icon: FileCheck2 },
+        { href: '/dashboard/changepassword', label: 'Change Password', icon: LockIcon },
+      ];
     }
   }
 
