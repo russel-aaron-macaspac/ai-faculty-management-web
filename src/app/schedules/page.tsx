@@ -10,8 +10,7 @@ import { Loader2, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
 import { Schedule } from '@/types/schedule';
 import { formatTimeToTwelveHour } from '@/lib/timeUtils';
-import { isFacultyLikeRole, isApprovalOfficer, getDashboardPathForRole } from '@/lib/roleConfig';
-import { useRouter } from 'next/navigation';
+import { isFacultyLikeRole } from '@/lib/roleConfig';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const APPROVAL_ROLES = new Set(['dean', 'ovpaa', 'registrar', 'hro']);
@@ -52,7 +51,6 @@ export function getSelectedLabel<T extends { id?: string | number }>(
 }
 
 export default function SchedulesPage() {
-  const router = useRouter();
   const [user, setUser] = useState<LocalUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -149,15 +147,8 @@ const sectionLabel = getSelectedLabel(
   useEffect(() => {
     const raw = localStorage.getItem('user');
     const parsed = raw ? (JSON.parse(raw) as LocalUser) : null;
-    setUser(parsed);
-    // If the logged-in user is an approval officer, redirect them away from Work Schedule
-    if (parsed && isApprovalOfficer(parsed.role)) {
-      // send them to their dashboard path
-      const dash = getDashboardPathForRole(parsed.role);
-      router.replace(dash);
-      return;
-    }
-    void loadData(parsed);
+  setUser(parsed);
+  void loadData(parsed);
   }, []);
 
   useEffect(() => {
