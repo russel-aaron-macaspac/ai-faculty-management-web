@@ -75,7 +75,6 @@ export default function ToastContainer() {
     <div aria-live="polite" className="fixed left-1/2 top-4 z-50 flex transform -translate-x-1/2 flex-col items-center gap-3">
       {toasts.map((t) => {
         const typeColor = t.type === 'success' ? 'bg-emerald-500' : t.type === 'error' ? 'bg-rose-500' : t.type === 'warning' ? 'bg-amber-500' : 'bg-sky-500';
-        const icon = t.type === 'success' ? '✓' : t.type === 'error' ? '✕' : t.type === 'warning' ? '⚠' : 'ℹ';
         return (
           <div
             key={t.id}
@@ -88,7 +87,7 @@ export default function ToastContainer() {
             <div className="flex-1 bg-white px-4 py-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <div className="text-sm font-semibold text-slate-800">{icon}</div>
+              
                   <div className="font-medium text-slate-900">{t.title}</div>
                 </div>
                 <button
