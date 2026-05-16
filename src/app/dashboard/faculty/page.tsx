@@ -1,5 +1,6 @@
 'use client';
 
+import { RouteGuard } from '@/components/RouteGuard';
 import { useEffect, useMemo, useState } from 'react';
 import { StatCard } from '@/components/dashboard/StatCards';
 import { AIAlerts } from '@/components/dashboard/AIAlerts';
@@ -12,6 +13,14 @@ import { attendanceService } from '@/services/attendanceService';
 import { Attendance } from '@/types/attendance';
 
 export default function FacultyDashboardPage() {
+  return (
+    <RouteGuard requiredRoles={['faculty', 'admin']} fallbackPath="/login">
+      <FacultyDashboardContent />
+    </RouteGuard>
+  );
+}
+
+function FacultyDashboardContent() {
   const [user, setUser] = useState<User | null>(null);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
 
