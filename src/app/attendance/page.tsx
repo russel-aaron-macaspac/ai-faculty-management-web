@@ -435,6 +435,16 @@ export default function AttendancePage() {
     setRecentRecords(results.flat());
   }, [filterDate]);
 
+  const onDateChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.value;
+    const today = format(new Date(), 'yyyy-MM-dd');
+
+    if (selected > today) return;
+
+    setFilterDate(selected);
+  }, []);
+
+
   useEffect(() => {
     const timerId = globalThis.setTimeout(() => {
       void loadAttendance(true, activeScannedUserId);
@@ -651,7 +661,8 @@ export default function AttendancePage() {
               type="date"
               className="w-auto h-9"
               value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
+              max={format(new Date(), 'yyyy-MM-dd')}
+              onChange={onDateChange}
             />
             {activeScannedUserId && (
               <Button
