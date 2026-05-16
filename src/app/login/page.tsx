@@ -20,6 +20,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { authService } from '@/services/authService';
 import { getDashboardPathForRole } from '@/lib/roleConfig';
 import { Loader2 } from 'lucide-react';
+import { toast } from '@/lib/toast';
 
 const loginSchema = z.object({
   email: z
@@ -61,6 +62,7 @@ export default function LoginPage() {
     try {
       const response = await authService.login(values.email, values.password);
       localStorage.setItem('user', JSON.stringify(response.user));
+  toast({ title: 'Signed in', description: `Welcome back, ${response.user.full_name}`, type: 'success' });
       router.push(getDashboardPathForRole(response.user.role));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '';
@@ -72,7 +74,8 @@ export default function LoginPage() {
           : message;
       }
 
-      setError(nextError);
+  setError(nextError);
+  toast({ title: 'Sign in failed', description: nextError, type: 'error' });
     } finally {
       setIsLoading(false);
     }

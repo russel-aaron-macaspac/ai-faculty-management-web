@@ -11,6 +11,7 @@ import { scheduleService } from '@/services/scheduleService';
 import { Schedule } from '@/types/schedule';
 import { formatTimeToTwelveHour } from '@/lib/timeUtils';
 import { isFacultyLikeRole } from '@/lib/roleConfig';
+import { toast } from '@/lib/toast';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const APPROVAL_ROLES = new Set(['dean', 'ovpaa', 'registrar', 'hro']);
@@ -243,6 +244,7 @@ const sectionLabel = getSelectedLabel(
     try {
       await scheduleService.saveFacultyAvailability(String(user.id), availabilityRows);
       await loadData(user);
+  toast({ title: 'Availability saved', description: 'Your availability was saved successfully.', type: 'success' });
     } finally {
       setSaving(false);
     }
@@ -271,6 +273,7 @@ const sectionLabel = getSelectedLabel(
 
       if (!result.success) {
         setConflictResult(result.conflict);
+  toast({ title: 'Schedule conflict', description: 'Unable to create schedule due to conflicts.', type: 'warning' });
         return;
       }
 
@@ -285,8 +288,11 @@ const sectionLabel = getSelectedLabel(
         endTime: '',
       });
       await loadData(user);
+  toast({ title: 'Done', description: 'Schedule created.', type: 'success' });
     } catch (error) {
-      setAssignmentError(error instanceof Error ? error.message : 'Unable to create the schedule. Please review the selected values and try again.');
+  const msg = error instanceof Error ? error.message : 'Unable to create the schedule. Please review the selected values and try again.';
+  setAssignmentError(msg);
+  toast({ title: 'Create failed', description: msg, type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -307,8 +313,10 @@ const sectionLabel = getSelectedLabel(
       });
 
       await loadData(user);
+        toast({ title: 'Done', description: `Schedule ${action}d.`, type: 'success' });
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to process approval decision');
+      const msg = error instanceof Error ? error.message : 'Failed to process approval decision';
+      toast({ title: 'Action failed', description: msg, type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -331,8 +339,11 @@ const sectionLabel = getSelectedLabel(
       setNewSubjectCode('');
       setNewSubjectName('');
       await loadData(user);
+  toast({ title: 'Subject added', description: 'Subject was created.', type: 'success' });
     } catch (error) {
-      setSubjectError(error instanceof Error ? error.message : 'Unable to create the subject. Please check the code and name, then try again.');
+  const msg = error instanceof Error ? error.message : 'Unable to create the subject. Please check the code and name, then try again.';
+  setSubjectError(msg);
+  toast({ title: 'Create failed', description: msg, type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -352,8 +363,10 @@ const sectionLabel = getSelectedLabel(
         name: nameInput.trim(),
       });
       await loadData(user);
+  toast({ title: 'Subject updated', description: 'Subject changed successfully.', type: 'success' });
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to update subject');
+  const msg = error instanceof Error ? error.message : 'Failed to update subject';
+  toast({ title: 'Update failed', description: msg, type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -366,8 +379,10 @@ const sectionLabel = getSelectedLabel(
     try {
       await scheduleService.deleteSubject(id);
       await loadData(user);
+  toast({ title: 'Deleted', description: 'Subject deleted.', type: 'info' });
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to delete subject');
+  const msg = error instanceof Error ? error.message : 'Failed to delete subject';
+  toast({ title: 'Delete failed', description: msg, type: 'error' });
     } finally {
       setSaving(false);
     }

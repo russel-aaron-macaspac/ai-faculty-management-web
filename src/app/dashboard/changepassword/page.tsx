@@ -16,6 +16,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Eye, EyeOff, KeyRound, CheckCircle2, XCircle } from 'lucide-react';
+import { toast } from '@/lib/toast';
 
 const changePasswordSchema = z
   .object({
@@ -91,17 +92,15 @@ export default function ChangePasswordPage() {
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        setFeedback({
-          type: 'error',
-          message: (data && (data.error || data.message)) || 'Something went wrong.',
-        });
+        const msg = (data && (data.error || data.message)) || 'Something went wrong.';
+        toast({ title: 'Update failed', description: msg, type: 'error' });
         return;
       }
 
-      setFeedback({ type: 'success', message: 'Password updated successfully.' });
+      toast({ title: 'Password updated', description: 'Password updated successfully.', type: 'success' });
       form.reset();
     } catch {
-      setFeedback({ type: 'error', message: 'Network error. Please try again.' });
+      toast({ title: 'Network error', description: 'Please try again.', type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -113,22 +112,7 @@ export default function ChangePasswordPage() {
 
       <Card className="max-w-2xl">
         <div className="p-6 space-y-6">
-          {feedback && (
-            <div
-              className={`flex items-center gap-2 rounded-md px-4 py-3 text-sm font-medium ${
-                feedback.type === 'success'
-                  ? 'bg-green-50 text-green-700 border border-green-200'
-                  : 'bg-red-50 text-red-700 border border-red-200'
-              }`}
-            >
-              {feedback.type === 'success' ? (
-                <CheckCircle2 className="h-4 w-4 shrink-0" />
-              ) : (
-                <XCircle className="h-4 w-4 shrink-0" />
-              )}
-              {feedback.message}
-            </div>
-          )}
+          {/* feedback handled by global toast */}
 
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
