@@ -98,36 +98,71 @@ const normalizeText = (v?: string | null) => (v || '').trim().toLowerCase();
 const normalizeRoomLabel = (v?: string | null) =>
   normalizeText(v).replace(/[^a-z0-9]/g, '');
 
+function hasMatchingRoomLabel(deviceValue?: string | null, scheduleValue?: string | null): boolean {
+  const deviceLabel = normalizeRoomLabel(deviceValue);
+  const scheduleLabel = normalizeRoomLabel(scheduleValue);
+
+  return Boolean(deviceLabel && scheduleLabel && deviceLabel === scheduleLabel);
+}
+
+function roomsMatch(deviceRoom: DeviceRoomInfo, schedule: ScheduleInfo): boolean {
+  return (
+    hasMatchingRoomLabel(deviceRoom.roomId, schedule.roomId) ||
+    hasMatchingRoomLabel(deviceRoom.roomId, schedule.roomName) ||
+    hasMatchingRoomLabel(deviceRoom.roomName, schedule.roomId) ||
+    hasMatchingRoomLabel(deviceRoom.roomName, schedule.roomName) ||
+    hasMatchingRoomLabel(deviceRoom.location, schedule.roomId) ||
+    hasMatchingRoomLabel(deviceRoom.location, schedule.roomName) ||
+    hasMatchingRoomLabel(deviceRoom.display, schedule.roomId) ||
+    hasMatchingRoomLabel(deviceRoom.display, schedule.roomName)
+  );
+}
+
+function isWithinScheduleWindow(scanMinutes: number, schedule: ScheduleInfo): boolean {
+  const start = toMinutesFromClock(schedule.startTime);
+  const end = toMinutesFromClock(schedule.endTime);
+
+  if (start === null || end === null) {
+    return true;
+  }
+
+  return scanMinutes >= start && scanMinutes <= end;
+}
+
 const toMinutesFromClock = (value?: string | null) => {
   if (!value) return null;
   const [h, m] = value.split(':');
-  const hours = parseInt(h || '', 10);
-  const mins = parseInt(m || '', 10);
-  if (isNaN(hours) || isNaN(mins)) return null;
+  const hours = Number.parseInt(h || '', 10);
+  const mins = Number.parseInt(m || '', 10);
+  if (Number.isNaN(hours) || Number.isNaN(mins)) return null;
   return hours * 60 + mins;
 };
 
 const toMinutesFromTimestamp = (value?: string | null) => {
   if (!value) return null;
   const d = new Date(value);
-  if (isNaN(d.getTime())) return null;
+  if (Number.isNaN(d.getTime())) return null;
   return d.getHours() * 60 + d.getMinutes();
 };
 
 const plusMinutes = (iso: string, mins: number) => {
   const d = new Date(iso);
-  if (isNaN(d.getTime())) return new Date().toISOString();
+  if (Number.isNaN(d.getTime())) return new Date().toISOString();
   d.setMinutes(d.getMinutes() + mins);
   return d.toISOString();
 };
 
 function toStringValue(value: unknown): string | null {
   if (value === undefined || value === null) return null;
-  try {
-    return String(value);
-  } catch {
-    return null;
+  if (typeof value === 'string') {
+    return value;
   }
+
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return String(value);
+  }
+
+  return null;
 }
 
 function pickScheduleForScan(schedules: ScheduleInfo[], scanMinutes: number): ScheduleInfo | null {
@@ -208,7 +243,11 @@ async function getRecentAttendanceLogs(
     .limit(120);
 
   if (!logsResponse.error && logsResponse.data) {
-    return logsResponse.data as AttendanceLogRecord[];
+    return logsResponse.data.map((row) => ({
+      time_in: row.time_in ?? null,
+      time_out: row.time_out ?? null,
+      log_date: row.log_date ?? null,
+    }));
   }
 
   const attendanceFallback = await supabase
@@ -250,7 +289,9 @@ async function getRecentUserScans(
     return [];
   }
 
-  return data as UserScanRecord[];
+  return data.map((row) => ({
+    timestamp: row.timestamp,
+  }));
 }
 
 export async function getTodaySchedule(
@@ -336,18 +377,18 @@ export async function getTodaySchedule(
   }
 
   if (!modernResponse.error && modernResponse.data) {
-    const schedules = (modernResponse.data as Array<Record<string, unknown>>).map((row) => {
+    const schedules = modernResponse.data.map((row: any) => {
       const roomValue = Array.isArray(row.room) ? row.room[0] : row.room;
-      const roomRecord = roomValue as { id?: string | number; name?: string } | null;
+      const roomRecord = roomValue && typeof roomValue === 'object' ? roomValue : null;
+      const roomRecordId = roomRecord && 'id' in roomRecord ? (roomRecord as { id?: string | number }).id : null;
+      const roomRecordName = roomRecord && 'name' in roomRecord ? (roomRecord as { name?: string | null }).name : null;
 
       return {
-        startTime: (row.start_time as string | null) ?? null,
-        endTime: (row.end_time as string | null) ?? null,
-        roomId:
-          toStringValue(row.room_id) ??
-          (roomRecord?.id !== undefined && roomRecord?.id !== null ? String(roomRecord.id) : null),
-        roomName: roomRecord?.name ?? null,
-      } as ScheduleInfo;
+        startTime: typeof row.start_time === 'string' ? row.start_time : null,
+        endTime: typeof row.end_time === 'string' ? row.end_time : null,
+        roomId: toStringValue(row.room_id) ?? toStringValue(roomRecordId),
+        roomName: toStringValue(roomRecordName),
+      };
     });
 
     return pickScheduleForScan(schedules, scanMinutes);
@@ -370,16 +411,16 @@ export async function getTodaySchedule(
     .eq('day_of_week', dayName);
 
   if (!legacyResponse.error && legacyResponse.data) {
-    const schedules = (legacyResponse.data as Array<Record<string, unknown>>).map((row) => {
+    const schedules = legacyResponse.data.map((row: any) => {
       const shiftValue = Array.isArray(row.shift) ? row.shift[0] : row.shift;
-      const shift = shiftValue as { start_time?: string | null; end_time?: string | null } | null;
+      const shift = shiftValue && typeof shiftValue === 'object' ? shiftValue : null;
 
       return {
-        startTime: shift?.start_time ?? null,
-        endTime: shift?.end_time ?? null,
+        startTime: typeof shift?.start_time === 'string' ? shift.start_time : null,
+        endTime: typeof shift?.end_time === 'string' ? shift.end_time : null,
         roomId: toStringValue(row.room),
         roomName: toStringValue(row.room),
-      } as ScheduleInfo;
+      };
     });
 
     return pickScheduleForScan(schedules, scanMinutes);
@@ -479,7 +520,9 @@ export function detectBehaviorPatterns(params: {
 
 export function generateAIResponse(
   status: string,
-  scanTimestamp: string
+  scanTimestamp: string,
+  schedule: ScheduleInfo | null,
+  deviceRoom: DeviceRoomInfo
 ): AIResponse {
   return {
     status,
@@ -488,12 +531,12 @@ export function generateAIResponse(
     insights: [],
     suggestedNextScan: plusMinutes(scanTimestamp, 30),
     schedule: {
-      startTime: null,
-      endTime: null,
-      roomName: null,
-      roomId: null,
+      startTime: schedule?.startTime ?? null,
+      endTime: schedule?.endTime ?? null,
+      roomName: schedule?.roomName ?? null,
+      roomId: schedule?.roomId ?? null,
     },
-    deviceRoom: 'Unknown',
+    deviceRoom: deviceRoom.display,
   };
 }
 
@@ -504,6 +547,8 @@ export async function analyzeScanWithSchedule({
   scanTimestamp,
 }: AnalyzeScanParams): Promise<AIResponse> {
   const deviceRoom = await getDeviceRoom(supabase, deviceId);
+  const schedule = await getTodaySchedule(supabase, userId, scanTimestamp);
+  const scanMinutes = toMinutesFromTimestamp(scanTimestamp) ?? 0;
 
   const averages = calculateAverages([]);
 
@@ -513,9 +558,47 @@ export async function analyzeScanWithSchedule({
     averages,
   });
 
-  const status = pattern.flags.size ? 'flagged' : 'on_time';
+  if (!schedule) {
+    return {
+      ...generateAIResponse('no_schedule', scanTimestamp, null, deviceRoom),
+      message: 'No schedule found for this user at scan time.',
+      recommendation: 'Verify the assigned schedule before scanning again.',
+      insights: pattern.insights,
+    };
+  }
 
-  return generateAIResponse(status, scanTimestamp);
+  const withinScheduleWindow = isWithinScheduleWindow(scanMinutes, schedule);
+  const roomMatches = roomsMatch(deviceRoom, schedule);
+
+  if (!roomMatches) {
+    return {
+      ...generateAIResponse('wrong_room', scanTimestamp, schedule, deviceRoom),
+      message: 'Scanned device room does not match the assigned room.',
+      recommendation: 'Move to the assigned room and rescan.',
+      insights: pattern.insights,
+    };
+  }
+
+  if (!withinScheduleWindow) {
+    return {
+      ...generateAIResponse('outside_schedule', scanTimestamp, schedule, deviceRoom),
+      message: 'Scan is outside the scheduled time window.',
+      recommendation: 'Scan again during the active schedule window.',
+      insights: pattern.insights,
+    };
+  }
+
+  let status: string = 'on_time';
+  if (pattern.flags.has('late')) {
+    status = 'late';
+  } else if (pattern.flags.has('early') || pattern.flags.has('anomaly')) {
+    status = 'unauthorized_access';
+  }
+
+  return {
+    ...generateAIResponse(status, scanTimestamp, schedule, deviceRoom),
+    insights: pattern.insights,
+  };
 }
 
 export async function logValidationAlert(
