@@ -12,6 +12,9 @@ import { attendanceService } from '@/services/attendanceService';
 import { Attendance } from '@/types/attendance';
 
 export default function FacultyDashboardPage() {
+  useEffect(() => {
+  document.title = 'DomStaX | Faculty Dashboard';
+}, []);
   const [user, setUser] = useState<User | null>(null);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
 

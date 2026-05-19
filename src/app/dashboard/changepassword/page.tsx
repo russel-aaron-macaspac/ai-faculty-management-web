@@ -37,6 +37,9 @@ type ChangePasswordFormValues = z.infer<typeof changePasswordSchema>;
 type Feedback = { type: 'success' | 'error'; message: string } | null;
 
 export default function ChangePasswordPage() {
+  useEffect(() => {
+  document.title = 'DomStaX | Change Password';
+}, []);
   // userId read from localStorage (fallback if you have an auth context, replace accordingly)
   const [userId, setUserId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);

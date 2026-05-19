@@ -51,6 +51,9 @@ export function getSelectedLabel<T extends { id?: string | number }>(
 }
 
 export default function SchedulesPage() {
+  useEffect(() => {
+  document.title = 'DomStaX | Schedules';
+}, []);
   const [user, setUser] = useState<LocalUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

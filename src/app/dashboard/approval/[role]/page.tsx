@@ -11,6 +11,9 @@ import { Clearance } from '@/types/clearance';
 import { getApprovalOfficerConfig, isApprovalOfficer } from '@/lib/roleConfig';
 
 export default function ApprovalOfficerPage() {
+  useEffect(() => {
+  document.title = 'DomStaX | Approval Dashboard';
+}, []);
   const params = useParams() as { role?: string };
   const roleId = params?.role;
   const router = useRouter();

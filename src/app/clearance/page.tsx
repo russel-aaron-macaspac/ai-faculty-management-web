@@ -31,6 +31,9 @@ const OFFICER_OFFICE_MAP: Record<string, number> = {
 };
 
 export default function ClearancePage() {
+  useEffect(() => {
+  document.title = 'DomStaX | Clearance Management';
+}, []);
   const router = useRouter();
   const [records, setRecords] = useState<Clearance[]>([]);
   const [loading, setLoading] = useState(true);

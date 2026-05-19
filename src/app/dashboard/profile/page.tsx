@@ -6,6 +6,9 @@ import { User } from '@/types/user';
 import { isApprovalOfficer, isFacultyLikeRole } from '@/lib/roleConfig';
 
 export default function ProfilePage() {
+  useEffect(() => {
+  document.title = 'DomStaX | Profile';
+}, []);
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {

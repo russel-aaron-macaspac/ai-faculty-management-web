@@ -383,6 +383,9 @@ function buildSchedulerInsights(recentRecords: Attendance[], visibleRecords: Att
 }
 
 export default function AttendancePage() {
+  useEffect(() => {
+  document.title = 'DomStaX | Attendance Log';
+}, []);
   const [records, setRecords] = useState<Attendance[]>([]);
   const [recentRecords, setRecentRecords] = useState<Attendance[]>([]);
   const [loading, setLoading] = useState(true);

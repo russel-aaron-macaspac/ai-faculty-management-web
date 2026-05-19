@@ -11,6 +11,9 @@ import { scheduleService } from '@/services/scheduleService';
 import { clearanceService } from '@/services/clearanceService';
 
 export default function AdminDashboardPage() {
+  useEffect(() => {
+  document.title = 'DomStaX | Admin Dashboard';
+}, []);
   const [user, setUser] = useState<User | null>(null);
   const [facultyCount, setFacultyCount] = useState<number | null>(null);
   const [staffCount, setStaffCount] = useState<number | null>(null);

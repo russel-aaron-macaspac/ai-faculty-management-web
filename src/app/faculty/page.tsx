@@ -29,6 +29,9 @@ const facultySchema = z.object({
 });
 
 export default function FacultyPage() {
+  useEffect(() => {
+  document.title = 'DomStaX | Faculty Management';
+}, []);
   const [faculty, setFaculty] = useState<Faculty[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');

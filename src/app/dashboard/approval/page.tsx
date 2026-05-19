@@ -10,6 +10,9 @@ import { Clearance } from '@/types/clearance';
 import { getApprovalOfficerConfig } from '@/lib/roleConfig';
 
 export default function ApprovalDashboardPage() {
+  useEffect(() => {
+  document.title = 'DomStaX | Approval Dashboard';
+}, []);
   const [user, setUser] = useState<User | null>(null);
   const [clearances, setClearances] = useState<Clearance[]>([]);
 

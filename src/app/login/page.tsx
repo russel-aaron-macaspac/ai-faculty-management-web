@@ -32,7 +32,12 @@ const loginSchema = z.object({
   password: z.string().min(1, { message: 'Password is required.' }).min(6, { message: 'Password must be at least 6 characters long.' }),
 });
 
+
+
 export default function LoginPage() {
+  useEffect(() => {
+  document.title = 'DomStaX | Login';
+}, []);
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);

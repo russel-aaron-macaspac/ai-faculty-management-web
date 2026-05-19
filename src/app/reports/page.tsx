@@ -4,8 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Download, TrendingUp, Users, Clock, FileCheck2, Filter } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
+import { useEffect } from 'react';
 
 export default function ReportsPage() {
+  useEffect(() => {
+  document.title = 'DomStaX | Reports';
+}, []);
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center flex-wrap gap-4">
