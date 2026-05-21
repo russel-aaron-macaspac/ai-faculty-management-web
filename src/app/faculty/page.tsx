@@ -119,12 +119,11 @@ export default function FacultyPage() {
              form.reset({ fullName: '', email: '', department: '', phone: '', status: 'active' });
           }
         }}>
-           <DialogTrigger>
-            <button className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md font-medium flex items-center gap-2">
-               <Plus className="mr-2 h-4 w-4" /> Add Faculty
-            </button>
-          </DialogTrigger>
-            <DialogContent className="sm:max-w-106.25">
+           <DialogTrigger className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md font-medium flex items-center gap-2">
+           <Plus className="h-4 w-4" />
+             Add Faculty
+           </DialogTrigger>
+            <DialogContent className="sm:max-w-106.25"> 
             <DialogHeader>
               <DialogTitle>{editingId ? 'Edit Faculty' : 'Add New Faculty'}</DialogTitle>
             </DialogHeader>
