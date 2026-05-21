@@ -29,6 +29,6 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"
-, "src/app/actions/create-admin-action.js", "src/services/facultyService.js"  ],
+, "src/app/actions/create-admin-action.js", "src/services/facultyService.js", "middleware.js"  ],
   "exclude": ["node_modules"]
 }

@@ -1,49 +1,35 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { authService, AuthUser, UserRole } from '@/services/authService';
+import { AuthUser } from '@/services/authService';
 
-interface UseRoleBasedAccessOptions {
-  allowedRoles: UserRole[];
-  redirectTo?: string;
-}
-
-export const useRoleBasedAccess = (options: UseRoleBasedAccessOptions) => {
-  const router = useRouter();
+export const useRoleBasedAccess = () => {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [isAuthorized, setIsAuthorized] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const allowedRolesKey = options.allowedRoles.join('|');
-  const fallbackRedirect = options.redirectTo || '/dashboard/admin';
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const currentUser = authService.getCachedUser();
+    const getUser = () => {
+      if (typeof window === 'undefined') return null;
+      const raw = localStorage.getItem('user');
+      if (!raw) return null;
 
-    if (!currentUser) {
-      // Redirect to login if no user
-      setIsAuthorized(false);
-      setUser(null);
-      setIsLoading(false);
-      router.replace('/login');
-      return;
-    }
+      try {
+        return JSON.parse(raw) as AuthUser;
+      } catch (error) {
+        console.error('Failed to parse user from localStorage', error);
+        return null;
+      }
+    };
 
-    const hasAccess = options.allowedRoles.includes(currentUser.role);
-
-    if (!hasAccess) {
-      // Redirect to dashboard if user doesn't have access
-      setIsAuthorized(false);
-      setUser(null);
-      setIsLoading(false);
-      router.replace(fallbackRedirect);
-      return;
-    }
-
+    const currentUser = getUser();
     setUser(currentUser);
-    setIsAuthorized(true);
-    setIsLoading(false);
-  }, [allowedRolesKey, fallbackRedirect, router]);
+    setLoading(false);
+  }, []);
 
-  return { user, isAuthorized, isLoading };
+  const hasAccess = (requiredRoles: string[]) => {
+    if (!user) return false;
+    return requiredRoles.includes(user.role);
+  };
+
+  return { user, hasAccess, loading };
 };

@@ -1,5 +1,6 @@
 'use client';
 
+import { RouteGuard } from '@/components/RouteGuard';
 import { useEffect, useMemo, useState } from 'react';
 import { StatCard } from '@/components/dashboard/StatCards';
 import { AIAlerts } from '@/components/dashboard/AIAlerts';
@@ -10,6 +11,14 @@ import { Clearance } from '@/types/clearance';
 import { getApprovalOfficerConfig } from '@/lib/roleConfig';
 
 export default function ApprovalDashboardPage() {
+  return (
+    <RouteGuard requiredRoles={['dlrc', 'pmo', 'laboratory', 'ict', 'admin']} fallbackPath="/dashboard/faculty">
+      <ApprovalDashboardContent />
+    </RouteGuard>
+  );
+}
+
+function ApprovalDashboardContent() {
   const [user, setUser] = useState<User | null>(null);
   const [clearances, setClearances] = useState<Clearance[]>([]);
 
