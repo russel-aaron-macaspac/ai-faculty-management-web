@@ -244,7 +244,7 @@ const sectionLabel = getSelectedLabel(
     try {
       await scheduleService.saveFacultyAvailability(String(user.id), availabilityRows);
       await loadData(user);
-  toast({ title: 'Availability saved', description: 'Your availability was saved successfully.', type: 'success' });
+  toast({ title: 'Availability Saved', description: 'Your availability was saved successfully.', type: 'success' });
     } finally {
       setSaving(false);
     }
@@ -273,7 +273,7 @@ const sectionLabel = getSelectedLabel(
 
       if (!result.success) {
         setConflictResult(result.conflict);
-  toast({ title: 'Schedule conflict', description: 'Unable to create schedule due to conflicts.', type: 'warning' });
+  toast({ title: 'Schedule Conflict', description: 'Unable to create schedule due to conflicts.', type: 'warning' });
         return;
       }
 
@@ -292,7 +292,7 @@ const sectionLabel = getSelectedLabel(
     } catch (error) {
   const msg = error instanceof Error ? error.message : 'Unable to create the schedule. Please review the selected values and try again.';
   setAssignmentError(msg);
-  toast({ title: 'Create failed', description: msg, type: 'error' });
+  toast({ title: 'Create Failed', description: msg, type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -313,10 +313,10 @@ const sectionLabel = getSelectedLabel(
       });
 
       await loadData(user);
-        toast({ title: 'Done', description: `Schedule ${action}d.`, type: 'success' });
+  toast({ title: 'Done', description: `Schedule ${action}d.`, type: 'success' });
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Failed to process approval decision';
-      toast({ title: 'Action failed', description: msg, type: 'error' });
+  toast({ title: 'Action Failed', description: msg, type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -339,11 +339,11 @@ const sectionLabel = getSelectedLabel(
       setNewSubjectCode('');
       setNewSubjectName('');
       await loadData(user);
-  toast({ title: 'Subject added', description: 'Subject was created.', type: 'success' });
+  toast({ title: 'Subject Added', description: 'Subject was created.', type: 'success' });
     } catch (error) {
   const msg = error instanceof Error ? error.message : 'Unable to create the subject. Please check the code and name, then try again.';
   setSubjectError(msg);
-  toast({ title: 'Create failed', description: msg, type: 'error' });
+  toast({ title: 'Create Failed', description: msg, type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -363,10 +363,10 @@ const sectionLabel = getSelectedLabel(
         name: nameInput.trim(),
       });
       await loadData(user);
-  toast({ title: 'Subject updated', description: 'Subject changed successfully.', type: 'success' });
+  toast({ title: 'Subject Updated', description: 'Subject changed successfully.', type: 'success' });
     } catch (error) {
   const msg = error instanceof Error ? error.message : 'Failed to update subject';
-  toast({ title: 'Update failed', description: msg, type: 'error' });
+  toast({ title: 'Update Failed', description: msg, type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -382,7 +382,7 @@ const sectionLabel = getSelectedLabel(
   toast({ title: 'Deleted', description: 'Subject deleted.', type: 'info' });
     } catch (error) {
   const msg = error instanceof Error ? error.message : 'Failed to delete subject';
-  toast({ title: 'Delete failed', description: msg, type: 'error' });
+  toast({ title: 'Delete Failed', description: msg, type: 'error' });
     } finally {
       setSaving(false);
     }

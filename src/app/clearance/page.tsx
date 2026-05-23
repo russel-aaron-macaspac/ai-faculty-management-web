@@ -94,11 +94,11 @@ export default function ClearancePage() {
       setIsUploadOpen(false);
       setDocName('Safety Training Certificate');
       void loadData(currentUser?.role);
-  toast({ title: 'Upload submitted', description: 'Document uploaded for review.', type: 'success' });
+  toast({ title: 'Clearance Uploaded', description: 'Document uploaded for review.', type: 'success' });
     } catch (error) {
   const msg = error instanceof Error ? error.message : 'Unable to submit this document. Please try again.';
   setUploadError(msg);
-  toast({ title: 'Upload failed', description: msg, type: 'error' });
+  toast({ title: 'Upload Failed', description: msg, type: 'error' });
     } finally {
       setUploading(false);
     }
@@ -197,9 +197,9 @@ export default function ClearancePage() {
     try {
       await clearanceService.updateStatus(record.id, decision, reason);
       await loadData(currentUser.role);
-      toast({ title: 'Decision saved', description: `Record ${decision}.`, type: decision === 'approved' ? 'success' : decision === 'rejected' ? 'error' : 'info' });
+  toast({ title: 'Decision Saved', description: `Record ${decision}.`, type: decision === 'approved' ? 'success' : decision === 'rejected' ? 'error' : 'info' });
     } catch (err) {
-      toast({ title: 'Decision failed', description: err instanceof Error ? err.message : 'Failed to update status', type: 'error' });
+  toast({ title: 'Decision Failed', description: err instanceof Error ? err.message : 'Failed to update status', type: 'error' });
     } finally {
       setActionLoadingId(null);
     }

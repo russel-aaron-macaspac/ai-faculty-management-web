@@ -78,7 +78,7 @@ export async function POST(request) {
     }
 
     return NextResponse.json(
-      { message: "Password updated successfully." },
+      { message: "Password Updated." },
       { status: 200 }
     );
 

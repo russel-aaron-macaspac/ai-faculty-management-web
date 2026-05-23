@@ -66,15 +66,15 @@ export default function FacultyPage() {
     try {
       if (editingId) {
         await facultyService.updateFaculty(editingId, values);
-        toast({ title: 'Faculty updated', description: 'Faculty record saved successfully.', type: 'success' });
+  toast({ title: 'Faculty Updated', description: 'Faculty record saved successfully.', type: 'success' });
       } else {
         await facultyService.createFaculty(values);
-        toast({ title: 'Faculty created', description: 'New faculty record added.', type: 'success' });
+  toast({ title: 'Faculty Created', description: 'New faculty record added.', type: 'success' });
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unable to save this faculty record. Please review the form and try again.';
       setFormError(msg);
-      toast({ title: 'Save failed', description: msg, type: 'error' });
+  toast({ title: 'Save Failed', description: msg, type: 'error' });
       return;
     }
 
@@ -100,9 +100,9 @@ export default function FacultyPage() {
     if (confirm('Are you sure you want to delete this faculty member?')) {
       try {
         await facultyService.deleteFaculty(id);
-        toast({ title: 'Deleted', description: 'Faculty record deleted.', type: 'info' });
+  toast({ title: 'Deleted', description: 'Faculty record deleted.', type: 'info' });
       } catch (err) {
-        toast({ title: 'Delete failed', description: err instanceof Error ? err.message : 'Failed to delete faculty.', type: 'error' });
+  toast({ title: 'Delete Failed', description: err instanceof Error ? err.message : 'Failed to delete faculty.', type: 'error' });
       }
       loadData();
     }

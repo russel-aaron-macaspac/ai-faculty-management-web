@@ -93,14 +93,14 @@ export default function ChangePasswordPage() {
 
       if (!response.ok) {
         const msg = (data && (data.error || data.message)) || 'Something went wrong.';
-        toast({ title: 'Update failed', description: msg, type: 'error' });
+        toast({ title: 'Update Failed', description: msg, type: 'error' });
         return;
       }
 
-      toast({ title: 'Password updated', description: 'Password updated successfully.', type: 'success' });
+      toast({ title: 'Password Updated', description: 'Password updated successfully.', type: 'success' });
       form.reset();
     } catch {
-      toast({ title: 'Network error', description: 'Please try again.', type: 'error' });
+      toast({ title: 'Network Error', description: 'Please try again.', type: 'error' });
     } finally {
       setIsLoading(false);
     }
