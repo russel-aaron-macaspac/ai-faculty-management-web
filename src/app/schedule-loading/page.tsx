@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertTriangle, CheckCircle2, Loader2, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertTriangle, CheckCircle2, Loader2, XCircle, ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
 import { useRouter } from 'next/navigation';
 import { Schedule } from '@/types/schedule';
@@ -30,6 +31,17 @@ interface SchedulingMeta {
   subjects: Array<{ id: string; code: string; name: string }>;
   rooms: Array<{ id: string; name: string; capacity: number }>;
   sections: Array<{ id: string; name: string }>;
+}
+
+interface EditScheduleFormState {
+  id: string;
+  facultyId: string;
+  section: string;
+  subjectId: string;
+  roomId: string;
+  day: string;
+  startTime: string;
+  endTime: string;
 }
 
 export function getSelectedLabel<T extends { id?: string | number }>(
@@ -86,6 +98,9 @@ function ScheduleLoadingContent() {
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomCapacity, setNewRoomCapacity] = useState('');
   const [newSectionName, setNewSectionName] = useState('');
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editSchedule, setEditSchedule] = useState<EditScheduleFormState | null>(null);
+  const [editError, setEditError] = useState('');
 
   const currentUserName = user?.full_name || user?.name || '';
   const canApprove = APPROVAL_ROLES.has(user?.role || '');
@@ -261,6 +276,7 @@ function ScheduleLoadingContent() {
                         <TableHead>Day</TableHead>
                         <TableHead>Time</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -276,6 +292,14 @@ function ScheduleLoadingContent() {
                             {formatTimeToTwelveHour(item.startTime)} - {formatTimeToTwelveHour(item.endTime)}
                           </TableCell>
                           <TableCell>{item.status}</TableCell>
+                          <TableCell className="space-x-2 text-right">
+                            <Button type="button" size="sm" variant="outline" onClick={() => openEditScheduleDialog(item)} disabled={saving}>
+                              <Pencil className="mr-1 h-4 w-4" /> Edit
+                            </Button>
+                            <Button type="button" size="sm" variant="destructive" onClick={() => handleDeleteSchedule(item)} disabled={saving}>
+                              <Trash2 className="mr-1 h-4 w-4" /> Delete
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -408,6 +432,88 @@ function ScheduleLoadingContent() {
       await loadData(user);
     } catch (error) {
       setSectionError(error instanceof Error ? error.message : 'Unable to create the section. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openEditScheduleDialog = (item: Schedule) => {
+    const facultyId = String(item.facultyId ?? item.faculty?.id ?? item.employeeId ?? '');
+    const subjectId = String(item.subjectId ?? item.subject?.id ?? '');
+    const roomId = String(item.roomId ?? item.room?.id ?? '');
+
+    setEditSchedule({
+      id: item.id,
+      facultyId,
+      section: item.section || '',
+      subjectId,
+      roomId,
+      day: item.day || 'Monday',
+      startTime: item.startTime || '',
+      endTime: item.endTime || '',
+    });
+    setEditError('');
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdateSchedule = async () => {
+    if (!user || !editSchedule) return;
+
+    if (!editSchedule.facultyId || !editSchedule.subjectId || !editSchedule.roomId || !editSchedule.day || !editSchedule.startTime || !editSchedule.endTime) {
+      setEditError('Choose a faculty member, subject, room, day, start time, and end time before saving.');
+      return;
+    }
+
+    if (editSchedule.startTime >= editSchedule.endTime) {
+      setEditError('End time must be later than the start time.');
+      return;
+    }
+
+    setEditError('');
+    setSaving(true);
+    try {
+      await scheduleService.updateSchedule(editSchedule.id, {
+        actorId: String(user.id),
+        actorRole: user.role,
+        facultyId: editSchedule.facultyId,
+        section: editSchedule.section || undefined,
+        subjectId: editSchedule.subjectId,
+        roomId: editSchedule.roomId,
+        day: editSchedule.day,
+        startTime: editSchedule.startTime,
+        endTime: editSchedule.endTime,
+      });
+
+      setIsEditDialogOpen(false);
+      setEditSchedule(null);
+      await loadData(user);
+      toast({ title: 'Done', description: 'Schedule updated.', type: 'success' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to update schedule.';
+      setEditError(message);
+      toast({ title: 'Update Failed', description: message, type: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteSchedule = async (item: Schedule) => {
+    if (!user) return;
+
+    const confirmed = globalThis.confirm(`Delete this schedule for ${item.facultyName} on ${item.day}?`);
+    if (!confirmed) return;
+
+    setSaving(true);
+    try {
+      await scheduleService.deleteSchedule(item.id, {
+        actorId: String(user.id),
+        actorRole: user.role,
+      });
+      await loadData(user);
+      toast({ title: 'Done', description: 'Schedule deleted.', type: 'success' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to delete schedule.';
+      toast({ title: 'Delete Failed', description: message, type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -728,6 +834,130 @@ function ScheduleLoadingContent() {
         </CardHeader>
         <CardContent>{masterScheduleContent}</CardContent>
       </Card>
+
+      <Dialog
+        open={isEditDialogOpen}
+        onOpenChange={(open) => {
+          setIsEditDialogOpen(open);
+          if (!open) {
+            setEditSchedule(null);
+            setEditError('');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Edit Schedule</DialogTitle>
+          </DialogHeader>
+
+          {editSchedule && (
+            <div className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <div className="text-sm font-medium">Faculty</div>
+                  <Select value={editSchedule.facultyId} onValueChange={(value) => setEditSchedule((prev) => (prev ? { ...prev, facultyId: value } : prev))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select faculty" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {meta.faculties.map((faculty) => (
+                        <SelectItem key={faculty.id} value={faculty.id}>
+                          {faculty.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <div className="text-sm font-medium">Section</div>
+                  <Select value={editSchedule.section} onValueChange={(value) => setEditSchedule((prev) => (prev ? { ...prev, section: value } : prev))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select section" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {meta.sections.map((section) => (
+                        <SelectItem key={section.id} value={section.name}>
+                          {section.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <div className="text-sm font-medium">Subject</div>
+                  <Select value={editSchedule.subjectId} onValueChange={(value) => setEditSchedule((prev) => (prev ? { ...prev, subjectId: value } : prev))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select subject" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {meta.subjects.map((subject) => (
+                        <SelectItem key={subject.id} value={subject.id}>
+                          {subject.code} - {subject.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <div className="text-sm font-medium">Room</div>
+                  <Select value={editSchedule.roomId} onValueChange={(value) => setEditSchedule((prev) => (prev ? { ...prev, roomId: value } : prev))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select room" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {meta.rooms.map((room) => (
+                        <SelectItem key={room.id} value={room.id}>
+                          {room.name} (cap {room.capacity})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <div>
+                  <div className="text-sm font-medium">Day</div>
+                  <Select value={editSchedule.day} onValueChange={(value) => setEditSchedule((prev) => (prev ? { ...prev, day: value } : prev))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DAYS.map((day) => (
+                        <SelectItem key={day} value={day}>
+                          {day}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <div className="text-sm font-medium">Start Time</div>
+                  <Input type="time" value={editSchedule.startTime} onChange={(event) => setEditSchedule((prev) => (prev ? { ...prev, startTime: event.target.value } : prev))} />
+                </div>
+                <div>
+                  <div className="text-sm font-medium">End Time</div>
+                  <Input type="time" value={editSchedule.endTime} onChange={(event) => setEditSchedule((prev) => (prev ? { ...prev, endTime: event.target.value } : prev))} />
+                </div>
+              </div>
+
+              {editError && <p className="text-sm text-rose-600">{editError}</p>}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleUpdateSchedule} disabled={saving || !editSchedule}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
