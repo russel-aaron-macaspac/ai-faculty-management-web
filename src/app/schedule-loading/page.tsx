@@ -276,6 +276,7 @@ function ScheduleLoadingContent() {
                         <TableHead>Day</TableHead>
                         <TableHead>Time</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead>Remarks</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -292,6 +293,13 @@ function ScheduleLoadingContent() {
                             {formatTimeToTwelveHour(item.startTime)} - {formatTimeToTwelveHour(item.endTime)}
                           </TableCell>
                           <TableCell>{item.status}</TableCell>
+                          <TableCell>
+                            {item.status === 'rejected' && item.remarks ? (
+                              <span className="text-red-600">{item.remarks}</span>
+                            ) : (
+                              <span className="text-slate-400">{item.remarks ? item.remarks : '-'}</span>
+                            )}
+                          </TableCell>
                           <TableCell className="space-x-2 text-right">
                             <Button type="button" size="sm" variant="outline" onClick={() => openEditScheduleDialog(item)} disabled={saving}>
                               <Pencil className="mr-1 h-4 w-4" /> Edit

@@ -71,6 +71,10 @@ export function Sidebar({ user }: Readonly<SidebarProps>) {
         { href: '/clearance', label: officerConfig.label, icon: FileCheck2 },
         { href: '/dashboard/changepassword', label: 'Change Password', icon: LockIcon },
       ];
+
+      if (user?.role === 'dean' || user?.role === 'ovpaa' || user?.role === 'registrar') {
+        links.splice(3, 0, { href: '/dashboard/schedule-approvals', label: 'Schedule Approvals', icon: Calendar });
+      }
     }
   }
 
