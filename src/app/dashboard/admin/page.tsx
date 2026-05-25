@@ -25,6 +25,7 @@ function AdminDashboardContent() {
   const [staffCount, setStaffCount] = useState<number | null>(null);
   const [activeClasses, setActiveClasses] = useState<number | null>(null);
   const [clearanceCompletion, setClearanceCompletion] = useState<{ percent: number; pending: number } | null>(null);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number | null>(null);
 
   useEffect(() => {
     const userStr = localStorage.getItem('user');
@@ -59,6 +60,13 @@ function AdminDashboardContent() {
           return start !== null && end !== null && start <= nowMinutes && nowMinutes <= end;
         }).length;
         setActiveClasses(active);
+
+        try {
+          const pendingApprovals = await scheduleService.getPendingApprovals('admin');
+          setPendingApprovalsCount(pendingApprovals.length);
+        } catch (err) {
+          setPendingApprovalsCount(null);
+        }
 
         const clearances = await clearanceService.getClearances();
         const pending = clearances.filter((c: any) => c.status === 'submitted' || c.status === 'pending').length;
@@ -110,11 +118,11 @@ function AdminDashboardContent() {
           <div className="grid gap-6 md:grid-cols-2">
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
               <h3 className="font-semibold text-slate-800 mb-4">Upcoming Schedule conflicts</h3>
-              <div className="text-sm text-slate-500">See AI Alerts for automated resolutions.</div>
+              <div className="text-sm text-slate-500">{pendingApprovalsCount !== null ? `${pendingApprovalsCount} pending schedule approvals` : 'Loading schedule data...'}</div>
             </div>
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
               <h3 className="font-semibold text-slate-800 mb-4">Pending Clearances</h3>
-              <div className="text-sm text-slate-500">15 documents require admin review.</div>
+              <div className="text-sm text-slate-500">{clearanceCompletion ? `${clearanceCompletion.pending} documents require admin review.` : 'Loading clearance data...'}</div>
             </div>
           </div>
         </div>
