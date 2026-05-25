@@ -39,7 +39,7 @@ export function Sidebar({ user }: Readonly<SidebarProps>) {
   const adminLinks = [
     { href: '/dashboard/admin', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/faculty', label: 'Faculty Management', icon: Users },
-    { href: '/schedules', label: 'Scheduling', icon: Calendar },
+    { href: '/schedule-loading', label: 'Schedule Loading', icon: Calendar },
     { href: '/attendance', label: 'Attendance Monitoring', icon: Clock },
     { href: '/clearance', label: 'Clearance Compliance', icon: FileCheck2 },
     { href: '/reports', label: 'Reports', icon: BarChart3 },
@@ -52,6 +52,7 @@ export function Sidebar({ user }: Readonly<SidebarProps>) {
     { href: '/dashboard/faculty', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/dashboard/profile', label: 'My Profile', icon: UserSquare2 },
     { href: '/schedules', label: 'My Schedule', icon: Calendar },
+    { href: '/schedule-loading', label: 'Schedule Loading', icon: Calendar },
     { href: '/attendance', label: 'Attendance', icon: Clock },
     { href: '/clearance', label: 'Clearance Status', icon: FileCheck2 },
     { href: '/dashboard/changepassword', label: 'Change Password', icon: LockIcon },

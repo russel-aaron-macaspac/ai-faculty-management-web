@@ -14,7 +14,7 @@ import { Attendance } from '@/types/attendance';
 
 export default function FacultyDashboardPage() {
   return (
-    <RouteGuard requiredRoles={['faculty', 'admin']} fallbackPath="/login">
+    <RouteGuard requiredRoles={['faculty', 'program_chair', 'admin']} fallbackPath="/login">
       <FacultyDashboardContent />
     </RouteGuard>
   );
