@@ -7,8 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertTriangle, CheckCircle2, Loader2, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Loader2, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
+import { useRouter } from 'next/navigation';
 import { Schedule } from '@/types/schedule';
 import { formatTimeToTwelveHour } from '@/lib/timeUtils';
 import { isFacultyLikeRole } from '@/lib/roleConfig';
@@ -87,7 +88,6 @@ function ScheduleLoadingContent() {
   const [newSectionName, setNewSectionName] = useState('');
 
   const currentUserName = user?.full_name || user?.name || '';
-  const facultyLike = isFacultyLikeRole(user?.role);
   const canApprove = APPROVAL_ROLES.has(user?.role || '');
 
   const loadData = async (currentUser?: LocalUser | null) => {
@@ -117,12 +117,26 @@ function ScheduleLoadingContent() {
     }
   };
 
+  const router = useRouter();
+
   useEffect(() => {
     const raw = localStorage.getItem('user');
     const parsed = raw ? (JSON.parse(raw) as LocalUser) : null;
     setUser(parsed);
     void loadData(parsed);
   }, []);
+
+  // Restrict this feature to the program chair Imelda Tolentino only
+  useEffect(() => {
+    if (!user) return;
+    const name = (user.full_name || user.name || '').trim().toLowerCase();
+    const role = (user.role || '').toString().toLowerCase();
+    const isImelda = name === 'imelda tolentino' && role === 'program_chair';
+    if (!isImelda) {
+      // Redirect other users away from this page
+      router.push('/dashboard/faculty');
+    }
+  }, [user, router]);
 
   useEffect(() => {
     if (!meta.faculties.length) return;
@@ -160,6 +174,120 @@ function ScheduleLoadingContent() {
   }, [selectedFacultyId]);
 
   const visibleSchedules = useMemo(() => schedules, [schedules]);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const toggleFaculty = (facultyId: string) => {
+    setExpanded((prev) => ({ ...prev, [facultyId]: !prev[facultyId] }));
+  };
+
+  // Build a list of faculties from meta and schedules to display in master schedule
+  const facultiesList = useMemo(() => buildFacultiesList(meta.faculties, visibleSchedules), [meta.faculties, visibleSchedules]);
+
+  // Extract selected faculty availability rendering to avoid nested ternary in JSX
+  let selectedFacultyAvailabilityContent: JSX.Element | null = null;
+  if (selectedFacultyLoading) {
+    selectedFacultyAvailabilityContent = (
+      <div className="flex items-center gap-2 text-sm text-slate-500">
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading availability...
+      </div>
+    );
+  } else if (selectedFacultyAvailability.length === 0) {
+    selectedFacultyAvailabilityContent = (
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">No saved availability for this faculty member.</div>
+    );
+  } else {
+    selectedFacultyAvailabilityContent = (
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {selectedFacultyAvailability.map((row, index) => (
+          <div key={`${row.day}-${row.startTime}-${index}`} className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <div className="font-medium text-slate-900">{row.day}</div>
+            <div className="text-sm text-slate-500">
+              {formatTimeToTwelveHour(row.startTime)} - {formatTimeToTwelveHour(row.endTime)}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // Extract master schedule content to avoid nested ternary in JSX
+  let masterScheduleContent: JSX.Element | null = null;
+  if (loading) {
+    masterScheduleContent = (
+      <div className="py-8 text-center text-slate-500">
+        <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" /> Loading schedules...
+      </div>
+    );
+  } else if (visibleSchedules.length === 0) {
+    masterScheduleContent = <div className="py-8 text-center text-slate-500">No schedules found.</div>;
+  } else {
+    masterScheduleContent = (
+      <div className="space-y-3">
+              {facultiesList.map((faculty) => {
+                const normalize = (v?: string | null) => (v ? v.trim().toLowerCase() : '');
+                const facultySchedules = visibleSchedules.filter((s) => {
+                  // If the faculty list key is name-based, match by normalized name; otherwise match by id
+                  if (String(faculty.id).startsWith('name:')) {
+                    return (
+                      normalize(s.facultyName ?? s.faculty?.name ?? s.employeeName ?? '') === normalize(faculty.name)
+                    );
+                  }
+                  return String(s.facultyId ?? s.faculty?.id ?? s.employeeId ?? '') === String(faculty.id);
+                });
+                const isOpen = Boolean(expanded[faculty.id]);
+          return (
+            <div key={faculty.id} className="rounded-md border border-slate-200 bg-white">
+              <button
+                type="button"
+                onClick={() => toggleFaculty(faculty.id)}
+                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-50"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="text-sm font-medium text-slate-900">{faculty.name}</div>
+                  <div className="text-xs text-slate-500">{facultySchedules.length} schedule(s)</div>
+                </div>
+                <div className="text-slate-500">
+                  {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </div>
+              </button>
+
+              {isOpen && (
+                <div className="px-4 pb-4">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Subject</TableHead>
+                        <TableHead>Room</TableHead>
+                        <TableHead>Day</TableHead>
+                        <TableHead>Time</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {facultySchedules.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell>
+                            {item.subject?.code} - {item.subject?.name}
+                            {item.section ? <span className="ml-2 text-xs text-slate-500">Section {item.section}</span> : null}
+                          </TableCell>
+                          <TableCell>{item.room?.name}</TableCell>
+                          <TableCell>{item.day}</TableCell>
+                          <TableCell>
+                            {formatTimeToTwelveHour(item.startTime)} - {formatTimeToTwelveHour(item.endTime)}
+                          </TableCell>
+                          <TableCell>{item.status}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
   const subjectLabel = getSelectedLabel(meta.subjects, assignment.subjectId, (subject) => `${subject.code} - ${subject.name}`);
   const roomLabel = getSelectedLabel(meta.rooms, assignment.roomId, (room) => `${room.name} (cap ${room.capacity})`);
   const sectionLabel = getSelectedLabel(meta.sections, assignment.section, (section) => section.name);
@@ -454,24 +582,7 @@ function ScheduleLoadingContent() {
                 <CardTitle>{selectedFacultyName} Availability</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {selectedFacultyLoading ? (
-                  <div className="flex items-center gap-2 text-sm text-slate-500">
-                    <Loader2 className="h-4 w-4 animate-spin" /> Loading availability...
-                  </div>
-                ) : selectedFacultyAvailability.length === 0 ? (
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">No saved availability for this faculty member.</div>
-                ) : (
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    {selectedFacultyAvailability.map((row, index) => (
-                      <div key={`${row.day}-${row.startTime}-${index}`} className="rounded-lg border border-slate-200 bg-white px-4 py-3">
-                        <div className="font-medium text-slate-900">{row.day}</div>
-                        <div className="text-sm text-slate-500">
-                          {formatTimeToTwelveHour(row.startTime)} - {formatTimeToTwelveHour(row.endTime)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                {selectedFacultyAvailabilityContent}
               </CardContent>
             </Card>
 
@@ -615,52 +726,52 @@ function ScheduleLoadingContent() {
         <CardHeader>
           <CardTitle>Master Schedule</CardTitle>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Faculty</TableHead>
-                <TableHead>Subject</TableHead>
-                <TableHead>Room</TableHead>
-                <TableHead>Day</TableHead>
-                <TableHead>Time</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-slate-500">
-                    <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" /> Loading schedules...
-                  </TableCell>
-                </TableRow>
-              ) : visibleSchedules.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-slate-500">
-                    No schedules found.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                visibleSchedules.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell>{item.facultyName}</TableCell>
-                    <TableCell>
-                      {item.subject?.code} - {item.subject?.name}
-                      {item.section ? <span className="ml-2 text-xs text-slate-500">Section {item.section}</span> : null}
-                    </TableCell>
-                    <TableCell>{item.room?.name}</TableCell>
-                    <TableCell>{item.day}</TableCell>
-                    <TableCell>
-                      {formatTimeToTwelveHour(item.startTime)} - {formatTimeToTwelveHour(item.endTime)}
-                    </TableCell>
-                    <TableCell>{item.status}</TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
+        <CardContent>{masterScheduleContent}</CardContent>
       </Card>
     </div>
   );
+}
+
+function buildFacultiesList(
+  metaFaculties: Array<{ id: string; name: string; role: string }>,
+  schedules: Schedule[]
+) {
+  const normalize = (s?: string | null) => (s ? s.trim().toLowerCase() : '');
+
+  const nm = new Map<string, { ids: Set<string>; name: string }>();
+
+  metaFaculties.forEach((f) => {
+    const name = f?.name ?? '';
+    const id = f?.id ? String(f.id) : '';
+    const n = normalize(name);
+    if (!n) return;
+    if (!nm.has(n)) nm.set(n, { ids: new Set(), name });
+    if (id) {
+      const bucket = nm.get(n);
+      if (bucket) bucket.ids.add(id);
+    }
+  });
+
+  schedules.forEach((s) => {
+    const fid = s.facultyId ?? s.faculty?.id ?? s.employeeId ?? '';
+    const fname = s.facultyName ?? s.faculty?.name ?? s.employeeName ?? '';
+    const n = normalize(fname);
+    if (!n) return;
+    if (!nm.has(n)) nm.set(n, { ids: new Set(), name: fname });
+    if (fid) {
+      const bucket = nm.get(n);
+      if (bucket) bucket.ids.add(String(fid));
+    }
+  });
+
+  const result: Array<{ id: string; name: string }> = [];
+  nm.forEach(({ ids, name }) => {
+    if (ids.size > 0) {
+      result.push({ id: Array.from(ids.values())[0], name });
+    } else {
+      result.push({ id: `name:${name}`, name });
+    }
+  });
+
+  return result;
 }

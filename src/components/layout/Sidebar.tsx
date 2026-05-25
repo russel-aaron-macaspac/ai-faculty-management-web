@@ -39,7 +39,6 @@ export function Sidebar({ user }: Readonly<SidebarProps>) {
   const adminLinks = [
     { href: '/dashboard/admin', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/faculty', label: 'Faculty Management', icon: Users },
-    { href: '/schedule-loading', label: 'Schedule Loading', icon: Calendar },
     { href: '/attendance', label: 'Attendance Monitoring', icon: Clock },
     { href: '/clearance', label: 'Clearance Compliance', icon: FileCheck2 },
     { href: '/reports', label: 'Reports', icon: BarChart3 },
@@ -52,7 +51,6 @@ export function Sidebar({ user }: Readonly<SidebarProps>) {
     { href: '/dashboard/faculty', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/dashboard/profile', label: 'My Profile', icon: UserSquare2 },
     { href: '/schedules', label: 'My Schedule', icon: Calendar },
-    { href: '/schedule-loading', label: 'Schedule Loading', icon: Calendar },
     { href: '/attendance', label: 'Attendance', icon: Clock },
     { href: '/clearance', label: 'Clearance Status', icon: FileCheck2 },
     { href: '/dashboard/changepassword', label: 'Change Password', icon: LockIcon },
@@ -74,6 +72,21 @@ export function Sidebar({ user }: Readonly<SidebarProps>) {
         { href: '/dashboard/changepassword', label: 'Change Password', icon: LockIcon },
       ];
     }
+  }
+
+  // Determine a display name that supports both `name` and legacy `full_name` fields
+  const displayName = user?.name ?? (user as unknown as { full_name?: string })?.full_name ?? '';
+
+  const isImelda = (u?: User | null) => {
+    if (!u) return false;
+    const nameLike = (u.name ?? (u as unknown as { full_name?: string })?.full_name ?? '').trim().toLowerCase();
+    const role = (u.role || '').toString().toLowerCase();
+    return nameLike === 'imelda tolentino' && role === 'program_chair';
+  };
+
+  // Only expose schedule-loading to the program chair Imelda Tolentino
+  if (isImelda(user)) {
+    links.push({ href: '/schedule-loading', label: 'Schedule Loading', icon: Calendar });
   }
 
   const handleLogout = () => {
@@ -122,10 +135,10 @@ export function Sidebar({ user }: Readonly<SidebarProps>) {
       <div className="border-t border-slate-800 p-4 space-y-4">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-full bg-slate-800 flex items-center justify-center text-red-400 font-bold border border-slate-700">
-            {user?.name?.charAt(0) ?? 'U'}
+            {displayName?.charAt(0) ?? 'U'}
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-medium">{user?.name}</span>
+            <span className="text-sm font-medium">{displayName || user?.role}</span>
             <span className="text-xs text-slate-400 capitalize">{user?.role}</span>
           </div>
         </div>
