@@ -18,7 +18,7 @@ export async function POST(request) {
 
     const { data: user, error: userError } = await supabase
       .from("users")
-      .select("user_id, email, role, first_name, middle_name, last_name, password_hash, status")
+      .select("user_id, email, role, first_name, middle_name, last_name, password_hash, status, phone_number, address")
       .eq("email", email)
       .eq("status", "active")
       .single();
@@ -54,14 +54,17 @@ export async function POST(request) {
       }
     }
 
+    const fullName = [user.first_name, user.middle_name, user.last_name].filter(Boolean).join(' ');
+
     return NextResponse.json({
       user: {
         id: user.user_id,
         email: user.email,
         role: frontendRole,
-        full_name: [user.first_name, user.middle_name, user.last_name]
-          .filter(Boolean)
-          .join(" "),
+        full_name: fullName,
+        name: fullName,
+        phone: user.phone_number || null,
+        address: user.address || null,
       },
     });
   } catch (err) {

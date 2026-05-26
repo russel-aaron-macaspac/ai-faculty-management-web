@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
+import crypto from 'crypto';
 import { NextResponse } from "next/server";
 
 export async function GET() {
@@ -7,8 +8,8 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from("users")
-      .select("user_id, first_name, middle_name, last_name, role, status")
-      .eq("role", "faculty")
+      .select("user_id, first_name, middle_name, last_name, email, role, status")
+      .in("role", ["faculty", "program_chair"])
       .eq("status", "active")
       .order("last_name", { ascending: true })
       .order("first_name", { ascending: true });
@@ -21,6 +22,7 @@ export async function GET() {
     const formatted = (data || []).map((u) => ({
       id: String(u.user_id),
       name: [u.first_name, u.middle_name, u.last_name].filter(Boolean).join(" "),
+      email: u.email || null,
     }));
 
     return NextResponse.json({ data: formatted });
@@ -58,6 +60,7 @@ export async function POST(req) {
       phone: phone || null,
     };
 
+    // Insert profile row into users table
     const { data, error } = await supabase.from('users').insert(insertPayload).select('user_id, first_name, middle_name, last_name');
 
     if (error) {
@@ -66,7 +69,42 @@ export async function POST(req) {
     }
 
     const created = (data || [])[0] || null;
-    return NextResponse.json({ data: { id: String(created?.user_id || ''), name: [created?.first_name, created?.middle_name, created?.last_name].filter(Boolean).join(' ') } });
+
+    // Create a Supabase Auth user with a random temporary password so the new faculty can sign in.
+    // If this fails, roll back the profile insert to avoid dangling records.
+    try {
+      const tempPassword = crypto.randomBytes(12).toString('base64').replace(/\+/g, 'A').replace(/\//g, 'B');
+
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email,
+        password: tempPassword,
+        email_confirm: true,
+        user_metadata: { first_name, middle_name, last_name, role: 'faculty' },
+      });
+
+      if (authError) {
+        console.error('[FACULTY AUTH CREATE ERROR]', authError);
+        // rollback profile row
+        try {
+          await supabase.from('users').delete().eq('user_id', created.user_id);
+        } catch (delErr) {
+          console.error('[FACULTY ROLLBACK ERROR]', delErr);
+        }
+
+        return NextResponse.json({ error: 'Failed to create auth user for faculty' }, { status: 500 });
+      }
+
+      // Success: return both profile id and auth user id (do not return password)
+      return NextResponse.json({ data: { id: String(created?.user_id || ''), name: [created?.first_name, created?.middle_name, created?.last_name].filter(Boolean).join(' '), auth_user_id: authData?.id || null } });
+    } catch (errAuth) {
+      console.error('[FACULTY AUTH UNEXPECTED ERROR]', errAuth);
+      try {
+        await supabase.from('users').delete().eq('user_id', created.user_id);
+      } catch (delErr) {
+        console.error('[FACULTY ROLLBACK ERROR]', delErr);
+      }
+      return NextResponse.json({ error: 'Internal server error during auth creation' }, { status: 500 });
+    }
   } catch (err) {
     console.error('[FACULTY USERS POST ERROR]', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
