@@ -195,6 +195,22 @@ function ScheduleLoadingContent() {
     setExpanded((prev) => ({ ...prev, [facultyId]: !prev[facultyId] }));
   };
 
+  const getLinkedScheduleCount = (predicate: (schedule: Schedule) => boolean) => schedules.filter(predicate).length;
+
+  const buildDeletePrompt = (entity: string, label: string, linkedCount: number) => {
+    const scheduleText = linkedCount === 1 ? '1 linked schedule will be deleted.' : `${linkedCount} linked schedules will be deleted.`;
+    return linkedCount > 0
+      ? `Delete ${entity} ${label}? ${scheduleText}`
+      : `Delete ${entity} ${label}?`;
+  };
+
+  const buildSectionDeletePrompt = (label: string, linkedCount: number) => {
+    const scheduleText = linkedCount === 1 ? '1 schedule references this section.' : `${linkedCount} schedules reference this section.`;
+    return linkedCount > 0
+      ? `Delete section ${label}? ${scheduleText}`
+      : `Delete section ${label}?`;
+  };
+
   // Build a list of faculties from meta and schedules to display in master schedule
   const facultiesList = useMemo(() => buildFacultiesList(meta.faculties, visibleSchedules), [meta.faculties, visibleSchedules]);
 
@@ -440,6 +456,75 @@ function ScheduleLoadingContent() {
       await loadData(user);
     } catch (error) {
       setSectionError(error instanceof Error ? error.message : 'Unable to create the section. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteSubject = async (subjectId: string, subjectLabel: string) => {
+    if (!user) return;
+
+    const linkedCount = getLinkedScheduleCount((schedule) => schedule.subjectId === subjectId);
+    const confirmed = globalThis.confirm(buildDeletePrompt('subject', subjectLabel, linkedCount));
+    if (!confirmed) return;
+
+    setSaving(true);
+    try {
+      await scheduleService.deleteSubject(subjectId);
+      if (assignment.subjectId === subjectId) {
+        setAssignment((prev) => ({ ...prev, subjectId: '' }));
+      }
+      await loadData(user);
+      toast({ title: 'Done', description: 'Subject deleted.', type: 'success' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to delete subject.';
+      toast({ title: 'Delete Failed', description: message, type: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteRoom = async (roomId: string, roomLabel: string) => {
+    if (!user) return;
+
+    const linkedCount = getLinkedScheduleCount((schedule) => schedule.roomId === roomId);
+    const confirmed = globalThis.confirm(buildDeletePrompt('room', roomLabel, linkedCount));
+    if (!confirmed) return;
+
+    setSaving(true);
+    try {
+      await scheduleService.deleteRoom(roomId);
+      if (assignment.roomId === roomId) {
+        setAssignment((prev) => ({ ...prev, roomId: '' }));
+      }
+      await loadData(user);
+      toast({ title: 'Done', description: 'Room deleted.', type: 'success' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to delete room.';
+      toast({ title: 'Delete Failed', description: message, type: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteSection = async (sectionId: string, sectionLabel: string) => {
+    if (!user) return;
+
+    const linkedCount = getLinkedScheduleCount((schedule) => schedule.section === sectionLabel || schedule.section === sectionId);
+    const confirmed = globalThis.confirm(buildSectionDeletePrompt(sectionLabel, linkedCount));
+    if (!confirmed) return;
+
+    setSaving(true);
+    try {
+      await scheduleService.deleteSection(sectionId);
+      if (assignment.section === sectionLabel) {
+        setAssignment((prev) => ({ ...prev, section: '' }));
+      }
+      await loadData(user);
+      toast({ title: 'Done', description: 'Section deleted.', type: 'success' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to delete section.';
+      toast({ title: 'Delete Failed', description: message, type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -705,6 +790,9 @@ function ScheduleLoadingContent() {
                 <CardTitle>Manage Subjects and Rooms</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  Deleting a subject, room, or section will remove it from the schedule-loading lists, and deleting a subject or room also clears schedules that use it.
+                </div>
                 <div className="space-y-3">
                   <div className="text-sm font-semibold text-slate-800">Add Subject</div>
                   <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_140px]">
@@ -715,7 +803,7 @@ function ScheduleLoadingContent() {
                     </Button>
                   </div>
                   {subjectError && <p className="text-sm text-rose-600">{subjectError}</p>}
-                  <div className="space-y-2">
+                  <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
                     {meta.subjects.length === 0 ? (
                       <div className="text-sm text-slate-500">No subjects yet.</div>
                     ) : (
@@ -724,6 +812,16 @@ function ScheduleLoadingContent() {
                           <div className="text-sm text-slate-800">
                             <span className="font-medium">{subject.code}</span> - {subject.name}
                           </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteSubject(subject.id, `${subject.code} - ${subject.name}`)}
+                            disabled={saving}
+                            aria-label={`Delete subject ${subject.code} - ${subject.name}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-slate-500 hover:text-rose-600" />
+                          </Button>
                         </div>
                       ))
                     )}
@@ -740,7 +838,7 @@ function ScheduleLoadingContent() {
                     </Button>
                   </div>
                   {roomError && <p className="text-sm text-rose-600">{roomError}</p>}
-                  <div className="space-y-2">
+                  <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
                     {meta.rooms.length === 0 ? (
                       <div className="text-sm text-slate-500">No rooms yet.</div>
                     ) : (
@@ -749,6 +847,16 @@ function ScheduleLoadingContent() {
                           <div className="text-sm text-slate-800">
                             <span className="font-medium">{room.name}</span> (cap {room.capacity})
                           </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteRoom(room.id, `${room.name} (cap ${room.capacity})`)}
+                            disabled={saving}
+                            aria-label={`Delete room ${room.name}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-slate-500 hover:text-rose-600" />
+                          </Button>
                         </div>
                       ))
                     )}
@@ -764,7 +872,7 @@ function ScheduleLoadingContent() {
                     </Button>
                   </div>
                   {sectionError && <p className="text-sm text-rose-600">{sectionError}</p>}
-                  <div className="space-y-2">
+                  <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
                     {meta.sections.length === 0 ? (
                       <div className="text-sm text-slate-500">No sections yet.</div>
                     ) : (
@@ -773,6 +881,16 @@ function ScheduleLoadingContent() {
                           <div className="text-sm text-slate-800">
                             <span className="font-medium">{section.name}</span>
                           </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteSection(section.id, section.name)}
+                            disabled={saving}
+                            aria-label={`Delete section ${section.name}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-slate-500 hover:text-rose-600" />
+                          </Button>
                         </div>
                       ))
                     )}
