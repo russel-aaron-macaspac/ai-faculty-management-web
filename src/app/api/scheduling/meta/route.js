@@ -53,7 +53,6 @@ export async function GET() {
 
     return NextResponse.json({
       faculties: (faculties || [])
-        .filter((f) => f.role === 'faculty')
         .map((f) => ({
         // Keep IDs aligned with schedule rows, which store users.user_id in schedules.faculty_id.
         id: String(f.user_id ?? f.supabase_id),

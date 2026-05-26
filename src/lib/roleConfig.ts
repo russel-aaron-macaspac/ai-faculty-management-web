@@ -219,5 +219,5 @@ export type ApprovalOfficerId =
   | 'hro';
 
 export const isFacultyLikeRole = (role: string | undefined): boolean => {
-  return role === 'faculty' || role === 'program_chair';
+  return role === 'faculty' || role === 'program_chair' || role === 'programchair';
 };
