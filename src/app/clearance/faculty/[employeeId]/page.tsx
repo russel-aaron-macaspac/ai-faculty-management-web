@@ -71,7 +71,9 @@ export default function FacultyDetailPage() {
   const [validationResult, setValidationResult] = useState<DocumentValidationResult | null>(null);
   const [ocrText, setOcrText] = useState('');
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [fileLoadingId, setFileLoadingId] = useState<string | null>(null);
   const [ocrError, setOcrError] = useState('');
+  const [fileError, setFileError] = useState('');
   const [actionError, setActionError] = useState('');
 
   // Dialog states for approval/rejection
@@ -186,6 +188,24 @@ export default function FacultyDetailPage() {
       setOcrError(message);
     } finally {
       setIsOCRLoading(false);
+    }
+  };
+
+  const handleOpenFile = async (path?: string, recordId?: string) => {
+    setFileError('');
+    if (!path) {
+      setFileError('No file available');
+      return;
+    }
+    setFileLoadingId(recordId ?? null);
+    try {
+      const url = await clearanceService.getFileUrl(path);
+      if (url) window.open(url, '_blank');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to open file';
+      setFileError(msg);
+    } finally {
+      setFileLoadingId(null);
     }
   };
 
@@ -530,9 +550,28 @@ export default function FacultyDetailPage() {
                   <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium capitalize mt-1 ${getStatusClass(record.status)}`}>
                     {record.status}
                   </span>
+                  <div className="mt-3 flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void handleOpenFile(record.filePath as string, record.id)}
+                      disabled={!record.filePath || fileLoadingId === record.id}
+                    >
+                      {fileLoadingId === record.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
+                      View Submitted File
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => void clearanceService.getClearanceNotes(record.id).then((n) => setNotes(n)).catch(()=>{})}
+                      variant="ghost"
+                    >
+                      Refresh Notes
+                    </Button>
+                  </div>
                 </div>
               ))
             )}
+            {fileError && <p className="text-sm text-rose-600">{fileError}</p>}
           </CardContent>
         </Card>
 
