@@ -270,18 +270,22 @@ export default function ClearancePage() {
         }}
       >
         <TableCell>
-          <div className="text-sm font-medium flex items-center gap-2">
-            <FileText className="h-4 w-4 text-slate-400" />
-            {isApprovalOfficer_ ? (
-              <span className="text-slate-800 font-semibold">{record.employeeName}</span>
-            ) : (
-              <Link
-                href={`/clearance/${toOfficeSlug(record.requiredDocument)}`}
-                className="text-slate-800 hover:text-red-700 hover:underline"
-              >
-                {record.requiredDocument}
-              </Link>
-            )}
+          <div className="flex items-start justify-between gap-4">
+            <div className="text-sm font-medium flex items-center gap-2">
+              <FileText className="h-4 w-4 text-slate-400" />
+              {isApprovalOfficer_ ? (
+                <span className="text-slate-800 font-semibold">{record.employeeName}</span>
+              ) : (
+                <Link
+                  href={`/clearance/${toOfficeSlug(record.requiredDocument)}`}
+                  className="text-slate-800 hover:text-red-700 hover:underline"
+                >
+                  {record.requiredDocument}
+                </Link>
+              )}
+            </div>
+
+            {/* Delete removed from list view; kept in office detail page */}
           </div>
           {record.validationWarning && (
             <div className="text-xs text-rose-600 mt-1 flex items-center gap-1">
@@ -295,31 +299,6 @@ export default function ClearancePage() {
             {record.status === 'approved' && <CheckCircle2 className="h-3 w-3" />}
             {record.status}
           </span>
-          {isFacultyUser && record.id && (currentUser?.supabase_id === record.employeeId || String(currentUser?.id) === String(record.employeeId)) && record.status !== 'approved' && (
-            <div className="mt-2">
-              <button
-                type="button"
-                className="text-xs text-rose-600 hover:underline"
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  // Confirm delete
-                  if (!confirm('Delete this submitted document? This will remove the submission and allow re-upload.')) return;
-                  try {
-                    setUploading(true);
-                      await clearanceService.deleteDocument(record.id);
-                    void loadData(currentUser);
-                    toast({ title: 'Deleted', description: 'Document removed. You may upload again.', type: 'info' });
-                  } catch (err) {
-                    toast({ title: 'Delete Failed', description: err instanceof Error ? err.message : 'Unable to delete document', type: 'error' });
-                  } finally {
-                    setUploading(false);
-                  }
-                }}
-              >
-                Delete
-              </button>
-            </div>
-          )}
         </TableCell>
         {showActionColumn && (
           <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>

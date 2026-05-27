@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { clearanceService } from '@/services/clearanceService';
+import { toast } from '@/lib/toast';
 import { Clearance } from '@/types/clearance';
 import { fromOfficeSlug } from '@/lib/clearanceOffices';
 import { StoredUser, normalize } from '@/lib/stringUtils';
@@ -85,6 +86,7 @@ export default function OfficeClearanceDetailPage() {
   const [ocrError, setOcrError] = useState('');
   const [fileLoading, setFileLoading] = useState(false);
   const [fileError, setFileError] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   const officeData = useMemo(() => {
     if (!officeName || offices.length === 0) return null;
@@ -293,7 +295,7 @@ export default function OfficeClearanceDetailPage() {
                     size="sm"
                     variant="outline"
                     onClick={() => void handleOpenFile(ownOfficeRecord.filePath as string)}
-                    disabled={fileLoading}
+                    disabled={fileLoading || deleting}
                   >
                     {fileLoading ? (
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -302,6 +304,30 @@ export default function OfficeClearanceDetailPage() {
                     )}
                     View submitted file
                   </Button>
+                    {ownOfficeRecord?.id && (currentUser?.supabase_id === ownOfficeRecord.employeeId || String(currentUser?.id) === String(ownOfficeRecord.employeeId)) && ownOfficeRecord.status !== 'approved' && (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="ml-2"
+                        onClick={async () => {
+                          if (!confirm('Delete this submitted document? This will remove the submission and allow re-upload.')) return;
+                          setDeleting(true);
+                          try {
+                            await clearanceService.deleteDocument(ownOfficeRecord.id as string);
+                            const data = await clearanceService.getClearances();
+                            setRecords(data);
+                            toast({ title: 'Deleted', description: 'Document removed. You may upload again.', type: 'info' });
+                          } catch (err) {
+                            toast({ title: 'Delete Failed', description: err instanceof Error ? err.message : 'Unable to delete document', type: 'error' });
+                          } finally {
+                            setDeleting(false);
+                          }
+                        }}
+                        disabled={fileLoading || deleting}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" /> Delete
+                      </Button>
+                    )}
                   {fileError && <p className="text-sm text-rose-600 mt-2">{fileError}</p>}
                 </div>
               )}
