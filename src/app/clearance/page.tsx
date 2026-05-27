@@ -55,10 +55,27 @@ export default function ClearancePage() {
 
   const loadData = async (userOrRole?: StoredUser | string) => {
     setLoading(true);
-    const role = typeof userOrRole === 'string' ? userOrRole : userOrRole?.role;
-    const user = typeof userOrRole === 'object' ? (userOrRole as StoredUser) : undefined;
+    let role: string | undefined;
+    let user: StoredUser | undefined;
+
+    if (typeof userOrRole === 'string') {
+      role = userOrRole;
+    } else if (userOrRole && typeof userOrRole === 'object') {
+      role = userOrRole.role;
+      user = userOrRole;
+    }
+
     const officeId = isApprovalOfficer(role) ? getOfficeId(role) : undefined;
-    const userId = user?.supabase_id ?? (user?.id ? String(user.id) : undefined);
+    let userId: string | undefined;
+
+    if (!isApprovalOfficer(role)) {
+      if (user?.supabase_id) {
+        userId = user.supabase_id;
+      } else if (user?.id) {
+        userId = String(user.id);
+      }
+    }
+
     const data = await clearanceService.getClearances(userId, officeId);
     setRecords(data || []);
     setLoading(false);
@@ -200,9 +217,15 @@ export default function ClearancePage() {
     try {
       await clearanceService.updateStatus(record.id, decision, reason);
       await loadData(currentUser);
-  toast({ title: 'Decision Saved', description: `Record ${decision}.`, type: decision === 'approved' ? 'success' : decision === 'rejected' ? 'error' : 'info' });
+      let toastType: 'success' | 'error' | 'info' = 'info';
+      if (decision === 'approved') {
+        toastType = 'success';
+      } else if (decision === 'rejected') {
+        toastType = 'error';
+      }
+      toast({ title: 'Decision Saved', description: `Record ${decision}.`, type: toastType });
     } catch (err) {
-  toast({ title: 'Decision Failed', description: err instanceof Error ? err.message : 'Failed to update status', type: 'error' });
+      toast({ title: 'Decision Failed', description: err instanceof Error ? err.message : 'Failed to update status', type: 'error' });
     } finally {
       setActionLoadingId(null);
     }
@@ -283,7 +306,7 @@ export default function ClearancePage() {
                   if (!confirm('Delete this submitted document? This will remove the submission and allow re-upload.')) return;
                   try {
                     setUploading(true);
-                    await clearanceService.deleteDocument(record.id!);
+                      await clearanceService.deleteDocument(record.id);
                     void loadData(currentUser);
                     toast({ title: 'Deleted', description: 'Document removed. You may upload again.', type: 'info' });
                   } catch (err) {
