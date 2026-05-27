@@ -13,21 +13,27 @@ export const clearanceService = {
       : '/api/clearances';
     const res = await fetch(url);
     if (!res.ok) {
-      console.warn('[clearanceService.getClearances]', await res.text());
+      const text = await res.text();
+      console.warn('[clearanceService.getClearances] Status:', res.status, 'Response:', text);
       return [];
     }
-    const { data } = await res.json();
-    return data;
+    const json = await res.json();
+    console.log('[clearanceService.getClearances] Success:', json);
+    const { data } = json;
+    return data || [];
   },
 
   async getOffices() {
     const res = await fetch('/api/offices');
     if (!res.ok) {
-      console.warn('[clearanceService.getOffices]', await res.text());
+      const text = await res.text();
+      console.warn('[clearanceService.getOffices] Status:', res.status, 'Response:', text);
       return [];
     }
-    const { data } = await res.json();
-    return data;
+    const json = await res.json();
+    console.log('[clearanceService.getOffices] Success:', json);
+    const { data } = json;
+    return data || [];
   },
 
   async uploadDocument(
@@ -51,8 +57,45 @@ export const clearanceService = {
     const json = text ? JSON.parse(text) : {};
 
     if (!res.ok) {
-      throw new Error(json.error ?? 'Failed to upload document');
+      const errorMessage = json?.error
+        ? `${json.error}${json?.details ? `: ${json.details}` : ''}`
+        : `Failed to upload document (${res.status})`;
+      console.warn('[clearanceService.uploadDocument] Status:', res.status, 'Response:', json);
+      throw new Error(errorMessage);
     }
+    return json;
+  },
+
+  async uploadDocuments(userId: string, officeId: number, files: File[] | FileList) {
+    const formData = new FormData();
+    formData.append('user_id', userId);
+    formData.append('office_id', String(officeId));
+
+    const fileArray = Array.from(files || []);
+    if (fileArray.length === 0) {
+      throw new Error('No files to upload');
+    }
+
+    fileArray.forEach((f) => {
+      formData.append('files', f, f.name);
+    });
+
+    const res = await fetch('/api/clearances', {
+      method: 'POST',
+      body: formData,
+    });
+
+    const text = await res.text();
+    const json = text ? JSON.parse(text) : {};
+
+    if (!res.ok) {
+      const errorMessage = json?.error
+        ? `${json.error}${json?.details ? `: ${json.details}` : ''}`
+        : `Failed to upload documents (${res.status})`;
+      console.warn('[clearanceService.uploadDocuments] Status:', res.status, 'Response:', json);
+      throw new Error(errorMessage);
+    }
+
     return json;
   },
 

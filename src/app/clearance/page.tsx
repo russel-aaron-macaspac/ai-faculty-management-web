@@ -13,6 +13,7 @@ import { UploadCloud, CheckCircle2, AlertTriangle, FileText, Loader2, Search, Ch
 import { FACULTY_REQUIRED_OFFICES, toOfficeSlug } from '@/lib/clearanceOffices';
 import { isApprovalOfficer, getClearancePageInfo, isFacultyLikeRole } from '@/lib/roleConfig';
 import { StoredUser } from '@/lib/stringUtils';
+import { toast } from '@/lib/toast';
 
 const OFFICER_OFFICE_MAP: Record<string, number> = {
   dlrc:         1,
@@ -55,10 +56,30 @@ export default function ClearancePage() {
     return id === undefined ? undefined : String(id);
   };
 
-  const loadData = async (role?: string) => {
+  const loadData = async (userOrRole?: StoredUser | string) => {
     setLoading(true);
+    let role: string | undefined;
+    let user: StoredUser | undefined;
+
+    if (typeof userOrRole === 'string') {
+      role = userOrRole;
+    } else if (userOrRole && typeof userOrRole === 'object') {
+      role = userOrRole.role;
+      user = userOrRole;
+    }
+
     const officeId = isApprovalOfficer(role) ? getOfficeId(role) : undefined;
-    const data = await clearanceService.getClearances(undefined, officeId);
+    let userId: string | undefined;
+
+    if (!isApprovalOfficer(role)) {
+      if (user?.supabase_id) {
+        userId = user.supabase_id;
+      } else if (user?.id) {
+        userId = String(user.id);
+      }
+    }
+
+    const data = await clearanceService.getClearances(userId, officeId);
     setRecords(data || []);
     setLoading(false);
   };
@@ -69,7 +90,7 @@ export default function ClearancePage() {
     try {
       const user = JSON.parse(raw) as StoredUser;
       setCurrentUser(user);
-      void loadData(user.role);
+      void loadData(user);
     } catch {
       // ignore
     }
@@ -84,9 +105,9 @@ export default function ClearancePage() {
       return;
     }
 
-    const employeeId = currentUser?.id ? String(currentUser.id) : '';
+    const employeeId = currentUser?.supabase_id ?? '';
     if (!employeeId) {
-      setUploadError('Your account is missing a user ID. Please log in again.');
+      setUploadError('Your account is missing the Supabase user UUID. Please log out and sign in again.');
       return;
     }
 
@@ -95,9 +116,12 @@ export default function ClearancePage() {
       await clearanceService.uploadDocument(employeeId, 0, docName.trim());
       setIsUploadOpen(false);
       setDocName('Safety Training Certificate');
-      void loadData(currentUser?.role);
+      void loadData(currentUser);
+  toast({ title: 'Clearance Uploaded', description: 'Document uploaded for review.', type: 'success' });
     } catch (error) {
-      setUploadError(error instanceof Error ? error.message : 'Unable to submit this document. Please try again.');
+  const msg = error instanceof Error ? error.message : 'Unable to submit this document. Please try again.';
+  setUploadError(msg);
+  toast({ title: 'Upload Failed', description: msg, type: 'error' });
     } finally {
       setUploading(false);
     }
@@ -193,9 +217,21 @@ export default function ClearancePage() {
     }
 
     setActionLoadingId(record.id);
-    await clearanceService.updateStatus(record.id, decision, reason);
-    await loadData(currentUser.role);
-    setActionLoadingId(null);
+    try {
+      await clearanceService.updateStatus(record.id, decision, reason);
+      await loadData(currentUser);
+      let toastType: 'success' | 'error' | 'info' = 'info';
+      if (decision === 'approved') {
+        toastType = 'success';
+      } else if (decision === 'rejected') {
+        toastType = 'error';
+      }
+      toast({ title: 'Decision Saved', description: `Record ${decision}.`, type: toastType });
+    } catch (err) {
+      toast({ title: 'Decision Failed', description: err instanceof Error ? err.message : 'Failed to update status', type: 'error' });
+    } finally {
+      setActionLoadingId(null);
+    }
   };
 
   const { title: pageTitle, subtitle: pageSubtitle } = getClearancePageInfo(currentUser?.role);
@@ -237,18 +273,22 @@ export default function ClearancePage() {
         }}
       >
         <TableCell>
-          <div className="text-sm font-medium flex items-center gap-2">
-            <FileText className="h-4 w-4 text-slate-400" />
-            {isApprovalOfficer_ ? (
-              <span className="text-slate-800 font-semibold">{record.employeeName}</span>
-            ) : (
-              <Link
-                href={`/clearance/${toOfficeSlug(record.requiredDocument)}`}
-                className="text-slate-800 hover:text-red-700 hover:underline"
-              >
-                {record.requiredDocument}
-              </Link>
-            )}
+          <div className="flex items-start justify-between gap-4">
+            <div className="text-sm font-medium flex items-center gap-2">
+              <FileText className="h-4 w-4 text-slate-400" />
+              {isApprovalOfficer_ ? (
+                <span className="text-slate-800 font-semibold">{record.employeeName}</span>
+              ) : (
+                <Link
+                  href={`/clearance/${toOfficeSlug(record.requiredDocument)}`}
+                  className="text-slate-800 hover:text-red-700 hover:underline"
+                >
+                  {record.requiredDocument}
+                </Link>
+              )}
+            </div>
+
+            {/* Delete removed from list view; kept in office detail page */}
           </div>
           {record.validationWarning && (
             <div className="text-xs text-rose-600 mt-1 flex items-center gap-1">

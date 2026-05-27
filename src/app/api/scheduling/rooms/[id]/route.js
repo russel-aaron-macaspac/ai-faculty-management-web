@@ -53,6 +53,12 @@ export async function DELETE(request, { params }) {
     const { id } = await params;
     const supabase = createSupabaseAdminClient();
 
+    const { error: scheduleDeleteError } = await supabase.from("schedules").delete().eq("room_id", id);
+    if (scheduleDeleteError) {
+      console.error("[ROOMS DELETE ERROR] Failed to delete related schedules", scheduleDeleteError);
+      return NextResponse.json({ error: "Failed to delete schedules linked to this room" }, { status: 500 });
+    }
+
     const { error } = await supabase.from("rooms").delete().eq("id", id);
     if (error) {
       console.error("[ROOMS DELETE ERROR]", error);

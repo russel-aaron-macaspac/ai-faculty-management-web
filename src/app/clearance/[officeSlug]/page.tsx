@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { clearanceService } from '@/services/clearanceService';
+import { toast } from '@/lib/toast';
 import { Clearance } from '@/types/clearance';
 import { fromOfficeSlug } from '@/lib/clearanceOffices';
 import { StoredUser, normalize } from '@/lib/stringUtils';
@@ -76,13 +77,16 @@ export default function OfficeClearanceDetailPage() {
   const [loading, setLoading] = useState(true);
   const storageKey = `clearance-office-${officeSlug}`;
   const [officeState, setOfficeState] = useState<OfficeLocalState>(() => loadSavedState(storageKey));
-  const [selectedDocumentFile, setSelectedDocumentFile] = useState<File | null>(null);
+  const [selectedDocumentFiles, setSelectedDocumentFiles] = useState<File[]>([]);
   const [selectedOCRFile, setSelectedOCRFile] = useState<File | null>(null);
   const [selectedOCRDocumentType, setSelectedOCRDocumentType] = useState(DOCUMENT_TYPES[0]);
   const [isOCRLoading, setIsOCRLoading] = useState(false);
   const [validationResult, setValidationResult] = useState<DocumentValidationResult | null>(null);
   const [documentError, setDocumentError] = useState('');
   const [ocrError, setOcrError] = useState('');
+  const [fileLoading, setFileLoading] = useState(false);
+  const [fileError, setFileError] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   const officeData = useMemo(() => {
     if (!officeName || offices.length === 0) return null;
@@ -93,6 +97,24 @@ export default function OfficeClearanceDetailPage() {
 
   const handleOCRDocumentTypeChange = (value: string | null) => {
     setSelectedOCRDocumentType(value ?? DOCUMENT_TYPES[0]);
+  };
+
+  const handleOpenFile = async (path: string) => {
+    setFileError('');
+    if (!path) {
+      setFileError('No file available');
+      return;
+    }
+    setFileLoading(true);
+    try {
+      const url = await clearanceService.getFileUrl(path);
+      if (url) window.open(url, '_blank');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to open file';
+      setFileError(msg);
+    } finally {
+      setFileLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -138,6 +160,11 @@ export default function OfficeClearanceDetailPage() {
     });
   }, [records, currentUser, officeName]);
 
+  const canSubmitDocument =
+    !ownOfficeRecord ||
+    ownOfficeRecord.status === 'rejected' ||
+    ownOfficeRecord.status === 'expired';
+
   const saveLocalState = (nextState: OfficeLocalState) => {
     localStorage.setItem(storageKey, JSON.stringify(nextState));
     setOfficeState(nextState);
@@ -148,15 +175,15 @@ export default function OfficeClearanceDetailPage() {
   };
 
   const handleSubmitDocument = async () => {
-    setDocumentError('');
-    if (!selectedDocumentFile) {
-      setDocumentError('Choose a file before submitting the document.');
-      return;
-    }
+      setDocumentError('');
+      if (!selectedDocumentFiles || selectedDocumentFiles.length === 0) {
+        setDocumentError('Choose at least one file before submitting the document.');
+        return;
+      }
 
-    const userId = currentUser?.id ? String(currentUser.id) : '';
+    const userId = currentUser?.supabase_id ?? '';
     if (!userId) {
-      setDocumentError('Your user ID is missing. Please log in again.');
+      setDocumentError('Your record is missing the Supabase user UUID. Please log out and sign in again.');
       return;
     }
 
@@ -167,18 +194,19 @@ export default function OfficeClearanceDetailPage() {
     }
 
     try {
-      await clearanceService.uploadDocument(
+      await clearanceService.uploadDocuments(
         userId,
         Number(officeData.id),
-        selectedDocumentFile.name,
+        selectedDocumentFiles
       );
 
+      const newDocs = selectedDocumentFiles.map((f) => ({ name: f.name, submittedAt: new Date().toLocaleString() }));
       const nextDocuments = [
-        { name: selectedDocumentFile.name, submittedAt: new Date().toLocaleString() },
+        ...newDocs,
         ...officeState.documents,
       ];
 
-      setSelectedDocumentFile(null);
+      setSelectedDocumentFiles([]);
       setDocumentError('');
       saveLocalState({ ...officeState, documents: nextDocuments });
 
@@ -261,6 +289,48 @@ export default function OfficeClearanceDetailPage() {
                   {ownOfficeRecord.validationWarning}
                 </p>
               )}
+              {ownOfficeRecord?.filePath && (
+                <div className="mt-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void handleOpenFile(ownOfficeRecord.filePath as string)}
+                    disabled={fileLoading || deleting}
+                  >
+                    {fileLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <FileText className="h-4 w-4 mr-2" />
+                    )}
+                    View submitted file
+                  </Button>
+                    {ownOfficeRecord?.id && (currentUser?.supabase_id === ownOfficeRecord.employeeId || String(currentUser?.id) === String(ownOfficeRecord.employeeId)) && ownOfficeRecord.status !== 'approved' && (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="ml-2"
+                        onClick={async () => {
+                          if (!confirm('Delete this submitted document? This will remove the submission and allow re-upload.')) return;
+                          setDeleting(true);
+                          try {
+                            await clearanceService.deleteDocument(ownOfficeRecord.id as string);
+                            const data = await clearanceService.getClearances();
+                            setRecords(data);
+                            toast({ title: 'Deleted', description: 'Document removed. You may upload again.', type: 'info' });
+                          } catch (err) {
+                            toast({ title: 'Delete Failed', description: err instanceof Error ? err.message : 'Unable to delete document', type: 'error' });
+                          } finally {
+                            setDeleting(false);
+                          }
+                        }}
+                        disabled={fileLoading || deleting}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" /> Delete
+                      </Button>
+                    )}
+                  {fileError && <p className="text-sm text-rose-600 mt-2">{fileError}</p>}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -284,16 +354,27 @@ export default function OfficeClearanceDetailPage() {
             <CardContent className="space-y-3">
               <Input
                 type="file"
+                multiple
                 onChange={(event) => {
-                  setSelectedDocumentFile(event.target.files?.[0] || null);
+                  const files = event.target.files ? Array.from(event.target.files) : [];
+                  setSelectedDocumentFiles(files);
                   if (documentError) setDocumentError('');
                 }}
               />
               <p className="text-xs text-slate-500">Attach a file that matches the selected office requirement before submitting.</p>
               {documentError && <p className="text-sm text-rose-600">{documentError}</p>}
-              <Button onClick={() => void handleSubmitDocument()} className="bg-red-600 hover:bg-red-700">
+              <Button
+                onClick={() => void handleSubmitDocument()}
+                disabled={!canSubmitDocument}
+                className="bg-red-600 hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
                 <UploadCloud className="mr-2 h-4 w-4" /> Submit Document
               </Button>
+              {!canSubmitDocument && (
+                <p className="text-sm text-slate-500">
+                  A clearance record already exists for this office. Please wait for review or contact the administrator if you need to upload again.
+                </p>
+              )}
               <div className="space-y-2">
                 {officeState.documents.length === 0 ? (
                   <p className="text-sm text-slate-500">No local submissions yet.</p>

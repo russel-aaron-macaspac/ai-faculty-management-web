@@ -70,12 +70,13 @@ export async function GET(request) {
     if (error) {
       console.error("[CLEARANCES GET ERROR]", error);
       return NextResponse.json(
-        { error: "Failed to fetch clearances" },
+        { error: "Failed to fetch clearances", details: error },
         { status: 500 }
       );
     }
 
-    const formatted = data.map(formatRow);
+    console.log("[CLEARANCES GET SUCCESS] Fetched", data?.length ?? 0, "clearances");
+    const formatted = (data || []).map(formatRow);
 
     return NextResponse.json({ data: formatted });
   } catch (err) {
@@ -87,11 +88,214 @@ export async function GET(request) {
   }
 }
 
+function isDuplicateClearanceError(error) {
+  return (
+    error?.code === "23505" ||
+    error?.message?.includes("duplicate key") ||
+    error?.details?.includes("duplicate key")
+  );
+}
+
+async function fetchExistingClearance(supabase, user_id, office_id) {
+  return supabase
+    .from("clearances")
+    .select(SELECT_FIELDS)
+    .eq("user_id", user_id)
+    .eq("office_id", office_id)
+    .single();
+}
+
+async function refreshRejectedClearance(supabase, existing, original_filename, file_path) {
+  return supabase
+    .from("clearances")
+    .update({
+      original_filename: original_filename ?? null,
+      file_path: file_path ?? null,
+      status: "pending",
+      submitted_at: new Date().toISOString(),
+      rejection_reason: null,
+    })
+    .eq("document_id", existing.document_id)
+    .select(SELECT_FIELDS)
+    .single();
+}
+
+async function handleClearanceInsertError(
+  supabase,
+  error,
+  user_id,
+  office_id,
+  original_filename,
+  file_path
+) {
+  console.error("[POST /api/clearances]", error);
+
+  if (!isDuplicateClearanceError(error)) {
+    return NextResponse.json(
+      { error: "Failed to create clearance record", details: error.message ?? error },
+      { status: 500 }
+    );
+  }
+
+  const { data: existing, error: existingError } = await fetchExistingClearance(
+    supabase,
+    user_id,
+    office_id
+  );
+
+  if (existingError || !existing) {
+    return NextResponse.json(
+      { error: "Failed to create clearance record", details: error.message ?? error },
+      { status: 500 }
+    );
+  }
+  // If the existing record was rejected/expired, refresh it with the new upload
+  if (existing.status === "rejected" || existing.status === "expired") {
+    const { data: updated, error: updateError } = await refreshRejectedClearance(
+      supabase,
+      existing,
+      original_filename,
+      file_path
+    );
+
+    if (updateError || !updated) {
+      return NextResponse.json(
+        { error: "Failed to resubmit clearance record", details: updateError?.message ?? updateError },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ data: formatRow(updated) });
+  }
+  // If the existing record has no file (file_path missing) or the stored file cannot be found,
+  // allow replacing it by updating the existing record to point to the newly uploaded file.
+  try {
+    const hasFilePath = !!existing.file_path;
+    let storageMissing = false;
+
+    if (hasFilePath) {
+      // Try to download the existing file to check existence. If it fails, treat as missing.
+      const { data: downloadData, error: downloadError } = await supabase.storage
+        .from('clearance-files')
+        .download(existing.file_path);
+
+      if (downloadError) {
+        storageMissing = true;
+      }
+    }
+
+    if (!hasFilePath || storageMissing) {
+      const { data: updated, error: updateError } = await refreshRejectedClearance(
+        supabase,
+        existing,
+        original_filename,
+        file_path
+      );
+
+      if (updateError || !updated) {
+        return NextResponse.json(
+          { error: "Failed to replace existing clearance record", details: updateError?.message ?? updateError },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({ data: formatRow(updated) });
+    }
+  } catch (checkErr) {
+    console.error('[POST /api/clearances] Error checking existing file presence:', checkErr);
+    // Fall through to the default conflict response below.
+  }
+
+  return NextResponse.json(
+    { error: "A clearance record for this office already exists. Please wait for review or contact the administrator if you need to upload again.", details: existing.status },
+    { status: 409 }
+  );
+}
+
 export async function POST(req) {
   try {
     const supabase = createSupabaseAdminClient();
+
+    // If request has form data (files), handle multiple file uploads first
+    const contentType = req.headers.get('content-type') || '';
+    if (contentType.includes('multipart/form-data')) {
+      const form = await req.formData();
+      const user_id = form.get('user_id');
+      const office_id = form.get('office_id');
+
+      if (!user_id || !office_id) {
+        return NextResponse.json({ error: 'Missing user_id or office_id' }, { status: 400 });
+      }
+
+      const files = form.getAll('files');
+      if (!files || files.length === 0) {
+        return NextResponse.json({ error: 'No files provided' }, { status: 400 });
+      }
+
+      const results = [];
+      for (const f of files) {
+        try {
+          // `f` is a File/Blob-like object
+          const arrayBuffer = await f.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          const safeName = (f.name || 'upload').replace(/[^a-zA-Z0-9.\-_]/g, '_');
+          const destPath = `uploads/clearances/${String(user_id)}/${Date.now()}-${Math.random().toString(36).slice(2,8)}-${safeName}`;
+
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('clearance-files')
+            .upload(destPath, buffer, { contentType: f.type || 'application/octet-stream' });
+
+          if (uploadError) {
+            console.error('[CLEARANCES UPLOAD ERROR]', uploadError);
+            results.push({ success: false, error: uploadError.message ?? uploadError });
+            continue;
+          }
+
+          // Insert clearance record for this uploaded file
+          const { data, error } = await supabase
+            .from('clearances')
+            .insert([
+              {
+                user_id: String(user_id),
+                office_id: Number(office_id),
+                original_filename: f.name ?? null,
+                file_path: destPath,
+                status: 'pending',
+                submitted_at: new Date().toISOString(),
+              },
+            ])
+            .select(SELECT_FIELDS)
+            .maybeSingle();
+
+          if (error) {
+            // Try to handle duplicate or other insert errors gracefully
+            const resp = await handleClearanceInsertError(
+              supabase,
+              error,
+              String(user_id),
+              Number(office_id),
+              f.name,
+              destPath
+            );
+
+            // If the error handler returned a response, push that as result
+            results.push({ success: resp?.data ? true : false, data: resp?.data ?? null, error: resp?.error ?? null });
+            continue;
+          }
+
+          results.push({ success: true, data });
+        } catch (err) {
+          console.error('[POST /api/clearances] File processing error:', err);
+          results.push({ success: false, error: err instanceof Error ? err.message : String(err) });
+        }
+      }
+
+      return NextResponse.json({ results });
+    }
+
+    // Otherwise parse JSON body for single-record submissions
     const body = await req.json();
-    const { user_id, office_id, original_filename, file_path } = body;
+    const { user_id, office_id, original_filename, file_path } = body || {};
 
     if (!user_id || !office_id) {
       return NextResponse.json(
@@ -116,10 +320,13 @@ export async function POST(req) {
       .single();
 
     if (error) {
-      console.error("[POST /api/clearances]", error.message);
-      return NextResponse.json(
-        { error: "Failed to create clearance record" },
-        { status: 500 }
+      return await handleClearanceInsertError(
+        supabase,
+        error,
+        user_id,
+        office_id,
+        original_filename,
+        file_path
       );
     }
 

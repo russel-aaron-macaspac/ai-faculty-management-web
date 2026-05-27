@@ -1,24 +1,34 @@
 'use client';
 
+import { RouteGuard } from '@/components/RouteGuard';
 import { useEffect, useState } from 'react';
 import { StatCard } from '@/components/dashboard/StatCards';
 import { AIAlerts } from '@/components/dashboard/AIAlerts';
 import { AttendanceSummary } from '@/components/dashboard/AttendanceSummary';
-import { Users, UserSquare2, CalendarDays, FileCheck2 } from 'lucide-react';
+import { Users, CalendarDays, FileCheck2, BarChart3 } from 'lucide-react';
 import { User } from '@/types/user';
 import { facultyService } from '@/services/facultyService';
 import { scheduleService } from '@/services/scheduleService';
 import { clearanceService } from '@/services/clearanceService';
+import { parseTimeToMinutes } from '@/lib/timeUtils';
 
 export default function AdminDashboardPage() {
   useEffect(() => {
   document.title = 'DomStaX | Admin Dashboard';
 }, []);
+  return (
+    <RouteGuard requiredRoles={['admin']} fallbackPath="/dashboard/faculty">
+      <AdminDashboardContent />
+    </RouteGuard>
+  );
+}
+
+function AdminDashboardContent() {
   const [user, setUser] = useState<User | null>(null);
   const [facultyCount, setFacultyCount] = useState<number | null>(null);
-  const [staffCount, setStaffCount] = useState<number | null>(null);
   const [activeClasses, setActiveClasses] = useState<number | null>(null);
   const [clearanceCompletion, setClearanceCompletion] = useState<{ percent: number; pending: number } | null>(null);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number | null>(null);
 
   useEffect(() => {
     const userStr = localStorage.getItem('user');
@@ -28,31 +38,29 @@ export default function AdminDashboardPage() {
     }
   }, []);
 
-  const mockAlerts: any[] = [];
-
   useEffect(() => {
     const loadKPIs = async () => {
       try {
         const faculties = await facultyService.getFaculty();
         setFacultyCount(faculties.length);
 
-        // staff count isn't modeled explicitly; keep as placeholder
-        setStaffCount(null);
-
         const schedules = await scheduleService.getSchedules();
         const now = new Date();
         const nowMinutes = now.getHours() * 60 + now.getMinutes();
         const active = schedules.filter((s) => {
-          const parse = (t?: string) => {
-            if (!t) return null;
-            const [hh, mm] = t.split(':').map(Number);
-            return hh * 60 + mm;
-          };
-          const start = parse(s.startTime);
-          const end = parse(s.endTime);
+          const start = parseTimeToMinutes(s.startTime);
+          const end = parseTimeToMinutes(s.endTime);
           return start !== null && end !== null && start <= nowMinutes && nowMinutes <= end;
         }).length;
         setActiveClasses(active);
+
+        try {
+          const pendingApprovals = await scheduleService.getPendingApprovals('admin');
+          setPendingApprovalsCount(pendingApprovals.length);
+        } catch (err) {
+          console.warn('[ADMIN DASHBOARD] Failed to load pending approvals', err);
+          setPendingApprovalsCount(null);
+        }
 
         const clearances = await clearanceService.getClearances();
         const pending = clearances.filter((c: any) => c.status === 'submitted' || c.status === 'pending').length;
@@ -60,7 +68,7 @@ export default function AdminDashboardPage() {
         const percent = Math.round(((total - pending) / total) * 100);
         setClearanceCompletion({ percent, pending });
       } catch (e) {
-        // ignore failures; show placeholders
+        console.error('[ADMIN DASHBOARD] Failed to load dashboard KPIs', e);
       }
     };
 
@@ -90,10 +98,10 @@ export default function AdminDashboardPage() {
 
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-  <StatCard title="Total Faculty" value={facultyCount ?? '...'} description={undefined} icon={Users} trend={facultyCount ? 'up' : undefined} trendValue={facultyCount ? `${facultyCount}` : undefined} href="/faculty" />
-  <StatCard title="Total Staff" value={staffCount ?? '...'} icon={UserSquare2} trend={staffCount ? 'neutral' : undefined} trendValue={staffCount ? `${staffCount}` : undefined} href="/staff" />
-  <StatCard title="Active Classes" value={activeClasses ?? '...'} description="Happening right now" icon={CalendarDays} trend={activeClasses ? 'up' : undefined} trendValue={activeClasses ? `${activeClasses}` : undefined} href="/schedules" />
-  <StatCard title="Clearance Completion" value={clearanceCompletion ? `${clearanceCompletion.percent}%` : '...'} description={clearanceCompletion ? `Pending: ${clearanceCompletion.pending}` : undefined} icon={FileCheck2} trend="up" trendValue={clearanceCompletion ? `${clearanceCompletion.percent}%` : undefined} href="/clearance" />
+        <StatCard title="Total Faculty" value={facultyCount ?? '...'} description={facultyCount == null ? undefined : 'Active faculty records'} icon={Users} href="/faculty" />
+        <StatCard title="Active Classes" value={activeClasses ?? '...'} description="Happening right now" icon={CalendarDays} href="/schedules" />
+        <StatCard title="Clearance Completion" value={clearanceCompletion ? `${clearanceCompletion.percent}%` : '...'} description={clearanceCompletion ? `Pending: ${clearanceCompletion.pending}` : undefined} icon={FileCheck2} href="/clearance" />
+        <StatCard title="Reports" value="View" description="Reports & Analytics" icon={BarChart3} href="/reports" />
       </div>
 
       <div className="grid gap-6 md:grid-cols-7">
@@ -103,12 +111,12 @@ export default function AdminDashboardPage() {
           
           <div className="grid gap-6 md:grid-cols-2">
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-              <h3 className="font-semibold text-slate-800 mb-4">Upcoming Schedule conflicts</h3>
-              <div className="text-sm text-slate-500">See AI Alerts for automated resolutions.</div>
+              <h3 className="font-semibold text-slate-800 mb-4">Pending Schedule Approvals</h3>
+              <div className="text-sm text-slate-500">{pendingApprovalsCount == null ? 'Loading schedule data...' : `${pendingApprovalsCount} schedules await admin review.`}</div>
             </div>
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
               <h3 className="font-semibold text-slate-800 mb-4">Pending Clearances</h3>
-              <div className="text-sm text-slate-500">15 documents require admin review.</div>
+              <div className="text-sm text-slate-500">{clearanceCompletion ? `${clearanceCompletion.pending} documents require admin review.` : 'Loading clearance data...'}</div>
             </div>
           </div>
         </div>

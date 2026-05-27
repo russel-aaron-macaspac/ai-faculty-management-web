@@ -5,14 +5,15 @@ import { facultyService } from '@/services/facultyService';
 import { Faculty } from '@/types/faculty';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Pencil, Trash2, Loader2, Search } from 'lucide-react';
+import { Pencil, Trash2, Loader2, Search } from 'lucide-react';
+import { toast } from '@/lib/toast';
 
 const facultySchema = z.object({
   fullName: z.string().trim().min(1, { message: 'Enter the faculty member’s full name.' }).min(2, { message: 'Full name should include at least 2 characters.' }),
@@ -23,8 +24,6 @@ const facultySchema = z.object({
     .refine((value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value), {
       message: 'Enter a valid email address.',
     }),
-  department: z.string().trim().min(1, { message: 'Enter the faculty department.' }).min(2, { message: 'Department should include at least 2 characters.' }),
-  phone: z.string().trim().min(1, { message: 'Enter a contact number.' }).min(5, { message: 'Contact number should include at least 5 characters.' }),
   status: z.enum(['active', 'on_leave', 'inactive']),
 });
 
@@ -44,8 +43,6 @@ export default function FacultyPage() {
     defaultValues: {
       fullName: '',
       email: '',
-      department: '',
-      phone: '',
       status: 'active',
     },
   });
@@ -68,11 +65,15 @@ export default function FacultyPage() {
     try {
       if (editingId) {
         await facultyService.updateFaculty(editingId, values);
+  toast({ title: 'Faculty Updated', description: 'Faculty record saved successfully.', type: 'success' });
       } else {
         await facultyService.createFaculty(values);
+  toast({ title: 'Faculty Created', description: 'New faculty record added.', type: 'success' });
       }
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'Unable to save this faculty record. Please review the form and try again.');
+      const msg = error instanceof Error ? error.message : 'Unable to save this faculty record. Please review the form and try again.';
+      setFormError(msg);
+  toast({ title: 'Save Failed', description: msg, type: 'error' });
       return;
     }
 
@@ -87,8 +88,6 @@ export default function FacultyPage() {
     form.reset({
       fullName: f.fullName,
       email: f.email,
-      department: f.department,
-      phone: f.phone,
       status: f.status,
     });
     setIsAddOpen(true);
@@ -96,14 +95,19 @@ export default function FacultyPage() {
 
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this faculty member?')) {
-      await facultyService.deleteFaculty(id);
+      try {
+        await facultyService.deleteFaculty(id);
+  toast({ title: 'Deleted', description: 'Faculty record deleted.', type: 'info' });
+      } catch (err) {
+  toast({ title: 'Delete Failed', description: err instanceof Error ? err.message : 'Failed to delete faculty.', type: 'error' });
+      }
       loadData();
     }
   };
 
   const filtered = faculty.filter(f => 
     f.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    f.department.toLowerCase().includes(searchTerm.toLowerCase())
+    (f.email || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -119,7 +123,7 @@ export default function FacultyPage() {
           if (!open) {
              setEditingId(null);
              setFormError(null);
-             form.reset({ fullName: '', email: '', department: '', phone: '', status: 'active' });
+             form.reset({ fullName: '', email: '', status: 'active' });
           }
         }}>
            <DialogTrigger className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md font-medium flex items-center gap-2">
@@ -142,12 +146,6 @@ export default function FacultyPage() {
                 )} />
                 <FormField control={form.control} name="email" render={({ field }) => (
                   <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>
-                )} />
-                <FormField control={form.control} name="department" render={({ field }) => (
-                  <FormItem><FormLabel>Department</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                )} />
-                <FormField control={form.control} name="phone" render={({ field }) => (
-                  <FormItem><FormLabel>Phone</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
                 <FormField control={form.control} name="status" render={({ field }) => (
                   <FormItem>
@@ -181,7 +179,7 @@ export default function FacultyPage() {
         <div className="p-4 border-b border-slate-100 flex items-center gap-2">
            <Search className="h-5 w-5 text-slate-400" />
            <Input 
-             placeholder="Search faculty by name or department..." 
+             placeholder="Search faculty by name or email..." 
              className="hidden md:block max-w-sm border-0 focus-visible:ring-0 px-0"
              value={searchTerm}
              onChange={(e) => setSearchTerm(e.target.value)}
@@ -191,19 +189,18 @@ export default function FacultyPage() {
         <Table>
           <TableHeader>
             <TableRow className="bg-slate-50">
-              <TableHead>Instructor</TableHead>
-              <TableHead className="hidden md:table-cell">Contact</TableHead>
-              <TableHead>Department</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
+                <TableHead>Instructor</TableHead>
+                <TableHead className="hidden md:table-cell">Email</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
           </TableHeader>
           <TableBody>
             {(() => {
               if (loading) {
                 return (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-10 text-slate-500">
+                    <TableCell colSpan={4} className="text-center py-10 text-slate-500">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-red-500" />
                       Loading faculty data...
                     </TableCell>
@@ -214,7 +211,7 @@ export default function FacultyPage() {
               if (filtered.length === 0) {
                 return (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-10 text-slate-500">
+                    <TableCell colSpan={4} className="text-center py-10 text-slate-500">
                       No faculty members found.
                     </TableCell>
                   </TableRow>
@@ -239,7 +236,6 @@ export default function FacultyPage() {
                   <div className="text-sm">{f.email}</div>
                   <div className="text-xs text-slate-500">{f.phone}</div>
                 </TableCell>
-                <TableCell>{f.department}</TableCell>
                 <TableCell>
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${statusClassName}`}>
                     {f.status.replace('_', ' ')}

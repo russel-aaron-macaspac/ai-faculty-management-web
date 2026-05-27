@@ -12,6 +12,18 @@ interface CreateSchedulePayload {
   creatorRole: string;
 }
 
+interface UpdateSchedulePayload {
+  actorId: string;
+  actorRole: string;
+  facultyId: string;
+  section?: string;
+  subjectId: string;
+  roomId: string;
+  day: string;
+  startTime: string;
+  endTime: string;
+}
+
 interface SubjectPayload {
   code: string;
   name: string;
@@ -88,6 +100,36 @@ export const scheduleService = {
 
     const data = await res.json();
     return { success: true, id: data.id as string };
+  },
+
+  async updateSchedule(scheduleId: string, values: UpdateSchedulePayload) {
+    const res = await fetch(`/api/scheduling/${scheduleId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(values),
+    });
+
+    if (!res.ok) {
+      const { error } = await res.json();
+      throw new Error(error ?? 'Failed to update schedule');
+    }
+
+    return res.json();
+  },
+
+  async deleteSchedule(scheduleId: string, values: { actorId: string; actorRole: string }) {
+    const res = await fetch(`/api/scheduling/${scheduleId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(values),
+    });
+
+    if (!res.ok) {
+      const { error } = await res.json();
+      throw new Error(error ?? 'Failed to delete schedule');
+    }
+
+    return res.json();
   },
 
   async getFacultyAvailability(facultyId: string): Promise<FacultyAvailability[]> {

@@ -1,5 +1,6 @@
 'use client';
 
+import { RouteGuard } from '@/components/RouteGuard';
 import { useEffect, useMemo, useState } from 'react';
 import { StatCard } from '@/components/dashboard/StatCards';
 import { AIAlerts } from '@/components/dashboard/AIAlerts';
@@ -15,6 +16,14 @@ export default function FacultyDashboardPage() {
   useEffect(() => {
   document.title = 'DomStaX | Faculty Dashboard';
 }, []);
+  return (
+    <RouteGuard requiredRoles={['faculty', 'program_chair', 'admin']} fallbackPath="/login">
+      <FacultyDashboardContent />
+    </RouteGuard>
+  );
+}
+
+function FacultyDashboardContent() {
   const [user, setUser] = useState<User | null>(null);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
 

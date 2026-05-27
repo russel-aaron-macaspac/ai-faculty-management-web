@@ -5,6 +5,7 @@ export type UserStatus = "active" | "inactive" | "on_leave" | "resigned";
 
 export interface AuthUser {
   id: number;
+  supabase_id?: string;
   email: string;
   role: UserRole;
   full_name: string;
