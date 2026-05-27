@@ -18,7 +18,7 @@ export async function POST(request) {
 
     const { data: user, error: userError } = await supabase
       .from("users")
-      .select("user_id, email, role, first_name, middle_name, last_name, password_hash, status, phone_number, address")
+      .select("user_id, supabase_id, email, role, first_name, middle_name, last_name, password_hash, status, phone_number, address")
       .eq("email", email)
       .eq("status", "active")
       .single();
@@ -59,6 +59,7 @@ export async function POST(request) {
     return NextResponse.json({
       user: {
         id: user.user_id,
+        supabase_id: user.supabase_id,
         email: user.email,
         role: frontendRole,
         full_name: fullName,

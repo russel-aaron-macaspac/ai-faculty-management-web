@@ -11,6 +11,7 @@ export const normalize = (value: string): string =>
  */
 export type StoredUser = {
   id?: string | number;
+  supabase_id?: string;
   role?: string;
   name?: string;
   full_name?: string;

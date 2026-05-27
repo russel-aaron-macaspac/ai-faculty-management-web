@@ -83,6 +83,8 @@ export default function OfficeClearanceDetailPage() {
   const [validationResult, setValidationResult] = useState<DocumentValidationResult | null>(null);
   const [documentError, setDocumentError] = useState('');
   const [ocrError, setOcrError] = useState('');
+  const [fileLoading, setFileLoading] = useState(false);
+  const [fileError, setFileError] = useState('');
 
   const officeData = useMemo(() => {
     if (!officeName || offices.length === 0) return null;
@@ -93,6 +95,24 @@ export default function OfficeClearanceDetailPage() {
 
   const handleOCRDocumentTypeChange = (value: string | null) => {
     setSelectedOCRDocumentType(value ?? DOCUMENT_TYPES[0]);
+  };
+
+  const handleOpenFile = async (path: string) => {
+    setFileError('');
+    if (!path) {
+      setFileError('No file available');
+      return;
+    }
+    setFileLoading(true);
+    try {
+      const url = await clearanceService.getFileUrl(path);
+      if (url) window.open(url, '_blank');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to open file';
+      setFileError(msg);
+    } finally {
+      setFileLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -138,6 +158,11 @@ export default function OfficeClearanceDetailPage() {
     });
   }, [records, currentUser, officeName]);
 
+  const canSubmitDocument =
+    !ownOfficeRecord ||
+    ownOfficeRecord.status === 'rejected' ||
+    ownOfficeRecord.status === 'expired';
+
   const saveLocalState = (nextState: OfficeLocalState) => {
     localStorage.setItem(storageKey, JSON.stringify(nextState));
     setOfficeState(nextState);
@@ -154,9 +179,9 @@ export default function OfficeClearanceDetailPage() {
       return;
     }
 
-    const userId = currentUser?.id ? String(currentUser.id) : '';
+    const userId = currentUser?.supabase_id ?? '';
     if (!userId) {
-      setDocumentError('Your user ID is missing. Please log in again.');
+      setDocumentError('Your record is missing the Supabase user UUID. Please log out and sign in again.');
       return;
     }
 
@@ -261,6 +286,24 @@ export default function OfficeClearanceDetailPage() {
                   {ownOfficeRecord.validationWarning}
                 </p>
               )}
+              {ownOfficeRecord?.filePath && (
+                <div className="mt-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void handleOpenFile(ownOfficeRecord.filePath as string)}
+                    disabled={fileLoading}
+                  >
+                    {fileLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <FileText className="h-4 w-4 mr-2" />
+                    )}
+                    View submitted file
+                  </Button>
+                  {fileError && <p className="text-sm text-rose-600 mt-2">{fileError}</p>}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -291,9 +334,18 @@ export default function OfficeClearanceDetailPage() {
               />
               <p className="text-xs text-slate-500">Attach a file that matches the selected office requirement before submitting.</p>
               {documentError && <p className="text-sm text-rose-600">{documentError}</p>}
-              <Button onClick={() => void handleSubmitDocument()} className="bg-red-600 hover:bg-red-700">
+              <Button
+                onClick={() => void handleSubmitDocument()}
+                disabled={!canSubmitDocument}
+                className="bg-red-600 hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
                 <UploadCloud className="mr-2 h-4 w-4" /> Submit Document
               </Button>
+              {!canSubmitDocument && (
+                <p className="text-sm text-slate-500">
+                  A clearance record already exists for this office. Please wait for review or contact the administrator if you need to upload again.
+                </p>
+              )}
               <div className="space-y-2">
                 {officeState.documents.length === 0 ? (
                   <p className="text-sm text-slate-500">No local submissions yet.</p>

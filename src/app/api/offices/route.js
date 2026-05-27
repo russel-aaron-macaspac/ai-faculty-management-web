@@ -14,12 +14,14 @@ export async function GET() {
     if (error) {
       console.error("[OFFICES GET ERROR]", error);
       return NextResponse.json(
-        { error: "Failed to fetch offices" },
+        { error: "Failed to fetch offices", details: error },
         { status: 500 }
       );
     }
 
-    const formatted = data.map((o) => ({
+    console.log("[OFFICES GET SUCCESS] Fetched", data?.length ?? 0, "offices");
+
+    const formatted = (data || []).map((o) => ({
       id:          String(o.office_id),
       name:        o.name,
       description: o.description ?? "",
@@ -31,7 +33,7 @@ export async function GET() {
   } catch (err) {
     console.error("[OFFICES GET ERROR]", err);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Internal server error", details: String(err) },
       { status: 500 }
     );
   }

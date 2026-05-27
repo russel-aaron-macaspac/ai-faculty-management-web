@@ -82,9 +82,9 @@ export default function ClearancePage() {
       return;
     }
 
-    const employeeId = currentUser?.id ? String(currentUser.id) : '';
+    const employeeId = currentUser?.supabase_id ?? '';
     if (!employeeId) {
-      setUploadError('Your account is missing a user ID. Please log in again.');
+      setUploadError('Your account is missing the Supabase user UUID. Please log out and sign in again.');
       return;
     }
 

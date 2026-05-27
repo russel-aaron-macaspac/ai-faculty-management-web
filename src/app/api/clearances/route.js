@@ -70,12 +70,13 @@ export async function GET(request) {
     if (error) {
       console.error("[CLEARANCES GET ERROR]", error);
       return NextResponse.json(
-        { error: "Failed to fetch clearances" },
+        { error: "Failed to fetch clearances", details: error },
         { status: 500 }
       );
     }
 
-    const formatted = data.map(formatRow);
+    console.log("[CLEARANCES GET SUCCESS] Fetched", data?.length ?? 0, "clearances");
+    const formatted = (data || []).map(formatRow);
 
     return NextResponse.json({ data: formatted });
   } catch (err) {
@@ -85,6 +86,92 @@ export async function GET(request) {
       { status: 500 }
     );
   }
+}
+
+function isDuplicateClearanceError(error) {
+  return (
+    error?.code === "23505" ||
+    error?.message?.includes("duplicate key") ||
+    error?.details?.includes("duplicate key")
+  );
+}
+
+async function fetchExistingClearance(supabase, user_id, office_id) {
+  return supabase
+    .from("clearances")
+    .select(SELECT_FIELDS)
+    .eq("user_id", user_id)
+    .eq("office_id", office_id)
+    .single();
+}
+
+async function refreshRejectedClearance(supabase, existing, original_filename, file_path) {
+  return supabase
+    .from("clearances")
+    .update({
+      original_filename: original_filename ?? null,
+      file_path: file_path ?? null,
+      status: "pending",
+      submitted_at: new Date().toISOString(),
+      rejection_reason: null,
+    })
+    .eq("document_id", existing.document_id)
+    .select(SELECT_FIELDS)
+    .single();
+}
+
+async function handleClearanceInsertError(
+  supabase,
+  error,
+  user_id,
+  office_id,
+  original_filename,
+  file_path
+) {
+  console.error("[POST /api/clearances]", error);
+
+  if (!isDuplicateClearanceError(error)) {
+    return NextResponse.json(
+      { error: "Failed to create clearance record", details: error.message ?? error },
+      { status: 500 }
+    );
+  }
+
+  const { data: existing, error: existingError } = await fetchExistingClearance(
+    supabase,
+    user_id,
+    office_id
+  );
+
+  if (existingError || !existing) {
+    return NextResponse.json(
+      { error: "Failed to create clearance record", details: error.message ?? error },
+      { status: 500 }
+    );
+  }
+
+  if (existing.status === "rejected" || existing.status === "expired") {
+    const { data: updated, error: updateError } = await refreshRejectedClearance(
+      supabase,
+      existing,
+      original_filename,
+      file_path
+    );
+
+    if (updateError || !updated) {
+      return NextResponse.json(
+        { error: "Failed to resubmit clearance record", details: updateError?.message ?? updateError },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ data: formatRow(updated) });
+  }
+
+  return NextResponse.json(
+    { error: "A clearance record for this office already exists.", details: existing.status },
+    { status: 409 }
+  );
 }
 
 export async function POST(req) {
@@ -116,10 +203,13 @@ export async function POST(req) {
       .single();
 
     if (error) {
-      console.error("[POST /api/clearances]", error.message);
-      return NextResponse.json(
-        { error: "Failed to create clearance record" },
-        { status: 500 }
+      return await handleClearanceInsertError(
+        supabase,
+        error,
+        user_id,
+        office_id,
+        original_filename,
+        file_path
       );
     }
 
