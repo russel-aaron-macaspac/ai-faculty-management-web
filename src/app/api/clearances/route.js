@@ -177,8 +177,87 @@ async function handleClearanceInsertError(
 export async function POST(req) {
   try {
     const supabase = createSupabaseAdminClient();
+
+    // If request has form data (files), handle multiple file uploads first
+    const contentType = req.headers.get('content-type') || '';
+    if (contentType.includes('multipart/form-data')) {
+      const form = await req.formData();
+      const user_id = form.get('user_id');
+      const office_id = form.get('office_id');
+
+      if (!user_id || !office_id) {
+        return NextResponse.json({ error: 'Missing user_id or office_id' }, { status: 400 });
+      }
+
+      const files = form.getAll('files');
+      if (!files || files.length === 0) {
+        return NextResponse.json({ error: 'No files provided' }, { status: 400 });
+      }
+
+      const results = [];
+      for (const f of files) {
+        try {
+          // `f` is a File/Blob-like object
+          const arrayBuffer = await f.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          const safeName = (f.name || 'upload').replace(/[^a-zA-Z0-9.\-_]/g, '_');
+          const destPath = `uploads/clearances/${String(user_id)}/${Date.now()}-${Math.random().toString(36).slice(2,8)}-${safeName}`;
+
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('clearance-files')
+            .upload(destPath, buffer, { contentType: f.type || 'application/octet-stream' });
+
+          if (uploadError) {
+            console.error('[CLEARANCES UPLOAD ERROR]', uploadError);
+            results.push({ success: false, error: uploadError.message ?? uploadError });
+            continue;
+          }
+
+          // Insert clearance record for this uploaded file
+          const { data, error } = await supabase
+            .from('clearances')
+            .insert([
+              {
+                user_id: String(user_id),
+                office_id: Number(office_id),
+                original_filename: f.name ?? null,
+                file_path: destPath,
+                status: 'pending',
+                submitted_at: new Date().toISOString(),
+              },
+            ])
+            .select(SELECT_FIELDS)
+            .maybeSingle();
+
+          if (error) {
+            // Try to handle duplicate or other insert errors gracefully
+            const resp = await handleClearanceInsertError(
+              supabase,
+              error,
+              String(user_id),
+              Number(office_id),
+              f.name,
+              destPath
+            );
+
+            // If the error handler returned a response, push that as result
+            results.push({ success: resp?.data ? true : false, data: resp?.data ?? null, error: resp?.error ?? null });
+            continue;
+          }
+
+          results.push({ success: true, data });
+        } catch (err) {
+          console.error('[POST /api/clearances] File processing error:', err);
+          results.push({ success: false, error: err instanceof Error ? err.message : String(err) });
+        }
+      }
+
+      return NextResponse.json({ results });
+    }
+
+    // Otherwise parse JSON body for single-record submissions
     const body = await req.json();
-    const { user_id, office_id, original_filename, file_path } = body;
+    const { user_id, office_id, original_filename, file_path } = body || {};
 
     if (!user_id || !office_id) {
       return NextResponse.json(

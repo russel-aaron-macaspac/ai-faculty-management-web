@@ -66,6 +66,39 @@ export const clearanceService = {
     return json;
   },
 
+  async uploadDocuments(userId: string, officeId: number, files: File[] | FileList) {
+    const formData = new FormData();
+    formData.append('user_id', userId);
+    formData.append('office_id', String(officeId));
+
+    const fileArray = Array.from(files || []);
+    if (fileArray.length === 0) {
+      throw new Error('No files to upload');
+    }
+
+    fileArray.forEach((f) => {
+      formData.append('files', f, f.name);
+    });
+
+    const res = await fetch('/api/clearances', {
+      method: 'POST',
+      body: formData,
+    });
+
+    const text = await res.text();
+    const json = text ? JSON.parse(text) : {};
+
+    if (!res.ok) {
+      const errorMessage = json?.error
+        ? `${json.error}${json?.details ? `: ${json.details}` : ''}`
+        : `Failed to upload documents (${res.status})`;
+      console.warn('[clearanceService.uploadDocuments] Status:', res.status, 'Response:', json);
+      throw new Error(errorMessage);
+    }
+
+    return json;
+  },
+
   async getFileUrl(path: string): Promise<string> {
     const res = await fetch(`/api/clearances/file?path=${encodeURIComponent(path)}`);
     const json = await res.json();

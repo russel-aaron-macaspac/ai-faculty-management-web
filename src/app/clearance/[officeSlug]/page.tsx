@@ -76,7 +76,7 @@ export default function OfficeClearanceDetailPage() {
   const [loading, setLoading] = useState(true);
   const storageKey = `clearance-office-${officeSlug}`;
   const [officeState, setOfficeState] = useState<OfficeLocalState>(() => loadSavedState(storageKey));
-  const [selectedDocumentFile, setSelectedDocumentFile] = useState<File | null>(null);
+  const [selectedDocumentFiles, setSelectedDocumentFiles] = useState<File[]>([]);
   const [selectedOCRFile, setSelectedOCRFile] = useState<File | null>(null);
   const [selectedOCRDocumentType, setSelectedOCRDocumentType] = useState(DOCUMENT_TYPES[0]);
   const [isOCRLoading, setIsOCRLoading] = useState(false);
@@ -173,11 +173,11 @@ export default function OfficeClearanceDetailPage() {
   };
 
   const handleSubmitDocument = async () => {
-    setDocumentError('');
-    if (!selectedDocumentFile) {
-      setDocumentError('Choose a file before submitting the document.');
-      return;
-    }
+      setDocumentError('');
+      if (!selectedDocumentFiles || selectedDocumentFiles.length === 0) {
+        setDocumentError('Choose at least one file before submitting the document.');
+        return;
+      }
 
     const userId = currentUser?.supabase_id ?? '';
     if (!userId) {
@@ -192,18 +192,19 @@ export default function OfficeClearanceDetailPage() {
     }
 
     try {
-      await clearanceService.uploadDocument(
+      await clearanceService.uploadDocuments(
         userId,
         Number(officeData.id),
-        selectedDocumentFile.name,
+        selectedDocumentFiles
       );
 
+      const newDocs = selectedDocumentFiles.map((f) => ({ name: f.name, submittedAt: new Date().toLocaleString() }));
       const nextDocuments = [
-        { name: selectedDocumentFile.name, submittedAt: new Date().toLocaleString() },
+        ...newDocs,
         ...officeState.documents,
       ];
 
-      setSelectedDocumentFile(null);
+      setSelectedDocumentFiles([]);
       setDocumentError('');
       saveLocalState({ ...officeState, documents: nextDocuments });
 
@@ -327,8 +328,10 @@ export default function OfficeClearanceDetailPage() {
             <CardContent className="space-y-3">
               <Input
                 type="file"
+                multiple
                 onChange={(event) => {
-                  setSelectedDocumentFile(event.target.files?.[0] || null);
+                  const files = event.target.files ? Array.from(event.target.files) : [];
+                  setSelectedDocumentFiles(files);
                   if (documentError) setDocumentError('');
                 }}
               />
