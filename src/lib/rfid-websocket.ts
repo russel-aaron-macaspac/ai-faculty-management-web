@@ -31,13 +31,31 @@ export async function registerDevice(socket: any, deviceData: any) {
   let device = activeDevices.get(deviceId);
 
   if (device === undefined) {
-    // Create new device in database
+    // Attempt to resolve a room id from the provided location (if any)
+    let resolvedRoomId: string | null = null;
+    try {
+      const loc = (location || '').trim();
+      if (loc) {
+        const { data: room } = await supabase
+          .from('rooms')
+          .select('id')
+          .ilike('name', `%${loc}%`)
+          .limit(1)
+          .maybeSingle();
+        if (room && room.id) resolvedRoomId = String(room.id);
+      }
+    } catch (err) {
+      console.warn('[REGISTER DEVICE] error resolving room from location', err);
+    }
+
+    // Create new device in database, attaching resolved room if available
     const { data, error } = await supabase
       .from('rfid_devices')
       .insert({
         device_id: deviceId,
         name,
         location,
+        room_id: resolvedRoomId,
         firmware_version,
         status: 'online',
         last_seen: new Date().toISOString(),
@@ -54,14 +72,43 @@ export async function registerDevice(socket: any, deviceData: any) {
     device = data;
   } else {
     // Update device status to online
-    await supabase
-      .from('rfid_devices')
-      .update({
+    // If location was provided, try to resolve room and update mapping as well
+    try {
+      let resolvedRoomId: string | null = null;
+      const loc = (location || '').trim();
+      if (loc) {
+        const { data: room } = await supabase
+          .from('rooms')
+          .select('id')
+          .ilike('name', `%${loc}%`)
+          .limit(1)
+          .maybeSingle();
+        if (room && room.id) resolvedRoomId = String(room.id);
+      }
+
+      const updatePayload: any = {
         status: 'online',
         last_seen: new Date().toISOString(),
         firmware_version,
-      })
-      .eq('device_id', deviceId);
+      };
+
+      if (resolvedRoomId) updatePayload.room_id = resolvedRoomId;
+
+      await supabase
+        .from('rfid_devices')
+        .update(updatePayload)
+        .eq('device_id', deviceId);
+    } catch (err) {
+      console.warn('[REGISTER DEVICE] error updating device with room mapping', err);
+      await supabase
+        .from('rfid_devices')
+        .update({
+          status: 'online',
+          last_seen: new Date().toISOString(),
+          firmware_version,
+        })
+        .eq('device_id', deviceId);
+    }
   }
 
   activeDevices.set(deviceId, {

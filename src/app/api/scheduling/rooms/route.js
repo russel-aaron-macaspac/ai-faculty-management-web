@@ -43,6 +43,28 @@ export async function POST(request) {
       return NextResponse.json({ error: "Failed to create room" }, { status: 500 });
     }
 
+    // Attempt to link any RFID devices that reported this room name as their location
+    try {
+      const roomId = data?.id;
+      if (roomId && name) {
+        // Update devices whose `location` loosely matches the room name and haven't been linked yet
+        const { data: updatedDevices, error: updateError } = await supabase
+          .from('rfid_devices')
+          .update({ room_id: roomId })
+          .ilike('location', `%${name}%`)
+          .is('room_id', null)
+          .select('device_id, room_id');
+
+        if (updateError) {
+          console.warn('[ROOMS POST] failed to attach devices to new room', updateError);
+        } else if (Array.isArray(updatedDevices) && updatedDevices.length) {
+          console.info(`[ROOMS POST] linked ${updatedDevices.length} device(s) to room ${roomId}`);
+        }
+      }
+    } catch (err) {
+      console.warn('[ROOMS POST] error while linking devices to room', err);
+    }
+
     return NextResponse.json({ message: "Room created", data }, { status: 201 });
   } catch (err) {
     console.error("[ROOMS POST ERROR]", err);
