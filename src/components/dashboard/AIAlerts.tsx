@@ -2,6 +2,8 @@ import { Card, CardContent, CardTitle, CardDescription } from '@/components/ui/c
 import { AlertTriangle, Lightbulb, Bell, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { useEffect, useState } from 'react';
+import { toast } from '@/lib/toast';
 
 interface Alert {
   id: string;
@@ -16,6 +18,12 @@ interface AIAlertsProps {
 }
 
 export function AIAlerts({ alerts }: AIAlertsProps) {
+  const [localAlerts, setLocalAlerts] = useState<Alert[]>(alerts || []);
+
+  useEffect(() => {
+    setLocalAlerts(alerts || []);
+  }, [alerts]);
+
   const getIcon = (type: string) => {
     switch (type) {
       case 'warning': return <AlertTriangle className="h-5 w-5 text-rose-500" />;
@@ -49,11 +57,11 @@ export function AIAlerts({ alerts }: AIAlertsProps) {
         </div>
       </div>
       <CardContent className="p-0">
-        {alerts.length === 0 ? (
+        {localAlerts.length === 0 ? (
           <div className="p-6 text-center text-slate-500 text-sm">No insights available right now.</div>
         ) : (
           <div className="divide-y divide-slate-100">
-            {alerts.map((alert) => (
+            {localAlerts.map((alert) => (
               <div key={alert.id} className={cn('p-4 transition-colors hover:bg-slate-50 border-l-4', getBgClass(alert.type).replace('bg-', 'border-l-').split(' ')[0])}>
                 <div className="flex gap-4">
                   <div className="mt-1 flex-shrink-0">
@@ -70,8 +78,35 @@ export function AIAlerts({ alerts }: AIAlertsProps) {
                           {alert.recommendation}
                         </p>
                         <div className="mt-2 flex gap-2">
-                          <Button size="sm" variant="outline" className="h-7 text-xs">Apply Fix</Button>
-                          <Button size="sm" variant="ghost" className="h-7 text-xs text-slate-500">Dismiss</Button>
+                          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={async () => {
+                            // optimistic UI update
+                            setLocalAlerts((prev) => prev.filter((a) => a.id !== alert.id));
+                            try {
+                              await fetch('/api/ai/insights/action', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ id: alert.id, action: 'apply' }),
+                              });
+                              toast({ title: 'Applied suggestion', description: alert.recommendation ?? 'Applied AI suggestion', type: 'success' });
+                            } catch (err) {
+                              setLocalAlerts((prev) => [alert, ...prev]);
+                              toast({ title: 'Failed to apply', description: String(err), type: 'error' });
+                            }
+                          }}>Apply Fix</Button>
+                          <Button size="sm" variant="ghost" className="h-7 text-xs text-slate-500" onClick={async () => {
+                            setLocalAlerts((prev) => prev.filter((a) => a.id !== alert.id));
+                            try {
+                              await fetch('/api/ai/insights/action', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ id: alert.id, action: 'dismiss' }),
+                              });
+                              toast({ title: 'Insight dismissed', type: 'info' });
+                            } catch (err) {
+                              setLocalAlerts((prev) => [alert, ...prev]);
+                              toast({ title: 'Failed to dismiss', description: String(err), type: 'error' });
+                            }
+                          }}>Dismiss</Button>
                         </div>
                       </div>
                     )}
