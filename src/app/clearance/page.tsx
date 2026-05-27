@@ -53,10 +53,13 @@ export default function ClearancePage() {
     return id === undefined ? undefined : String(id);
   };
 
-  const loadData = async (role?: string) => {
+  const loadData = async (userOrRole?: StoredUser | string) => {
     setLoading(true);
+    const role = typeof userOrRole === 'string' ? userOrRole : userOrRole?.role;
+    const user = typeof userOrRole === 'object' ? (userOrRole as StoredUser) : undefined;
     const officeId = isApprovalOfficer(role) ? getOfficeId(role) : undefined;
-    const data = await clearanceService.getClearances(undefined, officeId);
+    const userId = user?.supabase_id ?? (user?.id ? String(user.id) : undefined);
+    const data = await clearanceService.getClearances(userId, officeId);
     setRecords(data || []);
     setLoading(false);
   };
@@ -67,7 +70,7 @@ export default function ClearancePage() {
     try {
       const user = JSON.parse(raw) as StoredUser;
       setCurrentUser(user);
-      void loadData(user.role);
+      void loadData(user);
     } catch {
       // ignore
     }
@@ -93,7 +96,7 @@ export default function ClearancePage() {
       await clearanceService.uploadDocument(employeeId, 0, docName.trim());
       setIsUploadOpen(false);
       setDocName('Safety Training Certificate');
-      void loadData(currentUser?.role);
+      void loadData(currentUser);
   toast({ title: 'Clearance Uploaded', description: 'Document uploaded for review.', type: 'success' });
     } catch (error) {
   const msg = error instanceof Error ? error.message : 'Unable to submit this document. Please try again.';
@@ -196,7 +199,7 @@ export default function ClearancePage() {
     setActionLoadingId(record.id);
     try {
       await clearanceService.updateStatus(record.id, decision, reason);
-      await loadData(currentUser.role);
+      await loadData(currentUser);
   toast({ title: 'Decision Saved', description: `Record ${decision}.`, type: decision === 'approved' ? 'success' : decision === 'rejected' ? 'error' : 'info' });
     } catch (err) {
   toast({ title: 'Decision Failed', description: err instanceof Error ? err.message : 'Failed to update status', type: 'error' });
@@ -269,6 +272,31 @@ export default function ClearancePage() {
             {record.status === 'approved' && <CheckCircle2 className="h-3 w-3" />}
             {record.status}
           </span>
+          {isFacultyUser && record.id && (currentUser?.supabase_id === record.employeeId || String(currentUser?.id) === String(record.employeeId)) && record.status !== 'approved' && (
+            <div className="mt-2">
+              <button
+                type="button"
+                className="text-xs text-rose-600 hover:underline"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  // Confirm delete
+                  if (!confirm('Delete this submitted document? This will remove the submission and allow re-upload.')) return;
+                  try {
+                    setUploading(true);
+                    await clearanceService.deleteDocument(record.id!);
+                    void loadData(currentUser);
+                    toast({ title: 'Deleted', description: 'Document removed. You may upload again.', type: 'info' });
+                  } catch (err) {
+                    toast({ title: 'Delete Failed', description: err instanceof Error ? err.message : 'Unable to delete document', type: 'error' });
+                  } finally {
+                    setUploading(false);
+                  }
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          )}
         </TableCell>
         {showActionColumn && (
           <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>

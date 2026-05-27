@@ -149,7 +149,7 @@ async function handleClearanceInsertError(
       { status: 500 }
     );
   }
-
+  // If the existing record was rejected/expired, refresh it with the new upload
   if (existing.status === "rejected" || existing.status === "expired") {
     const { data: updated, error: updateError } = await refreshRejectedClearance(
       supabase,
@@ -167,9 +167,47 @@ async function handleClearanceInsertError(
 
     return NextResponse.json({ data: formatRow(updated) });
   }
+  // If the existing record has no file (file_path missing) or the stored file cannot be found,
+  // allow replacing it by updating the existing record to point to the newly uploaded file.
+  try {
+    const hasFilePath = !!existing.file_path;
+    let storageMissing = false;
+
+    if (hasFilePath) {
+      // Try to download the existing file to check existence. If it fails, treat as missing.
+      const { data: downloadData, error: downloadError } = await supabase.storage
+        .from('clearance-files')
+        .download(existing.file_path);
+
+      if (downloadError) {
+        storageMissing = true;
+      }
+    }
+
+    if (!hasFilePath || storageMissing) {
+      const { data: updated, error: updateError } = await refreshRejectedClearance(
+        supabase,
+        existing,
+        original_filename,
+        file_path
+      );
+
+      if (updateError || !updated) {
+        return NextResponse.json(
+          { error: "Failed to replace existing clearance record", details: updateError?.message ?? updateError },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({ data: formatRow(updated) });
+    }
+  } catch (checkErr) {
+    console.error('[POST /api/clearances] Error checking existing file presence:', checkErr);
+    // Fall through to the default conflict response below.
+  }
 
   return NextResponse.json(
-    { error: "A clearance record for this office already exists.", details: existing.status },
+    { error: "A clearance record for this office already exists. Please wait for review or contact the administrator if you need to upload again.", details: existing.status },
     { status: 409 }
   );
 }
