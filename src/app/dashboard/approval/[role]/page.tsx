@@ -8,7 +8,7 @@ import { User } from '@/types/user';
 import { FileCheck2, Clock, CheckCircle2, XCircle, ShieldCheck } from 'lucide-react';
 import { clearanceService } from '@/services/clearanceService';
 import { Clearance } from '@/types/clearance';
-import { getApprovalOfficerConfig, isApprovalOfficer } from '@/lib/roleConfig';
+import { getApprovalOfficerConfig, isApprovalOfficer, getRequiredOfficeForOfficer } from '@/lib/roleConfig';
 
 export default function ApprovalOfficerPage() {
   const params = useParams() as { role?: string };
@@ -34,9 +34,34 @@ export default function ApprovalOfficerPage() {
     }
 
     const loadClearances = async () => {
-      // Pass roleId as officeId (second param) so API filters by office
-      const data = await clearanceService.getClearances(undefined, roleId);
-      setClearances(data as Clearance[]);
+      // Resolve the required office name for this officer role, then find the
+      // corresponding office id from the offices API and fetch by that id.
+      const requiredOfficeName = getRequiredOfficeForOfficer(roleId);
+
+      if (!requiredOfficeName) {
+        // Fallback: try using roleId directly (legacy behavior)
+        const data = await clearanceService.getClearances(undefined, roleId);
+        setClearances(data as Clearance[]);
+        return;
+      }
+
+      const offices = await clearanceService.getOffices();
+      const matched = offices.find((o) => {
+        const name = o.name ?? '';
+        const a = name.toLowerCase();
+        const b = requiredOfficeName.toLowerCase();
+        return name === requiredOfficeName || a.includes(b) || b.includes(a);
+      });
+
+      if (matched?.id) {
+        const data = await clearanceService.getClearances(undefined, matched.id);
+        setClearances(data as Clearance[]);
+        return;
+      }
+
+      // If we couldn't resolve by name, fall back to legacy behavior
+      const fallback = await clearanceService.getClearances(undefined, roleId);
+      setClearances(fallback as Clearance[]);
     };
 
     void loadClearances();
