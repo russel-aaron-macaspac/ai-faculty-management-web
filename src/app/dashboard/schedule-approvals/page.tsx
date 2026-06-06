@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { RouteGuard } from '@/components/RouteGuard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -182,7 +182,7 @@ function ScheduleApprovalsContent() {
     }
   };
 
-  let queueContent: JSX.Element;
+  let queueContent: React.ReactElement;
   if (loading) {
     queueContent = (
       <div className="py-10 text-center text-slate-500">

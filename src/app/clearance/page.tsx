@@ -113,7 +113,7 @@ export default function ClearancePage() {
       await clearanceService.uploadDocument(employeeId, 0, docName.trim());
       setIsUploadOpen(false);
       setDocName('Safety Training Certificate');
-      void loadData(currentUser);
+      void loadData(currentUser ?? undefined);
   toast({ title: 'Clearance Uploaded', description: 'Document uploaded for review.', type: 'success' });
     } catch (error) {
   const msg = error instanceof Error ? error.message : 'Unable to submit this document. Please try again.';
