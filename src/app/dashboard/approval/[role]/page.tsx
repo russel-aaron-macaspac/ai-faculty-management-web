@@ -46,7 +46,7 @@ export default function ApprovalOfficerPage() {
       }
 
       const offices = await clearanceService.getOffices();
-      const matched = offices.find((o) => {
+      const matched = offices.find((o: any) => {
         const name = o.name ?? '';
         const a = name.toLowerCase();
         const b = requiredOfficeName.toLowerCase();

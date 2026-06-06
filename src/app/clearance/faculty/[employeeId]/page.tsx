@@ -3,17 +3,12 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { AlertTriangle, FileText, Loader2, ScanLine, Save, ArrowLeft, CheckCircle2, X, Clock } from 'lucide-react';
+import { AlertTriangle, FileText, Loader2, Save, ArrowLeft, CheckCircle2, X, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  DOCUMENT_TYPES, 
-  validateDocument,
-  DocumentValidationResult 
-} from '@/lib/documentTypes';
+import { DOCUMENT_TYPES } from '@/lib/documentTypes';
 import { Clearance, ClearanceNote } from '@/types/clearance';
 import { clearanceService } from '@/services/clearanceService';
 import { format } from 'date-fns';
@@ -23,17 +18,6 @@ type StoredUser = {
   role?: string;
   name?: string;
   full_name?: string;
-};
-
-const DOCUMENT_TYPE_RULES: Record<string, string[]> = {
-  'ICT Device Return Slip':            ['device return', 'ict office', 'asset tag'],
-  'Library Clearance Form':            ['library', 'borrowed books', 'return slip'],
-  'Laboratory Tools Return Checklist': ['laboratory', 'tools', 'checklist'],
-  'CESO Completion Certificate':       ['ceso', 'completion certificate', 'completed'],
-  'Financial Clearance':               ['financial clearance', 'cashier', 'no outstanding balance'],
-  'PMO Equipment Return':              ['pmo', 'equipment return', 'property management office'],
-  'Program Chair Clearance':           ['program chair', 'clearance', 'department'],
-  'Borrowed Book Slip':                ['borrowed book slip', 'borrowed books slip', 'borrowed book', 'library', 'book return', 'dlrc'],
 };
 
 const normalize = (value: string) => value.trim().toLowerCase().split(/\s+/).join(' ');
@@ -65,14 +49,8 @@ export default function FacultyDetailPage() {
   const [loadingNotes, setLoadingNotes] = useState(false);
 
   const [dlrcNotes, setDlrcNotes] = useState('');
-  const [selectedOCRFile, setSelectedOCRFile] = useState<File | null>(null);
-  const [selectedOCRDocumentType, setSelectedOCRDocumentType] = useState(DOCUMENT_TYPES[0]);
-  const [isOCRLoading, setIsOCRLoading] = useState(false);
-  const [validationResult, setValidationResult] = useState<DocumentValidationResult | null>(null);
-  const [ocrText, setOcrText] = useState('');
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [fileLoadingId, setFileLoadingId] = useState<string | null>(null);
-  const [ocrError, setOcrError] = useState('');
   const [fileError, setFileError] = useState('');
   const [actionError, setActionError] = useState('');
 
@@ -158,37 +136,6 @@ export default function FacultyDetailPage() {
   const saveDlrcNotes = () => {
     const storageKey = `faculty-dlrc-notes-${employeeId}`;
     localStorage.setItem(storageKey, dlrcNotes);
-  };
-
-  const handleOCRDocumentTypeChange = (value: string | null) => {
-    setSelectedOCRDocumentType(value ?? DOCUMENT_TYPES[0]);
-  };
-
-  const handleRunOCR = async () => {
-    setOcrError('');
-    if (!selectedOCRFile) {
-      setOcrError('Choose a file before running OCR.');
-      return;
-    }
-    setIsOCRLoading(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', selectedOCRFile);
-      const response = await fetch('/api/ocr', { method: 'POST', body: formData });
-      const payload = (await response.json()) as { text?: string; error?: string };
-      if (!response.ok) throw new Error(payload.error || 'OCR request failed');
-      const extractedText = payload.text || '';
-      const result = validateDocument(selectedOCRDocumentType, extractedText);
-      setOcrText(extractedText);
-      setValidationResult(result);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to process OCR.';
-      setOcrText(`OCR scan failed: ${message}`);
-      setValidationResult(null);
-      setOcrError(message);
-    } finally {
-      setIsOCRLoading(false);
-    }
   };
 
   const handleOpenFile = async (path?: string, recordId?: string) => {
@@ -572,55 +519,6 @@ export default function FacultyDetailPage() {
               ))
             )}
             {fileError && <p className="text-sm text-rose-600">{fileError}</p>}
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200 lg:col-span-2">
-          <CardHeader><CardTitle>OCR AI Scanner - Document Verification</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-2">
-              <label htmlFor="ocr-document-type" className="text-sm font-medium text-slate-700">Document Type</label>
-              <Select value={selectedOCRDocumentType} onValueChange={handleOCRDocumentTypeChange}>
-                <SelectTrigger id="ocr-document-type" className="w-full">
-                  <SelectValue placeholder="Select document type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {DOCUMENT_TYPES.map((type) => (
-                    <SelectItem key={type} value={type}>{type}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Input type="file" onChange={(event) => setSelectedOCRFile(event.target.files?.[0] || null)} />
-            <p className="text-xs text-slate-500">Choose a document file before running OCR so the validator can inspect its contents.</p>
-            {ocrError && <p className="text-sm text-rose-600">{ocrError}</p>}
-            <Button onClick={() => void handleRunOCR()} disabled={isOCRLoading} className="bg-red-600 hover:bg-red-700">
-              {isOCRLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ScanLine className="mr-2 h-4 w-4" />} Run OCR AI Scan
-            </Button>
-            <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-              <div className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-                Selected Type: <span className="text-slate-700 normal-case">{selectedOCRDocumentType}</span>
-              </div>
-              {validationResult && (
-                <div className="mb-3 rounded-md border border-slate-200 bg-white p-3 text-sm">
-                  <p className="text-slate-700">Matched Document Type: {validationResult.isMatch ? '✅' : '❌'}</p>
-                  <p className="text-slate-700">Confidence Score: {validationResult.confidence}%</p>
-                  <p className="text-slate-700">
-                    Detected Keywords: {validationResult.matchedKeywords.length > 0 ? validationResult.matchedKeywords.join(', ') : 'None'}
-                  </p>
-                  {!validationResult.isMatch && (
-                    <p className="mt-2 flex items-center gap-1 text-amber-600">
-                      <AlertTriangle className="h-4 w-4" />
-                      Uploaded document does not match selected type
-                    </p>
-                  )}
-                </div>
-              )}
-              <div className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
-                <FileText className="h-4 w-4" /> Extracted Text
-              </div>
-              <pre className="whitespace-pre-wrap text-xs text-slate-600">{ocrText || 'No OCR output yet.'}</pre>
-            </div>
           </CardContent>
         </Card>
       </div>
