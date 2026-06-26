@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { toast } from '@/lib/toast';
 import { User } from '@/types/user';
 import { isApprovalOfficer, isFacultyLikeRole } from '@/lib/roleConfig';
+import { Badge } from '@/components/ui/badge';
 
 export default function ProfilePage() {
   const [user, setUser] = useState<User | null>(null);
@@ -38,7 +39,7 @@ export default function ProfilePage() {
   if (!user) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="text-sm text-slate-500">No profile data found. Please login again.</div>
+        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500 shadow-sm">No profile data found. Please login again.</div>
       </div>
     );
   }
@@ -65,40 +66,38 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">My Profile</h1>
-        <p className="text-slate-500 mt-1">Review and see your account details.</p>
+      <div className="space-y-2">
+        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">My Profile</h1>
+        <p className="text-slate-500">Review and update your account details.</p>
       </div>
 
-      <Card className="max-w-3xl">
-        <CardHeader>
-          <div className="flex items-start justify-between gap-4">
+      <Card className="surface-panel max-w-4xl border-0 shadow-none">
+        <CardHeader className="border-b border-slate-200/80 pb-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <CardTitle>{user.name}</CardTitle>
-              <CardDescription className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-                <span>
-                  Role: <span className="font-medium capitalize">{user.role}</span>
-                </span>
-                <span className="hidden sm:inline-block">•</span>
-                <span>Department: <span className="font-medium">{profileDetails.department}</span></span>
+              <CardTitle className="text-2xl">{user.name}</CardTitle>
+              <CardDescription className="mt-2 flex flex-wrap items-center gap-2">
+                <Badge variant="secondary" className="capitalize">{user.role.replaceAll('_', ' ')}</Badge>
+                <Badge variant="outline">{profileDetails.department}</Badge>
+                <Badge variant="info">{profileDetails.position}</Badge>
               </CardDescription>
             </div>
 
             <div>
-                <Button variant="outline" onClick={() => setIsEditOpen(true)}>Edit</Button>
-                <Dialog open={isEditOpen} onOpenChange={(open) => setIsEditOpen(open)}>
+              <Button variant="outline" onClick={() => setIsEditOpen(true)}>Edit profile</Button>
+              <Dialog open={isEditOpen} onOpenChange={(open) => setIsEditOpen(open)}>
                 <DialogContent className="sm:max-w-md">
                   <DialogHeader>
                     <DialogTitle>Edit Contact Details</DialogTitle>
                   </DialogHeader>
-                  <div className="space-y-4">
+                  <div className="space-y-5">
                     <div>
-                      <label className="text-xs text-slate-500 uppercase">Phone</label>
-                      <Input value={phoneInput} onChange={(e) => setPhoneInput(e.target.value)} />
+                      <label htmlFor="profile-phone" className="text-xs font-semibold uppercase tracking-wide text-slate-500">Phone</label>
+                      <Input id="profile-phone" value={phoneInput} onChange={(e) => setPhoneInput(e.target.value)} className="mt-2" />
                     </div>
                     <div>
-                      <label className="text-xs text-slate-500 uppercase">Address</label>
-                      <Input value={addressInput} onChange={(e) => setAddressInput(e.target.value)} />
+                      <label htmlFor="profile-address" className="text-xs font-semibold uppercase tracking-wide text-slate-500">Address</label>
+                      <Input id="profile-address" value={addressInput} onChange={(e) => setAddressInput(e.target.value)} className="mt-2" />
                     </div>
                     <div className="flex justify-end gap-2">
                       <Button variant="ghost" onClick={() => setIsEditOpen(false)}>Cancel</Button>
@@ -135,34 +134,34 @@ export default function ProfilePage() {
           </div>
         </CardHeader>
 
-        <CardContent className="grid gap-6 sm:grid-cols-2">
-          <div className="space-y-1">
-            <div className="text-xs text-slate-500 uppercase tracking-wide">Email</div>
-            <div className="text-sm text-slate-900 wrap-break-word">{user.email}</div>
+        <CardContent className="grid gap-6 py-6 sm:grid-cols-2">
+          <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Email</div>
+            <div className="text-sm text-slate-900" style={{ wordBreak: 'break-word' }}>{user.email}</div>
           </div>
 
-          <div className="space-y-1">
-            <div className="text-xs text-slate-500 uppercase tracking-wide">Employee ID</div>
+          <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Employee ID</div>
             <div className="text-sm text-slate-900">{profileDetails.employeeId}</div>
           </div>
 
-          <div className="space-y-1">
-            <div className="text-xs text-slate-500 uppercase tracking-wide">Position</div>
+          <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Position</div>
             <div className="text-sm text-slate-900">{profileDetails.position}</div>
           </div>
 
-          <div className="space-y-1">
-            <div className="text-xs text-slate-500 uppercase tracking-wide">Hire Date</div>
+          <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Hire Date</div>
             <div className="text-sm text-slate-900">{profileDetails.hireDate}</div>
           </div>
 
-          <div className="space-y-1 sm:col-span-2">
-            <div className="text-xs text-slate-500 uppercase tracking-wide">Phone</div>
+          <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:col-span-2">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Phone</div>
             <div className="text-sm text-slate-900">{profileDetails.phone}</div>
           </div>
 
-          <div className="space-y-1 sm:col-span-2">
-            <div className="text-xs text-slate-500 uppercase tracking-wide">Address</div>
+          <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:col-span-2">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Address</div>
             <div className="text-sm text-slate-900">{profileDetails.address}</div>
           </div>
         </CardContent>

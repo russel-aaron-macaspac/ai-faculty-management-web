@@ -32,8 +32,10 @@ const FormField = <
 >({
   ...props
 }: ControllerProps<TFieldValues, TName>) => {
+  const fieldValue = React.useMemo(() => ({ name: props.name }), [props.name])
+
   return (
-    <FormFieldContext.Provider value={{ name: props.name }}>
+    <FormFieldContext.Provider value={fieldValue}>
       <Controller {...props} />
     </FormFieldContext.Provider>
   )
@@ -75,17 +77,18 @@ const FormItem = React.forwardRef<
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => {
   const id = React.useId()
+  const itemValue = React.useMemo(() => ({ id }), [id])
 
   return (
-    <FormItemContext.Provider value={{ id }}>
-      <div ref={ref} className={cn("space-y-2", className)} {...props} />
+    <FormItemContext.Provider value={itemValue}>
+      <div ref={ref} className={cn("space-y-3", className)} {...props} />
     </FormItemContext.Provider>
   )
 })
 FormItem.displayName = "FormItem"
 
 const FormLabel = React.forwardRef<
-  React.ElementRef<typeof LabelPrimitive.Root>,
+  React.ComponentRef<typeof LabelPrimitive.Root>,
   React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root>
 >(({ className, ...props }, ref) => {
   const { error, formItemId } = useFormField()
@@ -93,7 +96,7 @@ const FormLabel = React.forwardRef<
   return (
     <Label
       ref={ref}
-      className={cn(error && "text-destructive", className)}
+      className={cn("text-sm font-medium text-slate-700", error && "text-destructive", className)}
       htmlFor={formItemId}
       {...props}
     />
@@ -102,7 +105,7 @@ const FormLabel = React.forwardRef<
 FormLabel.displayName = "FormLabel"
 
 const FormControl = React.forwardRef<
-  React.ElementRef<typeof Slot>,
+  React.ComponentRef<typeof Slot>,
   React.ComponentPropsWithoutRef<typeof Slot>
 >(({ ...props }, ref) => {
   const { error, formItemId, formDescriptionId, formMessageId } = useFormField()
@@ -111,11 +114,7 @@ const FormControl = React.forwardRef<
     <Slot
       ref={ref}
       id={formItemId}
-      aria-describedby={
-        !error
-          ? `${formDescriptionId}`
-          : `${formDescriptionId} ${formMessageId}`
-      }
+      aria-describedby={error ? `${formDescriptionId} ${formMessageId}` : `${formDescriptionId}`}
       aria-invalid={!!error}
       {...props}
     />
@@ -133,7 +132,7 @@ const FormDescription = React.forwardRef<
     <p
       ref={ref}
       id={formDescriptionId}
-      className={cn("text-sm text-muted-foreground", className)}
+      className={cn("text-sm text-slate-500", className)}
       {...props}
     />
   )
@@ -155,7 +154,7 @@ const FormMessage = React.forwardRef<
     <p
       ref={ref}
       id={formMessageId}
-      className={cn("text-sm font-medium text-destructive", className)}
+      className={cn("text-sm font-medium text-rose-600", className)}
       {...props}
     >
       {body}

@@ -18,6 +18,8 @@ import {
 import { User } from '@/types/user';
 import { authService } from '@/services/authService';
 import { isApprovalOfficer, getApprovalOfficerConfig, isFacultyLikeRole } from '@/lib/roleConfig';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 interface SidebarProps {
   user: User | null;
@@ -100,8 +102,8 @@ export function Sidebar({ user }: Readonly<SidebarProps>) {
   };
 
   return (
-    <div className="flex h-full w-64 flex-col bg-slate-900 text-white shadow-xl transition-all duration-300">
-      <div className="flex h-16 items-center justify-start px-4 border-b border-slate-800">
+    <aside className="flex h-full w-72 flex-col border-r border-slate-200 bg-white/95 text-slate-900 shadow-[8px_0_40px_-30px_rgba(15,23,42,0.35)] backdrop-blur-xl transition-all duration-300">
+      <div className="flex h-20 items-center justify-start gap-3 border-b border-slate-200 px-5">
         <Image
           src="/cropped.png"
           alt="DomStaX"
@@ -110,10 +112,14 @@ export function Sidebar({ user }: Readonly<SidebarProps>) {
           className="h-8 w-auto"
           priority
         />
+        <div className="hidden flex-col sm:flex">
+          <span className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Faculty Hub</span>
+          <span className="text-xs text-slate-500">Operations dashboard</span>
+        </div>
       </div>
       
-      <div className="flex-1 overflow-y-auto py-4">
-        <nav className="flex flex-col space-y-1 px-3">
+      <div className="flex-1 overflow-y-auto px-4 py-5">
+        <nav className="flex flex-col gap-1.5">
           {links.map((link) => {
             const Icon = link.icon;
             const isActive = pathname === link.href || (pathname.startsWith(link.href) && link.href !== '/dashboard' && link.href !== '#');
@@ -122,39 +128,40 @@ export function Sidebar({ user }: Readonly<SidebarProps>) {
                 key={link.label}
                 href={link.href}
                 className={cn(
-                  'flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                  'group flex items-center rounded-2xl px-4 py-3 text-sm font-medium transition-all duration-200',
                   isActive 
-                    ? 'bg-red-600/10 text-red-400' 
-                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    ? 'bg-primary/10 text-primary ring-1 ring-inset ring-primary/10' 
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 )}
               >
-                <Icon className={cn('mr-3 h-5 w-5', isActive ? 'text-red-400' : 'text-slate-400')} />
-                {link.label}
+                <Icon className={cn('mr-3 h-5 w-5 transition-colors', isActive ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600')} />
+                <span className="truncate">{link.label}</span>
               </Link>
             );
           })}
         </nav>
       </div>
       
-      <div className="border-t border-slate-800 p-4 space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-full bg-slate-800 flex items-center justify-center text-red-400 font-bold border border-slate-700">
+      <div className="border-t border-slate-200 p-5 space-y-4">
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+          <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-semibold ring-1 ring-primary/10">
             {displayName?.charAt(0) ?? 'U'}
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-medium">{displayName || user?.role}</span>
-            <span className="text-xs text-slate-400 capitalize">{user?.role}</span>
+            <span className="text-sm font-semibold text-slate-900">{displayName || user?.role}</span>
+            <Badge variant="secondary" className="mt-1 w-fit capitalize">{user?.role}</Badge>
           </div>
         </div>
         
-        <button 
+        <Button 
+          variant="outline"
           onClick={handleLogout}
-          className="flex w-full items-center rounded-md px-3 py-2 text-sm font-medium text-slate-300 hover:bg-rose-500/10 hover:text-rose-400 transition-colors"
+          className="flex w-full items-center justify-start gap-3"
         >
-          <LogOut className="mr-3 h-5 w-5" />
+          <LogOut className="h-5 w-5" />
           Sign Out
-        </button>
+        </Button>
       </div>
-    </div>
+    </aside>
   );
 }

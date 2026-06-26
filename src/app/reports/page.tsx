@@ -10,11 +10,12 @@ import { attendanceService } from '@/services/attendanceService';
 import { facultyService } from '@/services/facultyService';
 import { clearanceService } from '@/services/clearanceService';
 import { parseTimeToMinutes } from '@/lib/timeUtils';
+import { Faculty } from '@/types/faculty';
 
 export default function ReportsPage() {
-  const [attendance, setAttendance] = useState([]);
-  const [faculties, setFaculties] = useState([]);
-  const [clearances, setClearances] = useState([]);
+  const [attendance, setAttendance] = useState<any[]>([]);
+  const [faculties, setFaculties] = useState<Faculty[]>([]);
+  const [clearances, setClearances] = useState<any[]>([]);
 
   useEffect(() => {
     let mounted = true;

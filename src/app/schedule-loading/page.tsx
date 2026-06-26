@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { RouteGuard } from '@/components/RouteGuard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -215,7 +215,7 @@ function ScheduleLoadingContent() {
   const facultiesList = useMemo(() => buildFacultiesList(meta.faculties, visibleSchedules), [meta.faculties, visibleSchedules]);
 
   // Extract selected faculty availability rendering to avoid nested ternary in JSX
-  let selectedFacultyAvailabilityContent: JSX.Element | null = null;
+  let selectedFacultyAvailabilityContent: ReactNode = null;
   if (selectedFacultyLoading) {
     selectedFacultyAvailabilityContent = (
       <div className="flex items-center gap-2 text-sm text-slate-500">
@@ -242,7 +242,7 @@ function ScheduleLoadingContent() {
   }
 
   // Extract master schedule content to avoid nested ternary in JSX
-  let masterScheduleContent: JSX.Element | null = null;
+  let masterScheduleContent: ReactNode = null;
   if (loading) {
     masterScheduleContent = (
       <div className="py-8 text-center text-slate-500">
@@ -260,10 +260,10 @@ function ScheduleLoadingContent() {
                   // If the faculty list key is name-based, match by normalized name; otherwise match by id
                   if (String(faculty.id).startsWith('name:')) {
                     return (
-                      normalize(s.facultyName ?? s.faculty?.name ?? s.employeeName ?? '') === normalize(faculty.name)
+                      normalize(s.facultyName ?? s.employeeName ?? '') === normalize(faculty.name)
                     );
                   }
-                  return String(s.facultyId ?? s.faculty?.id ?? s.employeeId ?? '') === String(faculty.id);
+                  return String(s.facultyId ?? s.employeeId ?? '') === String(faculty.id);
                 });
                 const isOpen = Boolean(expanded[faculty.id]);
           return (
@@ -531,7 +531,7 @@ function ScheduleLoadingContent() {
   };
 
   const openEditScheduleDialog = (item: Schedule) => {
-    const facultyId = String(item.facultyId ?? item.faculty?.id ?? item.employeeId ?? '');
+    const facultyId = String(item.facultyId ?? item.employeeId ?? '');
     const subjectId = String(item.subjectId ?? item.subject?.id ?? '');
     const roomId = String(item.roomId ?? item.room?.id ?? '');
 
@@ -981,7 +981,7 @@ function ScheduleLoadingContent() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <div className="text-sm font-medium">Faculty</div>
-                  <Select value={editSchedule.facultyId} onValueChange={(value) => setEditSchedule((prev) => (prev ? { ...prev, facultyId: value } : prev))}>
+                  <Select value={editSchedule.facultyId} onValueChange={(value) => setEditSchedule((prev) => (prev ? { ...prev, facultyId: value || '' } : prev))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select faculty" />
                     </SelectTrigger>
@@ -997,7 +997,7 @@ function ScheduleLoadingContent() {
 
                 <div>
                   <div className="text-sm font-medium">Section</div>
-                  <Select value={editSchedule.section} onValueChange={(value) => setEditSchedule((prev) => (prev ? { ...prev, section: value } : prev))}>
+                  <Select value={editSchedule.section} onValueChange={(value) => setEditSchedule((prev) => (prev ? { ...prev, section: value || '' } : prev))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select section" />
                     </SelectTrigger>
@@ -1013,7 +1013,7 @@ function ScheduleLoadingContent() {
 
                 <div>
                   <div className="text-sm font-medium">Subject</div>
-                  <Select value={editSchedule.subjectId} onValueChange={(value) => setEditSchedule((prev) => (prev ? { ...prev, subjectId: value } : prev))}>
+                  <Select value={editSchedule.subjectId} onValueChange={(value) => setEditSchedule((prev) => (prev ? { ...prev, subjectId: value || '' } : prev))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select subject" />
                     </SelectTrigger>
@@ -1029,7 +1029,7 @@ function ScheduleLoadingContent() {
 
                 <div>
                   <div className="text-sm font-medium">Room</div>
-                  <Select value={editSchedule.roomId} onValueChange={(value) => setEditSchedule((prev) => (prev ? { ...prev, roomId: value } : prev))}>
+                  <Select value={editSchedule.roomId} onValueChange={(value) => setEditSchedule((prev) => (prev ? { ...prev, roomId: value || '' } : prev))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select room" />
                     </SelectTrigger>
@@ -1047,7 +1047,7 @@ function ScheduleLoadingContent() {
               <div className="grid gap-4 md:grid-cols-3">
                 <div>
                   <div className="text-sm font-medium">Day</div>
-                  <Select value={editSchedule.day} onValueChange={(value) => setEditSchedule((prev) => (prev ? { ...prev, day: value } : prev))}>
+                  <Select value={editSchedule.day} onValueChange={(value) => setEditSchedule((prev) => (prev ? { ...prev, day: value || '' } : prev))}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -1109,8 +1109,8 @@ function buildFacultiesList(
   });
 
   schedules.forEach((s) => {
-    const fid = s.facultyId ?? s.faculty?.id ?? s.employeeId ?? '';
-    const fname = s.facultyName ?? s.faculty?.name ?? s.employeeName ?? '';
+    const fid = s.facultyId ?? s.employeeId ?? '';
+    const fname = s.facultyName ?? s.employeeName ?? '';
     const n = normalize(fname);
     if (!n) return;
     if (!nm.has(n)) nm.set(n, { ids: new Set(), name: fname });
