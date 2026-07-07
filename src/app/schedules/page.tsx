@@ -72,6 +72,53 @@ function SchedulesContent() {
     return schedules.filter((row) => String(row.facultyId) === String(user.id) || (row.facultyName || '').toLowerCase() === currentName);
   }, [schedules, user]);
 
+  let scheduleContent: React.ReactNode;
+  if (loading) {
+    scheduleContent = (
+      <div className="flex items-center justify-center gap-2 py-8 text-slate-500">
+        <Loader2 className="h-5 w-5 animate-spin" /> Loading schedule...
+      </div>
+    );
+  } else if (visibleSchedules.length === 0) {
+    scheduleContent = <div className="py-8 text-center text-slate-500">No schedules found.</div>;
+  } else {
+    scheduleContent = (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Faculty</TableHead>
+            <TableHead>Subject</TableHead>
+            <TableHead>Room</TableHead>
+            <TableHead>Day</TableHead>
+            <TableHead>Time</TableHead>
+            <TableHead>Status</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {visibleSchedules.map((item) => (
+            <TableRow key={item.id}>
+              <TableCell>{item.facultyName}</TableCell>
+              <TableCell>
+                {item.subject?.code} - {item.subject?.name}
+                {item.section ? <span className="ml-2 text-xs text-slate-500">Section {item.section}</span> : null}
+              </TableCell>
+              <TableCell>{item.room?.name}</TableCell>
+              <TableCell>{item.day}</TableCell>
+              <TableCell>
+                {formatTimeToTwelveHour(item.startTime)} - {formatTimeToTwelveHour(item.endTime)}
+              </TableCell>
+              <TableCell>
+                <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+                  {item.status}
+                </span>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  }
+
   const addAvailabilityRow = () => {
     setAvailabilityRows((rows) => [...rows, { day: 'Monday', startTime: '08:00', endTime: '10:00' }]);
   };
@@ -112,9 +159,10 @@ function SchedulesContent() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">My Schedule</h1>
-        <p className="mt-1 text-slate-500">Review your assigned classes and manage availability windows.</p>
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#D4A017]">Schedule management</p>
+        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">My Schedule</h1>
+        <p className="text-slate-500">Review your assigned classes and manage availability windows.</p>
       </div>
 
       <Card>
@@ -122,47 +170,7 @@ function SchedulesContent() {
           <CardTitle>{isFacultyLikeRole(user?.role) ? 'Faculty Availability' : 'Schedule Overview'}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {loading ? (
-            <div className="flex items-center justify-center gap-2 py-8 text-slate-500">
-              <Loader2 className="h-5 w-5 animate-spin" /> Loading schedule...
-            </div>
-          ) : visibleSchedules.length === 0 ? (
-            <div className="py-8 text-center text-slate-500">No schedules found.</div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Faculty</TableHead>
-                  <TableHead>Subject</TableHead>
-                  <TableHead>Room</TableHead>
-                  <TableHead>Day</TableHead>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {visibleSchedules.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell>{item.facultyName}</TableCell>
-                    <TableCell>
-                      {item.subject?.code} - {item.subject?.name}
-                      {item.section ? <span className="ml-2 text-xs text-slate-500">Section {item.section}</span> : null}
-                    </TableCell>
-                    <TableCell>{item.room?.name}</TableCell>
-                    <TableCell>{item.day}</TableCell>
-                    <TableCell>
-                      {formatTimeToTwelveHour(item.startTime)} - {formatTimeToTwelveHour(item.endTime)}
-                    </TableCell>
-                    <TableCell>
-                      <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
-                        {item.status}
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+          {scheduleContent}
         </CardContent>
       </Card>
 
@@ -175,7 +183,7 @@ function SchedulesContent() {
             {availabilityRows.map((row, index) => (
               <div key={`${row.day}-${index}`} className="grid items-end gap-3 md:grid-cols-4">
                 <div>
-                  <div className="text-sm font-medium">Day</div>
+                  <div className="text-sm font-medium text-slate-700">Day</div>
                   <Select value={row.day} onValueChange={(value) => updateAvailabilityRow(index, { day: value || 'Monday' })}>
                     <SelectTrigger>
                       <SelectValue />
@@ -190,11 +198,11 @@ function SchedulesContent() {
                   </Select>
                 </div>
                 <div>
-                  <div className="text-sm font-medium">Start</div>
+                  <div className="text-sm font-medium text-slate-700">Start</div>
                   <Input type="time" value={row.startTime} onChange={(event) => updateAvailabilityRow(index, { startTime: event.target.value })} />
                 </div>
                 <div>
-                  <div className="text-sm font-medium">End</div>
+                  <div className="text-sm font-medium text-slate-700">End</div>
                   <Input type="time" value={row.endTime} onChange={(event) => updateAvailabilityRow(index, { endTime: event.target.value })} />
                 </div>
                 <Button variant="outline" onClick={() => removeAvailabilityRow(index)}>

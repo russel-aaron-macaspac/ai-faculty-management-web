@@ -88,9 +88,10 @@ function AdminDashboardContent() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Admin Dashboard</h1>
-        <p className="text-slate-500 mt-1">Welcome back, {user?.name}. Here&apos;s what&apos;s happening today.</p>
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#D4A017]">Administration</p>
+        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Admin Dashboard</h1>
+        <p className="text-slate-500">Welcome back, {user?.name}. Here&apos;s what&apos;s happening today.</p>
       </div>
 
       {/* KPI Cards */}
@@ -107,12 +108,12 @@ function AdminDashboardContent() {
           <AIAlerts alerts={computedAlerts()} />
           
           <div className="grid gap-6 md:grid-cols-2">
-            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-              <h3 className="font-semibold text-slate-800 mb-4">Pending Schedule Approvals</h3>
+            <div className="surface-panel rounded-[12px] p-6">
+              <h3 className="mb-4 font-semibold text-slate-900">Pending Schedule Approvals</h3>
               <div className="text-sm text-slate-500">{pendingApprovalsCount == null ? 'Loading schedule data...' : `${pendingApprovalsCount} schedules await admin review.`}</div>
             </div>
-            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-              <h3 className="font-semibold text-slate-800 mb-4">Pending Clearances</h3>
+            <div className="surface-panel rounded-[12px] p-6">
+              <h3 className="mb-4 font-semibold text-slate-900">Pending Clearances</h3>
               <div className="text-sm text-slate-500">{clearanceCompletion ? `${clearanceCompletion.pending} documents require admin review.` : 'Loading clearance data...'}</div>
             </div>
           </div>

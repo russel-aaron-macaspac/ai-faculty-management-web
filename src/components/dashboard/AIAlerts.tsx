@@ -79,15 +79,15 @@ export function AIAlerts(props: Readonly<AIAlertsProps>) {
 
   return (
     <Card className="overflow-hidden border-slate-200 shadow-sm">
-      <div className="flex items-center justify-between bg-linear-to-r from-primary via-sky-600 to-cyan-600 px-6 py-4">
+      <div className="flex items-center justify-between bg-[#0F172A] px-6 py-4">
         <div>
            <CardTitle className="flex items-center gap-2 text-white">
-             <Sparkles className="h-5 w-5 text-sky-100" />
+             <Sparkles className="h-5 w-5 text-[#D4A017]" />
              AI Assistant Insights
            </CardTitle>
-           <CardDescription className="mt-1 text-sky-100/90">Smart recommendations and anomaly detection</CardDescription>
+           <CardDescription className="mt-1 text-slate-300">Smart recommendations and anomaly detection</CardDescription>
         </div>
-        <Badge variant="outline" className="border-white/20 bg-white/15 text-white">
+        <Badge variant="outline" className="border-white/15 bg-white/10 text-white">
           Powered by AI
         </Badge>
       </div>
@@ -113,7 +113,7 @@ export function AIAlerts(props: Readonly<AIAlertsProps>) {
                     <p className="text-sm text-slate-600">{alert.message}</p>
                     
                     {alert.recommendation && (
-                      <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="mt-3 rounded-[12px] border border-slate-200 bg-white p-4 shadow-sm">
                         <p className="flex flex-col gap-1 text-sm font-medium text-slate-700">
                           <span className="uppercase text-[10px] tracking-wider font-bold text-slate-400">Actionable Suggestion</span>
                           {alert.recommendation}

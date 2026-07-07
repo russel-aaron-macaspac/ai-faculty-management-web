@@ -186,7 +186,7 @@ type SchedulerInsight = {
 
 const INSIGHT_TONE_CLASSES: Record<SchedulerInsight['tone'], string> = {
   emerald: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  blue: 'bg-sky-50 text-sky-700 ring-sky-200',
+  blue: 'bg-[#0F172A]/5 text-[#0F172A] ring-[#0F172A]/15',
   amber: 'bg-amber-50 text-amber-700 ring-amber-200',
   rose: 'bg-rose-50 text-rose-700 ring-rose-200',
   slate: 'bg-slate-50 text-slate-700 ring-slate-200',
@@ -620,7 +620,7 @@ export default function AttendancePage() {
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
             <div className="flex items-center gap-2 text-slate-900 font-semibold">
-              <Sparkles className="h-4 w-4 text-sky-600" />
+              <Sparkles className="h-4 w-4 text-[#D4A017]" />
               AI Scheduler & Recommendations
             </div>
             <p className="text-xs text-slate-500 mt-1">Rule-based insights from attendance logs and recent scans.</p>

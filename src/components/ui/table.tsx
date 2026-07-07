@@ -8,7 +8,7 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm"
+      className="relative w-full overflow-x-auto rounded-[12px] border border-slate-200 bg-white shadow-sm"
     >
       <table
         data-slot="table"
@@ -44,7 +44,7 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
     <tfoot
       data-slot="table-footer"
       className={cn(
-        "border-t border-slate-200 bg-slate-50/80 font-medium [&>tr]:last:border-b-0",
+        "border-t border-slate-200 bg-slate-50/70 font-medium [&>tr]:last:border-b-0",
         className
       )}
       {...props}

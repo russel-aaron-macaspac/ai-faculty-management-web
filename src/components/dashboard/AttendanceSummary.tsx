@@ -10,7 +10,7 @@ interface Props {
   date?: string; // yyyy-MM-dd
 }
 
-export function AttendanceSummary({ userId, date }: Props) {
+export function AttendanceSummary({ userId, date }: Readonly<Props>) {
   const [present, setPresent] = useState(0);
   const [late, setLate] = useState(0);
   const [absent, setAbsent] = useState(0);
@@ -33,17 +33,11 @@ export function AttendanceSummary({ userId, date }: Props) {
           else a += 1;
         }
 
-        // If a specific user is requested and we only get that user's record, normalize counts to 1/0
-        if (userId) {
-          setPresent(p);
-          setLate(l);
-          setAbsent(a);
-        } else {
-          setPresent(p);
-          setLate(l);
-          setAbsent(a);
-        }
-      } catch (e) {
+        setPresent(p);
+        setLate(l);
+        setAbsent(a);
+      } catch (error) {
+        console.warn('[AttendanceSummary] failed to load attendance', error);
         setPresent(0);
         setLate(0);
         setAbsent(0);
@@ -58,15 +52,15 @@ export function AttendanceSummary({ userId, date }: Props) {
   const total = present + late + absent || 1; // avoid divide by zero
 
   const stats = [
-    { label: 'Present', value: Math.round((present / total) * 100), color: 'bg-emerald-500', icon: UserCheck, count: present },
-    { label: 'Late', value: Math.round((late / total) * 100), color: 'bg-amber-500', icon: Clock, count: late },
+    { label: 'Present', value: Math.round((present / total) * 100), color: 'bg-[#0F172A]', icon: UserCheck, count: present },
+    { label: 'Late', value: Math.round((late / total) * 100), color: 'bg-[#D4A017]', icon: Clock, count: late },
     { label: 'Absent/Leave', value: Math.round((absent / total) * 100), color: 'bg-rose-500', icon: UserX, count: absent },
   ];
 
   return (
     <Card className="shadow-sm">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-slate-500 flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2 text-sm font-medium text-slate-500">
           <Users className="h-4 w-4" />
           Today's Attendance Overview
         </CardTitle>

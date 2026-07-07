@@ -43,6 +43,12 @@ export default function ReportsPage() {
     };
   }, []);
 
+  const getDepartmentIndicatorClass = (percent: number) => {
+    if (percent > 95) return 'bg-emerald-500';
+    if (percent > 90) return 'bg-amber-500';
+    return 'bg-red-500';
+  };
+
   const metrics = useMemo(() => {
     const facultyCount = faculties.length;
 
@@ -69,6 +75,7 @@ export default function ReportsPage() {
     const clearanceTotal = Array.isArray(clearances) ? clearances.length : 0;
     const clearanceApproved = Array.isArray(clearances) ? clearances.filter((c: any) => c.status === 'approved').length : 0;
     const clearanceCompliance = clearanceTotal ? Math.round((clearanceApproved / clearanceTotal) * 100) : 0;
+    const clearancePending = Array.isArray(clearances) ? clearances.filter((c: any) => c.status !== 'approved').length : 0;
 
     // departmental attendance
     const deptMap: Record<string, { total: number; present: number }> = {};
@@ -109,22 +116,23 @@ export default function ReportsPage() {
 
     const docStats = Object.values(docMap).slice(0, 6);
 
-    return { avgAttendance, totalHours, activePersonnel, departmental, clearanceCompliance, docStats };
+    return { avgAttendance, totalHours, activePersonnel, departmental, clearanceCompliance, clearancePending, docStats };
   }, [attendance, faculties, clearances]);
 
   return (
     <RouteGuard requiredRoles={["admin"]} fallbackPath="/dashboard/faculty">
       <div className="space-y-6">
-      <div className="flex justify-between items-center flex-wrap gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Analytics & Reports</h1>
-          <p className="text-slate-500 mt-1">Cross-module insights and system-wide analytics.</p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#D4A017]">Institutional reporting</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Analytics & Reports</h1>
+          <p className="text-slate-500">Cross-module insights and system-wide analytics.</p>
         </div>
         <div className="flex gap-3">
-           <Button variant="outline" className="border-slate-200">
+           <Button variant="outline">
              <Filter className="mr-2 h-4 w-4" /> This Month
            </Button>
-           <Button className="bg-slate-900 hover:bg-slate-800 text-white">
+           <Button variant="secondary">
              <Download className="mr-2 h-4 w-4" /> Export All PDF
            </Button>
         </div>
@@ -170,7 +178,7 @@ export default function ReportsPage() {
                <div className="p-2 bg-amber-50 rounded-lg"><FileCheck2 className="h-5 w-5 text-amber-500" /></div>
             </div>
             <div className="mt-4 flex items-center text-sm text-amber-600 font-medium">
-               <span>Action required for {Math.max(0, (Array.isArray(clearances) ? clearances.filter((c: any) => c.status !== 'approved').length : 0))} employees</span>
+               <span>Action required for {Math.max(0, metrics.clearancePending)} employees</span>
             </div>
           </CardContent>
         </Card>
@@ -201,7 +209,7 @@ export default function ReportsPage() {
             {metrics.departmental.map((d: any) => (
              <div className="space-y-2" key={d.name}>
                <div className="flex justify-between text-sm"><span>{d.name}</span><span className="font-bold">{d.percent}%</span></div>
-               <Progress value={d.percent} className="h-2" indicatorClassName={d.percent > 95 ? 'bg-emerald-500' : d.percent > 90 ? 'bg-amber-500' : 'bg-red-500'} />
+               <Progress value={d.percent} className="h-2" indicatorClassName={getDepartmentIndicatorClass(d.percent)} />
              </div>
             ))}
           </CardContent>

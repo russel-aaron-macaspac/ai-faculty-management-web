@@ -30,7 +30,7 @@ export const formatAttendanceTimestampToTime = (value?: string | null): string =
     return '';
   }
 
-  const compactTime = value.match(/^([0-9]{2}:[0-9]{2})(?::[0-9]{2}(?:\.[0-9]+)?)?$/);
+  const compactTime = /^(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?$/.exec(value);
   if (compactTime) {
     return compactTime[1];
   }
@@ -124,7 +124,7 @@ export const getTimeStatus = (
   }
 
   if (nowMinutes >= startMinutes && nowMinutes < endMinutes) {
-    return { label: 'In Progress', color: 'bg-blue-100 text-blue-700' };
+    return { label: 'In Progress', color: 'bg-[#0F172A]/5 text-[#0F172A]' };
   }
 
   return { label: 'Completed', color: 'bg-emerald-100 text-emerald-700' };

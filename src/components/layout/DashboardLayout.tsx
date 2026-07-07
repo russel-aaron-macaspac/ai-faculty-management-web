@@ -27,9 +27,9 @@ export function DashboardLayout({ children }: Readonly<{ children: React.ReactNo
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-6">
-        <div className="surface-panel flex w-full max-w-md flex-col gap-4 rounded-3xl p-6">
-          <Skeleton className="h-12 w-12 rounded-2xl" />
+      <div className="flex min-h-screen items-center justify-center px-6 university-shell">
+        <div className="surface-panel flex w-full max-w-md flex-col gap-4 rounded-[12px] p-6">
+          <Skeleton className="h-12 w-12 rounded-[12px]" />
           <Skeleton className="h-5 w-56" />
           <Skeleton className="h-4 w-72" />
           <Skeleton className="h-2 w-full rounded-full" />
@@ -41,13 +41,13 @@ export function DashboardLayout({ children }: Readonly<{ children: React.ReactNo
   if (!user) return null;
 
   return (
-    <div className="flex min-h-screen overflow-hidden bg-background text-foreground">
+    <div className="flex min-h-screen overflow-hidden bg-background text-foreground university-shell">
       {/* Mobile Sidebar overlay */}
       {sidebarOpen && (
         <button
           type="button"
           aria-label="Close sidebar overlay"
-          className="fixed inset-0 z-40 bg-slate-950/35 backdrop-blur-sm md:hidden"
+          className="fixed inset-0 z-40 bg-slate-950/32 backdrop-blur-[2px] md:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -62,7 +62,7 @@ export function DashboardLayout({ children }: Readonly<{ children: React.ReactNo
         <Navbar onMenuClick={() => setSidebarOpen(true)} user={user} />
         <main className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
           <div className="mx-auto max-w-7xl animate-in fade-in slide-in-from-bottom-2 duration-300">
-             {children}
+            {children}
           </div>
         </main>
       </div>

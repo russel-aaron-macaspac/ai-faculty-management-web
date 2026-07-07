@@ -11,7 +11,6 @@ function Progress({
   indicatorClassName,
   ...props
 }: ProgressPrimitive.Root.Props & { indicatorClassName?: string }) {
-  const { indicatorClassName: indClassName, ...restProps } = props as any;
   return (
     <ProgressPrimitive.Root
       value={value}
@@ -27,11 +26,11 @@ function Progress({
   )
 }
 
-function ProgressTrack({ className, ...props }: ProgressPrimitive.Track.Props) {
+function ProgressTrack({ className, ...props }: Readonly<ProgressPrimitive.Track.Props>) {
   return (
     <ProgressPrimitive.Track
       className={cn(
-        "relative flex h-1 w-full items-center overflow-x-hidden rounded-full bg-muted",
+        "relative flex h-2 w-full items-center overflow-x-hidden rounded-full bg-slate-200",
         className
       )}
       data-slot="progress-track"
@@ -43,17 +42,17 @@ function ProgressTrack({ className, ...props }: ProgressPrimitive.Track.Props) {
 function ProgressIndicator({
   className,
   ...props
-}: ProgressPrimitive.Indicator.Props) {
+}: Readonly<ProgressPrimitive.Indicator.Props>) {
   return (
     <ProgressPrimitive.Indicator
       data-slot="progress-indicator"
-      className={cn("h-full bg-primary transition-all", className)}
+      className={cn("h-full bg-[#0F172A] transition-all", className)}
       {...props}
     />
   )
 }
 
-function ProgressLabel({ className, ...props }: ProgressPrimitive.Label.Props) {
+function ProgressLabel({ className, ...props }: Readonly<ProgressPrimitive.Label.Props>) {
   return (
     <ProgressPrimitive.Label
       className={cn("text-sm font-medium", className)}
@@ -63,7 +62,7 @@ function ProgressLabel({ className, ...props }: ProgressPrimitive.Label.Props) {
   )
 }
 
-function ProgressValue({ className, ...props }: ProgressPrimitive.Value.Props) {
+function ProgressValue({ className, ...props }: Readonly<ProgressPrimitive.Value.Props>) {
   return (
     <ProgressPrimitive.Value
       className={cn(

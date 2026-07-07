@@ -12,6 +12,18 @@ import { parseTimeToMinutes, formatTimeToTwelveHour, getTimeStatus } from '@/lib
 import { attendanceService } from '@/services/attendanceService';
 import { Attendance } from '@/types/attendance';
 
+type InsightsMeta = {
+  latenessSeries?: Array<{ date: string; lateCount: number }>;
+} | null;
+
+type DashboardAlert = {
+  id: string;
+  type: 'warning' | 'insight' | 'info' | 'success';
+  title: string;
+  message: string;
+  recommendation?: string;
+};
+
 export default function FacultyDashboardPage() {
   return (
     <RouteGuard requiredRoles={['faculty', 'program_chair', 'admin']} fallbackPath="/login">
@@ -43,7 +55,7 @@ function FacultyDashboardContent() {
 
   const todayStats = useMemo(() => {
     const currentDay = new Date().toLocaleDateString('en-US', { weekday: 'long' });
-    const accountName = (user as User & { full_name?: string } | null)?.full_name ?? '';
+    const accountName = user?.full_name ?? user?.name ?? '';
     const now = new Date();
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
@@ -111,24 +123,24 @@ function FacultyDashboardContent() {
   }, [user]);
 
   const computedAlerts = () => {
-    const alerts: any[] = [];
+    const alerts: DashboardAlert[] = [];
 
     // upcoming class reminder
     const nextClass = todayStats.ownClassesToday[0];
     if (nextClass) {
-      alerts.push({ id: 'upcoming-class', type: 'info' as const, title: 'Upcoming Class Reminder', message: `${nextClass.subjectOrRole ?? nextClass.subject?.name} begins at ${formatTimeToTwelveHour(nextClass.startTime)} in ${nextClass.room?.name ?? 'TBD'}.` });
+      alerts.push({ id: 'upcoming-class', type: 'info', title: 'Upcoming Class Reminder', message: `${nextClass.subjectOrRole ?? nextClass.subject?.name} begins at ${formatTimeToTwelveHour(nextClass.startTime)} in ${nextClass.room?.name ?? 'TBD'}.` });
     }
 
     // attendance alert for late / anomaly
-    if (myAttendance && myAttendance.status === 'late') {
-      alerts.push({ id: 'late-arrival', type: 'warning' as const, title: 'Late Arrival Detected', message: `You clocked in at ${myAttendance.timeIn}.` });
+    if (myAttendance?.status === 'late') {
+      alerts.push({ id: 'late-arrival', type: 'warning', title: 'Late Arrival Detected', message: `You clocked in at ${myAttendance.timeIn}.` });
     }
 
     return alerts;
   };
 
-  const [insights, setInsights] = useState<any[] | null>(null);
-  const [insightsMeta, setInsightsMeta] = useState<any | null>(null);
+  const [insights, setInsights] = useState<DashboardAlert[] | null>(null);
+  const [insightsMeta, setInsightsMeta] = useState<InsightsMeta>(null);
 
   useEffect(() => {
     const fetchInsights = async () => {
@@ -140,10 +152,10 @@ function FacultyDashboardContent() {
         const res = await fetch(url, { cache: 'no-store' });
         if (!res.ok) return;
         const payload = await res.json();
-        if (Array.isArray(payload.alerts)) setInsights(payload.alerts);
-        if (payload.meta) setInsightsMeta(payload.meta);
-      } catch (e) {
-        // ignore, keep client-side computed alerts
+        if (Array.isArray(payload.alerts)) setInsights(payload.alerts as DashboardAlert[]);
+        if (payload.meta) setInsightsMeta(payload.meta as InsightsMeta);
+      } catch (error) {
+        console.warn('[FacultyDashboard] failed to load AI insights', error);
       }
     };
 
@@ -152,9 +164,10 @@ function FacultyDashboardContent() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">{isProgramChair ? 'Program Chair Dashboard' : 'Faculty Dashboard'}</h1>
-        <p className="text-slate-500 mt-1">Hello, {(user as User & { full_name?: string } | null)?.full_name}. Here is your schedule and status for today.</p>
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#D4A017]">Academic overview</p>
+        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">{isProgramChair ? 'Program Chair Dashboard' : 'Faculty Dashboard'}</h1>
+        <p className="text-slate-500">Hello, {user?.full_name ?? user?.name}. Here is your schedule and status for today.</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -168,10 +181,10 @@ function FacultyDashboardContent() {
         <div className="md:col-span-4 lg:col-span-5 space-y-6">
           <AIAlerts alerts={insights ?? computedAlerts()} />
           
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-            <h3 className="font-semibold text-slate-800 mb-4">My Schedule Today</h3>
+          <div className="surface-panel rounded-[12px] p-6">
+            <h3 className="mb-4 font-semibold text-slate-900">My Schedule Today</h3>
             {todayStats.ownClassesToday.length === 0 ? (
-              <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-lg border border-slate-200 text-center justify-center">
+              <div className="flex items-center justify-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-center">
                 <p className="text-sm text-slate-600">No classes scheduled for today</p>
               </div>
             ) : (
@@ -179,7 +192,7 @@ function FacultyDashboardContent() {
                 {todayStats.ownClassesToday.map((schedule) => {
                   const status = getTimeStatus(schedule.startTime, schedule.endTime);
                   return (
-                    <div key={schedule.id} className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-lg border border-slate-100 transition-colors">
+                    <div key={schedule.id} className="flex items-center justify-between rounded-xl border border-slate-100 p-3 transition-colors hover:bg-slate-50">
                       <div className="flex-1">
                         <div className="font-medium text-slate-800">
                           {formatTimeToTwelveHour(schedule.startTime)} - {formatTimeToTwelveHour(schedule.endTime)} {schedule.subjectOrRole ?? schedule.subject?.name}
@@ -200,18 +213,18 @@ function FacultyDashboardContent() {
         </div>
 
         <div className="md:col-span-3 lg:col-span-2 space-y-6">
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm text-center">
-          <h3 className="font-semibold text-slate-800 mb-2">My Attendance</h3>
-          <div className="text-3xl font-bold text-emerald-500 my-4">{myAttendance ? myAttendance.status : 'No record'}</div>
+        <div className="surface-panel rounded-[12px] p-6 text-center">
+          <h3 className="mb-2 font-semibold text-slate-900">My Attendance</h3>
+          <div className="my-4 text-3xl font-bold text-[#16A34A]">{myAttendance ? myAttendance.status : 'No record'}</div>
           <div className="text-sm text-slate-500">{myAttendance ? `Clocked in at ${myAttendance.timeIn || '—'}` : 'No attendance found for today'}</div>
         </div>
         {insightsMeta?.latenessSeries && (
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-            <h3 className="font-semibold text-slate-800 mb-2">Lateness (14d)</h3>
-            <div className="text-sm text-slate-600 mb-2">Recent late arrivals per day</div>
-            <div className="flex gap-2 flex-wrap text-xs text-slate-700">
+          <div className="surface-panel rounded-[12px] p-6">
+            <h3 className="mb-2 font-semibold text-slate-900">Lateness (14d)</h3>
+            <div className="mb-2 text-sm text-slate-600">Recent late arrivals per day</div>
+            <div className="flex flex-wrap gap-2 text-xs text-slate-700">
               {insightsMeta.latenessSeries.map((s: { date: string; lateCount: number }) => (
-                <div key={s.date} className="p-2 bg-slate-50 rounded-md border border-slate-100">
+                <div key={s.date} className="rounded-lg border border-slate-100 bg-slate-50 p-2">
                   <div className="font-medium">{s.lateCount}</div>
                   <div className="text-[10px] text-slate-500">{s.date.slice(5)}</div>
                 </div>

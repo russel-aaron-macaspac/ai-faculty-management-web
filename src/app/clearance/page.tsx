@@ -342,10 +342,11 @@ export default function ClearancePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center flex-wrap gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">{pageTitle}</h1>
-          <p className="text-slate-500 mt-1">{pageSubtitle}</p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#D4A017]">Clearance tracking</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">{pageTitle}</h1>
+          <p className="text-slate-500">{pageSubtitle}</p>
         </div>
 
         {!isFacultyUser && !isApprovalOfficer_ && (

@@ -22,15 +22,15 @@ export default function Home() {
   }, [router]);
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-6">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.18),transparent_34%),radial-gradient(circle_at_top_right,rgba(29,78,216,0.12),transparent_28%),linear-gradient(180deg,#f8fafc, #eef4fb)]" />
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-200 to-transparent" />
-      <div className="surface-panel relative z-10 flex flex-col items-center gap-4 rounded-3xl px-8 py-10 text-center">
-        <div className="flex h-14 w-14 animate-pulse items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/10">
-          <div className="h-5 w-5 rounded-full bg-primary" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-6 university-shell">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(212,160,23,0.16),transparent_34%),radial-gradient(circle_at_top_right,rgba(15,23,42,0.08),transparent_28%),linear-gradient(180deg,#f8fafc,#eef4fb)]" />
+      <div className="absolute inset-x-0 top-0 h-px bg-[#D4A017]/40" />
+      <div className="surface-panel relative z-10 flex flex-col items-center gap-4 rounded-[12px] px-8 py-10 text-center">
+        <div className="flex h-14 w-14 animate-pulse items-center justify-center rounded-2xl bg-[#0F172A]/10 ring-1 ring-[#0F172A]/10">
+          <div className="h-5 w-5 rounded-full bg-[#0F172A]" />
         </div>
         <div>
-          <p className="text-sm font-semibold tracking-[0.24em] text-primary uppercase">DomStaX</p>
+          <p className="text-sm font-semibold tracking-[0.24em] text-[#0F172A] uppercase">DomStaX</p>
           <p className="mt-2 text-sm text-slate-600">Initializing workspace...</p>
         </div>
       </div>

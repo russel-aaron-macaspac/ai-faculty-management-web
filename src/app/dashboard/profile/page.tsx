@@ -37,9 +37,9 @@ export default function ProfilePage() {
   }, [user]);
 
   if (!user) {
-    return (
+      return (
       <div className="flex h-full items-center justify-center">
-        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500 shadow-sm">No profile data found. Please login again.</div>
+        <div className="rounded-[12px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500 shadow-sm">No profile data found. Please login again.</div>
       </div>
     );
   }
@@ -67,6 +67,7 @@ export default function ProfilePage() {
   return (
     <div className="space-y-6">
       <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#D4A017]">Faculty profile</p>
         <h1 className="text-3xl font-semibold tracking-tight text-slate-900">My Profile</h1>
         <p className="text-slate-500">Review and update your account details.</p>
       </div>
@@ -135,32 +136,32 @@ export default function ProfilePage() {
         </CardHeader>
 
         <CardContent className="grid gap-6 py-6 sm:grid-cols-2">
-          <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+          <div className="space-y-2 rounded-[12px] border border-slate-200 bg-slate-50/80 p-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Email</div>
             <div className="text-sm text-slate-900" style={{ wordBreak: 'break-word' }}>{user.email}</div>
           </div>
 
-          <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+          <div className="space-y-2 rounded-[12px] border border-slate-200 bg-slate-50/80 p-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Employee ID</div>
             <div className="text-sm text-slate-900">{profileDetails.employeeId}</div>
           </div>
 
-          <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+          <div className="space-y-2 rounded-[12px] border border-slate-200 bg-slate-50/80 p-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Position</div>
             <div className="text-sm text-slate-900">{profileDetails.position}</div>
           </div>
 
-          <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+          <div className="space-y-2 rounded-[12px] border border-slate-200 bg-slate-50/80 p-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Hire Date</div>
             <div className="text-sm text-slate-900">{profileDetails.hireDate}</div>
           </div>
 
-          <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:col-span-2">
+          <div className="space-y-2 rounded-[12px] border border-slate-200 bg-slate-50/80 p-4 sm:col-span-2">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Phone</div>
             <div className="text-sm text-slate-900">{profileDetails.phone}</div>
           </div>
 
-          <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:col-span-2">
+          <div className="space-y-2 rounded-[12px] border border-slate-200 bg-slate-50/80 p-4 sm:col-span-2">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Address</div>
             <div className="text-sm text-slate-900">{profileDetails.address}</div>
           </div>
