@@ -51,9 +51,13 @@ export function AttendanceSummary({ userId, date }: Readonly<Props>) {
 
   const total = present + late + absent || 1; // avoid divide by zero
 
+  // Semantic status colors — same emerald/amber/rose tokens used in
+  // AIAlerts, so "good/attention/bad" reads consistently across the app
+  // instead of borrowing brand colors (navy/gold) that have no inherent
+  // status meaning.
   const stats = [
-    { label: 'Present', value: Math.round((present / total) * 100), color: 'bg-[#0F172A]', icon: UserCheck, count: present },
-    { label: 'Late', value: Math.round((late / total) * 100), color: 'bg-[#D4A017]', icon: Clock, count: late },
+    { label: 'Present', value: Math.round((present / total) * 100), color: 'bg-emerald-500', icon: UserCheck, count: present },
+    { label: 'Late', value: Math.round((late / total) * 100), color: 'bg-amber-500', icon: Clock, count: late },
     { label: 'Absent/Leave', value: Math.round((absent / total) * 100), color: 'bg-rose-500', icon: UserX, count: absent },
   ];
 
@@ -69,17 +73,17 @@ export function AttendanceSummary({ userId, date }: Readonly<Props>) {
         {loading ? (
           <div className="text-sm text-slate-500">Loading attendance...</div>
         ) : (
-          <div className="space-y-4 mt-2">
+          <div className="mt-2 space-y-4">
             {stats.map((stat) => (
               <div key={stat.label} className="space-y-1">
                 <div className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2 text-slate-700 font-medium">
+                  <div className="flex items-center gap-2 font-medium text-slate-700">
                     <stat.icon className="h-4 w-4 text-slate-400" />
                     {stat.label}
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-bold">{stat.count}</span>
-                    <span className="text-slate-500 text-xs">({stat.value}%)</span>
+                    <span className="text-xs text-slate-500">({stat.value}%)</span>
                   </div>
                 </div>
                 <Progress value={stat.value} className="h-2" indicatorClassName={stat.color} />

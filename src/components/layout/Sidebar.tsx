@@ -18,7 +18,6 @@ import {
 import { User } from '@/types/user';
 import { authService } from '@/services/authService';
 import { isApprovalOfficer, getApprovalOfficerConfig, isFacultyLikeRole } from '@/lib/roleConfig';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
 interface SidebarProps {
@@ -32,6 +31,10 @@ const createMenuLinks = (dashboardPath: string, label: string) => [
   { href: '/attendance', label: 'Attendance', icon: Clock },
   { href: '/clearance', label, icon: FileCheck2 },
 ];
+
+// Labels that belong in the "Account" group at the bottom of the nav,
+// separated from primary navigation by a divider + section label.
+const ACCOUNT_LABELS = new Set(['Change Password']);
 
 export function Sidebar({ user }: Readonly<SidebarProps>) {
   const pathname = usePathname();
@@ -95,14 +98,51 @@ export function Sidebar({ user }: Readonly<SidebarProps>) {
     links.push({ href: '/schedule-loading', label: 'Schedule Loading', icon: Calendar });
   }
 
+  // Split into primary nav vs. account-related items so the list gets a
+  // section break instead of one long undifferentiated column with a
+  // large empty gap above the footer.
+  const primaryLinks = links.filter((link) => !ACCOUNT_LABELS.has(link.label));
+  const accountLinks = links.filter((link) => ACCOUNT_LABELS.has(link.label));
+
   const handleLogout = () => {
     authService.logout();
     localStorage.removeItem('user');
     router.push('/login');
   };
 
+  const renderLink = (link: { href: string; label: string; icon: typeof LayoutDashboard }) => {
+    const Icon = link.icon;
+    const isActive = pathname === link.href || (pathname.startsWith(link.href) && link.href !== '/dashboard' && link.href !== '#');
+    return (
+      <Link
+        key={link.label}
+        href={link.href}
+        aria-current={isActive ? 'page' : undefined}
+        className={cn(
+          'group relative flex items-center gap-3 rounded-[10px] px-3.5 py-2.5 font-sans text-sm font-medium transition-colors duration-150',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017]/40',
+          isActive
+            ? 'bg-white/10 text-white'
+            : 'text-slate-400 hover:bg-white/5 hover:text-slate-100'
+        )}
+      >
+        {/* Slim accent bar instead of a fully-filled block — carries the
+            brand color without dominating the row. */}
+        <span
+          className={cn(
+            'absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-[#D4A017] transition-opacity duration-150',
+            isActive ? 'opacity-100' : 'opacity-0'
+          )}
+          aria-hidden="true"
+        />
+        <Icon className={cn('h-[18px] w-[18px] shrink-0 transition-colors', isActive ? 'text-[#D4A017]' : 'text-slate-500 group-hover:text-slate-300')} />
+        <span className="truncate">{link.label}</span>
+      </Link>
+    );
+  };
+
   return (
-    <aside className="flex h-full w-72 flex-col border-r border-white/10 navy-panel text-white shadow-[8px_0_40px_-30px_rgba(0,0,0,0.5)] transition-all duration-300">
+    <aside className="flex h-full w-72 flex-col border-r border-white/10 navy-panel font-sans text-white shadow-[8px_0_40px_-30px_rgba(0,0,0,0.5)] transition-all duration-300">
       <div className="flex h-20 items-center justify-start gap-3 border-b border-white/10 px-5">
         <Image
           src="/cropped.png"
@@ -112,55 +152,52 @@ export function Sidebar({ user }: Readonly<SidebarProps>) {
           className="h-8 w-auto"
           priority
         />
-        <div className="hidden flex-col sm:flex">
-          <span className="text-xs font-semibold uppercase tracking-[0.22em] text-[#D4A017]">Faculty Hub</span>
-          <span className="text-xs text-slate-300">Operations dashboard</span>
-        </div>
       </div>
-      
-      <div className="flex-1 overflow-y-auto px-4 py-5">
-        <nav className="flex flex-col gap-1.5">
-          {links.map((link) => {
-            const Icon = link.icon;
-            const isActive = pathname === link.href || (pathname.startsWith(link.href) && link.href !== '/dashboard' && link.href !== '#');
-            return (
-              <Link
-                key={link.label}
-                href={link.href}
-                className={cn(
-                  'group flex items-center rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200',
-                  isActive 
-                    ? 'bg-[#D4A017] text-[#0F172A] shadow-sm' 
-                    : 'text-slate-300 hover:bg-white/8 hover:text-white'
-                )}
-              >
-                <Icon className={cn('mr-3 h-5 w-5 transition-colors', isActive ? 'text-[#0F172A]' : 'text-slate-400 group-hover:text-white')} />
-                <span className="truncate">{link.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
-      </div>
-      
-      <div className="border-t border-white/10 p-5 space-y-4">
-        <div className="flex items-center gap-3 rounded-[12px] border border-white/10 bg-white/5 p-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-[12px] bg-[#D4A017]/15 font-semibold text-[#D4A017] ring-1 ring-[#D4A017]/20">
+
+      {/* User identity block now lives right under the logo, in its own
+          bordered section — first thing you see after the brand, rather
+          than a footer element that felt disconnected from the nav flow. */}
+      <div className="border-b border-white/10 px-4 py-4">
+        <div className="flex items-center gap-3 rounded-[10px] border border-white/10 bg-white/5 p-2.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[#D4A017]/15 font-sans text-sm font-semibold text-[#D4A017] ring-1 ring-[#D4A017]/20">
             {displayName?.charAt(0) ?? 'U'}
           </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold text-white">{displayName || user?.role}</span>
-            <Badge variant="outline" className="mt-1 w-fit capitalize border-white/10 bg-white/5 text-slate-100">{user?.role}</Badge>
+          <div className="flex min-w-0 flex-col">
+            <span className="truncate font-sans text-sm font-medium text-white">{displayName || user?.role}</span>
+            <Badge variant="outline" className="mt-0.5 w-fit border-white/10 bg-transparent px-1.5 py-0 font-sans text-[10px] capitalize text-slate-400">
+              {user?.role}
+            </Badge>
           </div>
         </div>
-        
-        <Button 
-          variant="outline"
+      </div>
+
+      <div className="flex flex-1 flex-col overflow-y-auto px-3 py-5">
+        <nav className="flex flex-col gap-0.5">
+          {primaryLinks.map(renderLink)}
+        </nav>
+
+        {accountLinks.length > 0 && (
+          <div className="mt-auto pt-6">
+            <div className="flex items-center gap-2 px-3.5 pb-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Account</span>
+              <span className="h-px flex-1 bg-white/10" aria-hidden="true" />
+            </div>
+            <nav className="flex flex-col gap-0.5">
+              {accountLinks.map(renderLink)}
+            </nav>
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-white/10 p-4">
+        <button
+          type="button"
           onClick={handleLogout}
-          className="flex w-full items-center justify-start gap-3 border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+          className="flex w-full items-center gap-3 rounded-[10px] px-3.5 py-2.5 font-sans text-sm font-medium text-slate-400 transition-colors duration-150 hover:bg-white/5 hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017]/40"
         >
-          <LogOut className="h-5 w-5" />
+          <LogOut className="h-[18px] w-[18px]" />
           Sign Out
-        </Button>
+        </button>
       </div>
     </aside>
   );

@@ -32,7 +32,6 @@ export function Navbar({ onMenuClick, user = null }: Readonly<NavbarProps>) {
       </div>
       
       <div className="flex items-center gap-3 sm:gap-4">
-        <Badge variant="outline" className="hidden border-slate-200 bg-white text-slate-700 sm:inline-flex">Faculty management</Badge>
         <NotificationCenter userId={user?.id ?? null} />
       </div>
     </header>
