@@ -4,9 +4,11 @@ import { useState, useEffect, useMemo } from 'react';
 import { clearanceService } from '@/services/clearanceService';
 import { Clearance } from '@/types/clearance';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Progress } from '@/components/ui/progress';
 import { UploadCloud, CheckCircle2, AlertTriangle, FileText, Loader2, Search, Check, X, Clock } from 'lucide-react';
 import { FACULTY_REQUIRED_OFFICES } from '@/lib/clearanceOffices';
 import { isApprovalOfficer, getClearancePageInfo, isFacultyLikeRole } from '@/lib/roleConfig';
@@ -27,6 +29,10 @@ const OFFICER_OFFICE_MAP: Record<string, number> = {
   account:      11,
   treasury:     12,
   hro:          13,
+};
+
+type FacultyStepRecord = Clearance & {
+  _isRequiredPlaceholder?: boolean;
 };
 
 export default function ClearancePage() {
@@ -170,38 +176,44 @@ export default function ClearancePage() {
     }
   };
 
+  const facultyStepRecords = useMemo<FacultyStepRecord[]>(() => {
+    if (!currentUser || !isFacultyLikeRole(currentUser.role)) return [];
+
+    const accountId = currentUser.id ? String(currentUser.id) : '';
+    const accountName = normalize(currentUser.full_name || currentUser.name || '');
+
+    const ownRecords = records.filter((record) => {
+      const sameId = accountId !== '' && record.employeeId === accountId;
+      const recordName = normalize(record.employeeName || '');
+      const sameName =
+        accountName !== '' &&
+        (recordName === accountName || recordName.includes(accountName) || accountName.includes(recordName));
+      return sameId || sameName;
+    });
+
+    return FACULTY_REQUIRED_OFFICES.map((office, index) => {
+      for (const row of ownRecords) {
+        if (normalize(row.requiredDocument || '') === normalize(office)) {
+          return { ...row, _isRequiredPlaceholder: false };
+        }
+      }
+
+      return {
+        id: `required-${index}`,
+        employeeId: accountId || 'N/A',
+        employeeName: currentUser.full_name || currentUser.name || 'Faculty User',
+        requiredDocument: office,
+        status: 'pending' as const,
+        _isRequiredPlaceholder: true,
+      };
+    });
+  }, [currentUser, records]);
+
   const filtered = useMemo(() => {
     if (!currentUser) return [];
     const term = searchTerm.toLowerCase();
-    const normalizeText = (value?: string) => (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
     if (isFacultyLikeRole(currentUser.role)) {
-      const accountId = currentUser.id ? String(currentUser.id) : '';
-      const accountName = normalizeText(currentUser.full_name || currentUser.name);
-      const ownRecords = records.filter((record) => {
-        const sameId = accountId !== '' && record.employeeId === accountId;
-        const recordName = normalizeText(record.employeeName);
-        const sameName =
-          accountName !== '' &&
-          (recordName === accountName || recordName.includes(accountName) || accountName.includes(recordName));
-        return sameId || sameName;
-      });
-
-      return FACULTY_REQUIRED_OFFICES.map((office, index) => {
-        const officeName = office;
-        for (const row of ownRecords) {
-          if (normalizeText(row.requiredDocument) === normalizeText(officeName)) {
-            return { ...row, _isRequiredPlaceholder: false };
-          }
-        }
-        return {
-          id: `required-${index}`,
-          employeeId: accountId || 'N/A',
-          employeeName: currentUser.full_name || currentUser.name || 'Faculty User',
-          requiredDocument: officeName,
-          status: 'pending' as const,
-          _isRequiredPlaceholder: true,
-        };
-      }).filter((row) =>
+      return facultyStepRecords.filter((row) =>
         (row.requiredDocument ?? '').toLowerCase().includes(term) ||
         (row.employeeName ?? '').toLowerCase().includes(term)
       );
@@ -231,28 +243,26 @@ export default function ClearancePage() {
       (record.employeeName ?? '').toLowerCase().includes(term) ||
       (record.requiredDocument ?? '').toLowerCase().includes(term)
     );
-  }, [records, searchTerm, currentUser]);
+  }, [records, searchTerm, currentUser, facultyStepRecords]);
 
-  const facultyStatusTotals = useMemo(() => {
-    if (!isFacultyUser) {
-      return { approved: 0, rejected: 0, pending: 0 };
-    }
+  const facultyProgress = useMemo(() => {
+    if (!isFacultyUser || facultyStepRecords.length === 0) return null;
 
-    return filtered.reduce(
-      (totals, record) => {
-        if (record.status === 'approved') {
-          totals.approved += 1;
-        } else if (record.status === 'rejected') {
-          totals.rejected += 1;
-        } else {
-          // Treat submitted as pending for faculty progress tracking.
-          totals.pending += 1;
-        }
-        return totals;
-      },
-      { approved: 0, rejected: 0, pending: 0 }
-    );
-  }, [filtered, isFacultyUser]);
+    const approved = facultyStepRecords.filter((record) => record.status === 'approved').length;
+    const submitted = facultyStepRecords.filter((record) => record.status === 'submitted').length;
+    const rejected = facultyStepRecords.filter((record) => record.status === 'rejected').length;
+    const pending = facultyStepRecords.filter((record) => record.status === 'pending').length;
+    const completion = Math.round((approved / facultyStepRecords.length) * 100);
+
+    return {
+      approved,
+      submitted,
+      rejected,
+      pending,
+      total: facultyStepRecords.length,
+      completion,
+    };
+  }, [facultyStepRecords, isFacultyUser]);
 
   const handleDecision = async (record: Clearance, decision: 'approved' | 'rejected' | 'pending') => {
     if (!currentUser) return;
@@ -339,7 +349,7 @@ export default function ClearancePage() {
           </div>
           {record.validationWarning && (
             <div className="text-xs text-rose-600 mt-1 flex items-center gap-1">
-              <AlertTriangle className="h-3 w-3" /> AI Flag: {record.validationWarning}
+              <AlertTriangle className="h-3 w-3" /> Reason: {record.validationWarning}
             </div>
           )}
         </TableCell>
@@ -456,21 +466,43 @@ export default function ClearancePage() {
         )}
       </div>
 
-      {isFacultyUser && (
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Approved</p>
-            <p className="mt-2 text-3xl font-bold text-emerald-800">{facultyStatusTotals.approved}</p>
-          </div>
-          <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">Rejected</p>
-            <p className="mt-2 text-3xl font-bold text-rose-800">{facultyStatusTotals.rejected}</p>
-          </div>
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Pending</p>
-            <p className="mt-2 text-3xl font-bold text-amber-800">{facultyStatusTotals.pending}</p>
-          </div>
-        </div>
+      {isFacultyUser && facultyProgress && (
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader className="space-y-1">
+            <CardTitle>Clearance Progress</CardTitle>
+            <CardDescription>Completion and clearance status summary.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm text-slate-500">Completion</p>
+                <p className="text-3xl font-semibold tracking-tight text-slate-900">{facultyProgress.completion}%</p>
+                <p className="text-sm text-slate-500">{facultyProgress.approved} of {facultyProgress.total} approved</p>
+              </div>
+            </div>
+
+            <Progress
+              value={facultyProgress.completion}
+              className="h-2"
+              indicatorClassName="bg-gradient-to-r from-[#0F172A] via-[#D4A017] to-emerald-600"
+            />
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Approved</p>
+                <p className="mt-2 text-2xl font-semibold text-emerald-800">{facultyProgress.approved}</p>
+              </div>
+              <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">Rejected</p>
+                <p className="mt-2 text-2xl font-semibold text-rose-800">{facultyProgress.rejected}</p>
+              </div>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Pending</p>
+                <p className="mt-2 text-2xl font-semibold text-amber-800">{facultyProgress.pending}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -484,20 +516,22 @@ export default function ClearancePage() {
           />
         </div>
 
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-slate-50">
-              <TableHead>Office / Requirement</TableHead>
-              <TableHead>Submission Date</TableHead>
-              <TableHead>Status</TableHead>
-              {showSubmitColumn && <TableHead className="text-right">Action</TableHead>}
-              {showActionColumn && <TableHead className="text-right">Decision</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {tableRows}
-          </TableBody>
-        </Table>
+        <div className="max-h-128 overflow-y-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-slate-50">
+                <TableHead>Office / Requirement</TableHead>
+                <TableHead>Submission Date</TableHead>
+                <TableHead>Status</TableHead>
+                {showSubmitColumn && <TableHead className="text-right">Action</TableHead>}
+                {showActionColumn && <TableHead className="text-right">Decision</TableHead>}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tableRows}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </div>
   );
