@@ -13,14 +13,3 @@ export const FACULTY_REQUIRED_OFFICES = [
   'Treasury Office',
   'Human Resources Office',
 ];
-
-export const toOfficeSlug = (office: string) =>
-  office
-    .toLowerCase()
-    .trim()
-    .split(/[^a-z0-9]+/)
-    .filter(Boolean)
-    .join('-');
-
-export const fromOfficeSlug = (slug: string) =>
-  FACULTY_REQUIRED_OFFICES.find((office) => toOfficeSlug(office) === slug);

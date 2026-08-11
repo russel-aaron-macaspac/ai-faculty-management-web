@@ -1,8 +1,6 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { clearanceService } from '@/services/clearanceService';
 import { Clearance } from '@/types/clearance';
 import { Button } from '@/components/ui/button';
@@ -10,9 +8,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { UploadCloud, CheckCircle2, AlertTriangle, FileText, Loader2, Search, Check, X, Clock } from 'lucide-react';
-import { FACULTY_REQUIRED_OFFICES, toOfficeSlug } from '@/lib/clearanceOffices';
+import { FACULTY_REQUIRED_OFFICES } from '@/lib/clearanceOffices';
 import { isApprovalOfficer, getClearancePageInfo, isFacultyLikeRole } from '@/lib/roleConfig';
-import { StoredUser } from '@/lib/stringUtils';
+import { StoredUser, normalize } from '@/lib/stringUtils';
 import { toast } from '@/lib/toast';
 
 const OFFICER_OFFICE_MAP: Record<string, number> = {
@@ -32,12 +30,13 @@ const OFFICER_OFFICE_MAP: Record<string, number> = {
 };
 
 export default function ClearancePage() {
-  const router = useRouter();
   const [records, setRecords] = useState<Clearance[]>([]);
+  const [offices, setOffices] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [submittingOfficeId, setSubmittingOfficeId] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<StoredUser | null>(null);
   const [docName, setDocName] = useState('Safety Training Certificate');
@@ -46,6 +45,17 @@ export default function ClearancePage() {
   const isFacultyUser = isFacultyLikeRole(currentUser?.role);
   const isApprovalOfficer_ = isApprovalOfficer(currentUser?.role);
   const showActionColumn = isApprovalOfficer_;
+  const showSubmitColumn = isFacultyUser;
+
+  const officeIdMap = useMemo(() => {
+    const map = new Map<string, string>();
+    offices.forEach((office) => {
+      if (office?.name && office?.id) {
+        map.set(normalize(office.name), String(office.id));
+      }
+    });
+    return map;
+  }, [offices]);
 
   const getOfficeId = (role?: string): string | undefined => {
     if (!role) return undefined;
@@ -80,6 +90,14 @@ export default function ClearancePage() {
     setRecords(data || []);
     setLoading(false);
   };
+
+  useEffect(() => {
+    void clearanceService.getOffices().then((data) => {
+      if (Array.isArray(data)) {
+        setOffices(data);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     const raw = localStorage.getItem('user');
@@ -124,16 +142,44 @@ export default function ClearancePage() {
     }
   };
 
+  const handleFacultySubmit = async (officeName: string) => {
+    if (!currentUser) return;
+
+    const employeeId = currentUser.supabase_id ?? '';
+    if (!employeeId) {
+      toast({ title: 'Submission Failed', description: 'Your account is missing the Supabase user UUID. Please log out and sign in again.', type: 'error' });
+      return;
+    }
+
+    const officeId = officeIdMap.get(normalize(officeName));
+    if (!officeId) {
+      toast({ title: 'Submission Failed', description: `Could not resolve ${officeName} to an office record.`, type: 'error' });
+      return;
+    }
+
+    setSubmittingOfficeId(officeId);
+    try {
+      await clearanceService.uploadDocument(employeeId, Number(officeId), officeName);
+      await loadData(currentUser);
+      toast({ title: 'Clearance Submitted', description: `${officeName} has been submitted for review.`, type: 'success' });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unable to submit this clearance. Please try again.';
+      toast({ title: 'Submission Failed', description: msg, type: 'error' });
+    } finally {
+      setSubmittingOfficeId(null);
+    }
+  };
+
   const filtered = useMemo(() => {
     if (!currentUser) return [];
     const term = searchTerm.toLowerCase();
-    const normalize = (value?: string) => (value ?? '').trim().toLowerCase().split(/\s+/).join(' ');
+    const normalizeText = (value?: string) => (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
     if (isFacultyLikeRole(currentUser.role)) {
       const accountId = currentUser.id ? String(currentUser.id) : '';
-      const accountName = normalize(currentUser.full_name || currentUser.name);
+      const accountName = normalizeText(currentUser.full_name || currentUser.name);
       const ownRecords = records.filter((record) => {
         const sameId = accountId !== '' && record.employeeId === accountId;
-        const recordName = normalize(record.employeeName);
+        const recordName = normalizeText(record.employeeName);
         const sameName =
           accountName !== '' &&
           (recordName === accountName || recordName.includes(accountName) || accountName.includes(recordName));
@@ -142,14 +188,18 @@ export default function ClearancePage() {
 
       return FACULTY_REQUIRED_OFFICES.map((office, index) => {
         const officeName = office;
-        const existing = ownRecords.find((row) => normalize(row.requiredDocument) === normalize(officeName));
-        if (existing) return existing;
+        for (const row of ownRecords) {
+          if (normalizeText(row.requiredDocument) === normalizeText(officeName)) {
+            return { ...row, _isRequiredPlaceholder: false };
+          }
+        }
         return {
           id: `required-${index}`,
           employeeId: accountId || 'N/A',
           employeeName: currentUser.full_name || currentUser.name || 'Faculty User',
           requiredDocument: officeName,
           status: 'pending' as const,
+          _isRequiredPlaceholder: true,
         };
       }).filter((row) =>
         (row.requiredDocument ?? '').toLowerCase().includes(term) ||
@@ -240,11 +290,21 @@ export default function ClearancePage() {
     return 'bg-slate-100 text-slate-800';
   };
 
+  const getFacultySubmitLabel = (record: Clearance & { _isRequiredPlaceholder?: boolean }) => {
+    if (!record._isRequiredPlaceholder && record.status !== 'rejected') {
+      return 'Submitted';
+    }
+    if (record.status === 'rejected') {
+      return 'Resubmit Clearance';
+    }
+    return 'Submit Clearance';
+  };
+
   let tableRows: React.ReactNode;
   if (loading) {
     tableRows = (
       <TableRow>
-        <TableCell colSpan={showActionColumn ? 4 : 3} className="text-center py-10 text-slate-500">
+        <TableCell colSpan={showActionColumn || showSubmitColumn ? 4 : 3} className="text-center py-10 text-slate-500">
           <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-red-500" />
           Loading clearance data...
         </TableCell>
@@ -253,7 +313,7 @@ export default function ClearancePage() {
   } else if (filtered.length === 0) {
     tableRows = (
       <TableRow>
-        <TableCell colSpan={showActionColumn ? 4 : 3} className="text-center py-10 text-slate-500">
+        <TableCell colSpan={showActionColumn || showSubmitColumn ? 4 : 3} className="text-center py-10 text-slate-500">
           No documents found.
         </TableCell>
       </TableRow>
@@ -263,11 +323,6 @@ export default function ClearancePage() {
       <TableRow
         key={record.id}
         className={isApprovalOfficer_ ? 'cursor-pointer hover:bg-slate-50' : ''}
-        onClick={() => {
-          if (isApprovalOfficer_) {
-            router.push(`/clearance/faculty/${record.employeeId}`);
-          }
-        }}
       >
         <TableCell>
           <div className="flex items-start justify-between gap-4">
@@ -276,12 +331,7 @@ export default function ClearancePage() {
               {isApprovalOfficer_ ? (
                 <span className="text-slate-800 font-semibold">{record.employeeName}</span>
               ) : (
-                <Link
-                  href={`/clearance/${toOfficeSlug(record.requiredDocument)}`}
-                  className="text-slate-800 hover:text-red-700 hover:underline"
-                >
-                  {record.requiredDocument}
-                </Link>
+                <span className="text-slate-800">{record.requiredDocument}</span>
               )}
             </div>
 
@@ -300,6 +350,24 @@ export default function ClearancePage() {
             {record.status}
           </span>
         </TableCell>
+        {showSubmitColumn && (
+          <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+            <Button
+              type="button"
+              size="sm"
+              className="bg-red-600 hover:bg-red-700"
+              disabled={!currentUser?.supabase_id || actionLoadingId === record.id || submittingOfficeId === officeIdMap.get(normalize(record.requiredDocument)) || (!record._isRequiredPlaceholder && record.status !== 'rejected')}
+              onClick={() => void handleFacultySubmit(record.requiredDocument)}
+            >
+              {submittingOfficeId === officeIdMap.get(normalize(record.requiredDocument)) ? (
+                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <UploadCloud className="mr-1 h-3.5 w-3.5" />
+              )}
+              {getFacultySubmitLabel(record)}
+            </Button>
+          </TableCell>
+        )}
         {showActionColumn && (
           <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
             <div className="inline-flex flex-col gap-1 sm:gap-2 sm:flex-row">
@@ -422,6 +490,7 @@ export default function ClearancePage() {
               <TableHead>Office / Requirement</TableHead>
               <TableHead>Submission Date</TableHead>
               <TableHead>Status</TableHead>
+              {showSubmitColumn && <TableHead className="text-right">Action</TableHead>}
               {showActionColumn && <TableHead className="text-right">Decision</TableHead>}
             </TableRow>
           </TableHeader>
