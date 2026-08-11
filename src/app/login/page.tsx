@@ -82,7 +82,7 @@ export default function LoginPage() {
     }
   }
 
-  if (showSplash) {
+if (showSplash) {
     return (
       <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-6 text-slate-900 university-shell">
         <div
@@ -94,24 +94,26 @@ export default function LoginPage() {
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.04),rgba(248,250,252,0.7))]" />
         <div className="pointer-events-none absolute left-[12%] top-[18%] h-40 w-40 rounded-full bg-[#D4A017]/12 blur-3xl" />
         <div className="pointer-events-none absolute right-[10%] bottom-[16%] h-48 w-48 rounded-full bg-[#0F172A]/10 blur-3xl" />
+
         <div className="relative z-10 flex items-center justify-center">
-          <div className="absolute h-52 w-52 rounded-full bg-[#D4A017]/12 blur-3xl animate-pulse" />
-          <div className="absolute h-72 w-72 rounded-full border border-white/30 animate-pulse animation-duration-[2400ms]" />
-          <div className="absolute h-96 w-96 rounded-full border border-[#0F172A]/10 animate-pulse animation-duration-[3200ms]" />
-          <div className="relative flex h-40 w-40 items-center justify-center rounded-[28px] border border-white/70 bg-white/78 shadow-[0_24px_60px_-28px_rgba(15,23,42,0.34)] backdrop-blur-md">
-            <div className="absolute inset-4 rounded-[22px] border border-[#D4A017]/20" />
-            <div className="absolute inset-0 rounded-[28px] bg-[radial-gradient(circle_at_center,rgba(212,160,23,0.18),transparent_70%)]" />
-            <Image
-              src="/croppedcolored.png"
-              alt="DomStaX"
-              width={260}
-              height={96}
-              priority
-              className="relative z-10 h-auto animate-[splash-logo-breathe_1800ms_ease-in-out_infinite]"
-              style={{ width: '178px', maxWidth: '178px' }}
-            />
-          </div>
-          <div className="absolute left-1/2 top-[calc(50%+5.75rem)] flex -translate-x-1/2 items-center gap-2">
+          {/* ambient glow behind logo */}
+          <div className="absolute h-56 w-56 rounded-full bg-[#D4A017]/14 blur-3xl animate-pulse" />
+
+          {/* counter-rotating rings */}
+          <div className="absolute h-80 w-80 rounded-full border border-dashed border-[#0F172A]/10 animate-[spin_12s_linear_infinite]" />
+          <div className="absolute h-64 w-64 rounded-full border border-white/40 animate-[spin_9s_linear_infinite_reverse]" />
+
+          <Image
+            src="/croppedcolored.png"
+            alt="DomStaX"
+            width={220}
+            height={37}
+            priority
+            className="relative z-10 h-auto splash-logo-pulse"
+            style={{ width: '200px', maxWidth: '200px' }}
+          />
+
+          <div className="absolute left-1/2 top-[calc(50%+4.25rem)] flex -translate-x-1/2 items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-[#0F172A] animate-bounce" style={{ animationDelay: '0ms' }} />
             <span className="h-2 w-2 rounded-full bg-[#0F172A] animate-bounce" style={{ animationDelay: '150ms' }} />
             <span className="h-2 w-2 rounded-full bg-[#D4A017] animate-bounce" style={{ animationDelay: '300ms' }} />

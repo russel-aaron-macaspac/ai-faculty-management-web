@@ -203,6 +203,15 @@
   }
 }
 
+@keyframes splash-shimmer {
+  0% {
+    transform: translateX(-120%) skewX(-12deg);
+  }
+  100% {
+    transform: translateX(320%) skewX(-12deg);
+  }
+}
+
 .splash-fade-in {
   animation: splash-fade-in 500ms ease-out both;
 }
