@@ -14,7 +14,7 @@ import { formatTimeToTwelveHour } from '@/lib/timeUtils';
 import { isFacultyLikeRole } from '@/lib/roleConfig';
 import { toast } from '@/lib/toast';
 
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 type LocalUser = {
   id: string;
@@ -37,7 +37,13 @@ function SchedulesContent() {
   const [saving, setSaving] = useState(false);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [availabilityRows, setAvailabilityRows] = useState<Array<{ day: string; startTime: string; endTime: string }>>([]);
+  const [generatedAvailabilityRows, setGeneratedAvailabilityRows] = useState<Array<{ day: string; startTime: string; endTime: string }>>([]);
   const [availabilityError, setAvailabilityError] = useState('');
+  const [matrixInput, setMatrixInput] = useState({
+    selectedDays: DAYS,
+    startTime: '08:00',
+    endTime: '17:00',
+  });
 
   useEffect(() => {
     const raw = localStorage.getItem('user');
@@ -51,9 +57,12 @@ function SchedulesContent() {
 
         if (parsed?.id && isFacultyLikeRole(parsed.role)) {
           const entries = await scheduleService.getFacultyAvailability(String(parsed.id));
-          setAvailabilityRows(entries.map((entry) => ({ day: entry.day, startTime: entry.startTime, endTime: entry.endTime })));
+          const mappedEntries = entries.map((entry) => ({ day: entry.day, startTime: entry.startTime, endTime: entry.endTime }));
+          setAvailabilityRows(mappedEntries);
+          setGeneratedAvailabilityRows(mappedEntries);
         } else {
           setAvailabilityRows([]);
+          setGeneratedAvailabilityRows([]);
         }
       } finally {
         setLoading(false);
@@ -119,16 +128,52 @@ function SchedulesContent() {
     );
   }
 
-  const addAvailabilityRow = () => {
-    setAvailabilityRows((rows) => [...rows, { day: 'Monday', startTime: '08:00', endTime: '10:00' }]);
+  const toggleMatrixDay = (day: string) => {
+    setMatrixInput((current) => {
+      const selectedDays = current.selectedDays.includes(day)
+        ? current.selectedDays.filter((selectedDay) => selectedDay !== day)
+        : [...current.selectedDays, day];
+
+      return { ...current, selectedDays };
+    });
   };
 
-  const updateAvailabilityRow = (index: number, next: Partial<{ day: string; startTime: string; endTime: string }>) => {
+  const generateAvailabilityMatrix = () => {
+    if (!matrixInput.startTime || !matrixInput.endTime) {
+      setAvailabilityError('Please choose both a start and end time.');
+      return;
+    }
+
+    if (matrixInput.startTime >= matrixInput.endTime) {
+      setAvailabilityError('The availability end time must be later than the start time.');
+      return;
+    }
+
+    if (matrixInput.selectedDays.length === 0) {
+      setAvailabilityError('Select at least one day for your availability schedule.');
+      return;
+    }
+
+    const rows = matrixInput.selectedDays.map((day) => ({
+      day,
+      startTime: matrixInput.startTime,
+      endTime: matrixInput.endTime,
+    }));
+
+    setGeneratedAvailabilityRows(rows);
+    setAvailabilityRows(rows);
+    setAvailabilityError('');
+  };
+
+  const updateGeneratedRow = (index: number, next: Partial<{ day: string; startTime: string; endTime: string }>) => {
+    setGeneratedAvailabilityRows((rows) => rows.map((row, rowIndex) => (rowIndex === index ? { ...row, ...next } : row)));
     setAvailabilityRows((rows) => rows.map((row, rowIndex) => (rowIndex === index ? { ...row, ...next } : row)));
   };
 
-  const removeAvailabilityRow = (index: number) => {
-    setAvailabilityRows((rows) => rows.filter((_, rowIndex) => rowIndex !== index));
+  const removeGeneratedRow = (index: number) => {
+    const nextRows = generatedAvailabilityRows.filter((_, rowIndex) => rowIndex !== index);
+    setGeneratedAvailabilityRows(nextRows);
+    setAvailabilityRows(nextRows);
   };
 
   const handleSaveAvailability = async () => {
@@ -137,7 +182,8 @@ function SchedulesContent() {
       return;
     }
 
-    const invalidRow = availabilityRows.find((row) => !row.day || !row.startTime || !row.endTime || row.startTime >= row.endTime);
+    const rowsToSave = generatedAvailabilityRows.length > 0 ? generatedAvailabilityRows : availabilityRows;
+    const invalidRow = rowsToSave.find((row) => !row.day || !row.startTime || !row.endTime || row.startTime >= row.endTime);
     if (invalidRow) {
       setAvailabilityError('Each availability row needs a day, a start time, and an end time that is later than the start time.');
       return;
@@ -146,8 +192,9 @@ function SchedulesContent() {
     setSaving(true);
     setAvailabilityError('');
     try {
-      await scheduleService.saveFacultyAvailability(String(user.id), availabilityRows);
-      toast({ title: 'Availability Saved', description: 'Your availability was saved successfully.', type: 'success' });
+      await scheduleService.saveFacultyAvailability(String(user.id), rowsToSave);
+      setAvailabilityRows(rowsToSave);
+      toast({ title: 'Availability Saved', description: 'Your availability schedule was saved successfully.', type: 'success' });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to save availability.';
       setAvailabilityError(message);
@@ -179,42 +226,128 @@ function SchedulesContent() {
           <CardHeader>
             <CardTitle>Availability</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {availabilityRows.map((row, index) => (
-              <div key={`${row.day}-${index}`} className="grid items-end gap-3 md:grid-cols-4">
+          <CardContent className="space-y-5">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="mb-3 text-sm font-semibold text-slate-800">Build your availability schedule</div>
+              <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <div className="text-sm font-medium text-slate-700">Day</div>
-                  <Select value={row.day} onValueChange={(value) => updateAvailabilityRow(index, { day: value || 'Monday' })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DAYS.map((day) => (
-                        <SelectItem key={day} value={day}>
-                          {day}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="mb-1 text-sm font-medium text-slate-700">Start time</div>
+                  <Input
+                    type="time"
+                    value={matrixInput.startTime}
+                    onChange={(event) => setMatrixInput((current) => ({ ...current, startTime: event.target.value }))}
+                  />
                 </div>
                 <div>
-                  <div className="text-sm font-medium text-slate-700">Start</div>
-                  <Input type="time" value={row.startTime} onChange={(event) => updateAvailabilityRow(index, { startTime: event.target.value })} />
+                  <div className="mb-1 text-sm font-medium text-slate-700">End time</div>
+                  <Input
+                    type="time"
+                    value={matrixInput.endTime}
+                    onChange={(event) => setMatrixInput((current) => ({ ...current, endTime: event.target.value }))}
+                  />
                 </div>
-                <div>
-                  <div className="text-sm font-medium text-slate-700">End</div>
-                  <Input type="time" value={row.endTime} onChange={(event) => updateAvailabilityRow(index, { endTime: event.target.value })} />
+              </div>
+
+              <div className="mt-4">
+                <div className="mb-2 text-sm font-medium text-slate-700">Available days</div>
+                <div className="flex flex-wrap gap-2">
+                  {DAYS.map((day) => {
+                    const isSelected = matrixInput.selectedDays.includes(day);
+                    return (
+                      <Button
+                        key={day}
+                        type="button"
+                        size="sm"
+                        variant={isSelected ? 'default' : 'outline'}
+                        onClick={() => toggleMatrixDay(day)}
+                        className={
+                          isSelected
+                            ? 'rounded-full border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 hover:text-white'
+                            : 'rounded-full border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                        }
+                      >
+                        {day}
+                      </Button>
+                    );
+                  })}
                 </div>
-                <Button variant="outline" onClick={() => removeAvailabilityRow(index)}>
-                  Remove
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Button type="button" onClick={generateAvailabilityMatrix}>
+                  Generate Schedule
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setMatrixInput({ selectedDays: DAYS, startTime: '08:00', endTime: '17:00' });
+                    setGeneratedAvailabilityRows([]);
+                    setAvailabilityRows([]);
+                    setAvailabilityError('');
+                  }}
+                >
+                  Clear
                 </Button>
               </div>
-            ))}
+            </div>
+
+            {generatedAvailabilityRows.length > 0 && (
+              <div className="rounded-xl border border-slate-200">
+                <div className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800">Generated availability schedule</div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Day</TableHead>
+                      <TableHead>Time</TableHead>
+                      <TableHead className="w-[120px]">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {generatedAvailabilityRows.map((row, index) => (
+                      <TableRow key={`${row.day}-${index}`}>
+                        <TableCell>
+                          <Select value={row.day} onValueChange={(value) => updateGeneratedRow(index, { day: value || 'Monday' })}>
+                            <SelectTrigger className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {DAYS.map((day) => (
+                                <SelectItem key={day} value={day}>
+                                  {day}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Input
+                              type="time"
+                              value={row.startTime}
+                              onChange={(event) => updateGeneratedRow(index, { startTime: event.target.value })}
+                            />
+                            <span className="self-center text-slate-400">-</span>
+                            <Input
+                              type="time"
+                              value={row.endTime}
+                              onChange={(event) => updateGeneratedRow(index, { endTime: event.target.value })}
+                            />
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Button type="button" variant="outline" onClick={() => removeGeneratedRow(index)}>
+                            Remove
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
 
             <div className="flex gap-3">
-              <Button type="button" variant="outline" onClick={addAvailabilityRow}>
-                Add Availability
-              </Button>
               <Button type="button" onClick={handleSaveAvailability} disabled={saving}>
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save Availability
               </Button>
