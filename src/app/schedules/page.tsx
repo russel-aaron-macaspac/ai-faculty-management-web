@@ -214,7 +214,7 @@ function SchedulesContent() {
 
       <Card>
         <CardHeader>
-          <CardTitle>{isFacultyLikeRole(user?.role) ? 'Faculty Availability' : 'Schedule Overview'}</CardTitle>
+          <CardTitle>{isFacultyLikeRole(user?.role) ? 'Faculty Schedule' : 'Schedule Overview'}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {scheduleContent}
