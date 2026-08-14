@@ -142,6 +142,14 @@ function FacultyDashboardContent() {
   const [insights, setInsights] = useState<DashboardAlert[] | null>(null);
   const [insightsMeta, setInsightsMeta] = useState<InsightsMeta>(null);
 
+  const facultyClearanceProgress = useMemo(() => {
+    const progressAlert = (insights ?? []).find(
+      (alert) => alert.id === 'faculty-clearance-progress' || alert.title === 'Clearance Progress'
+    ) as DashboardAlert & { progress?: { completion: number; approved: number; total: number } } | undefined;
+
+    return progressAlert?.progress ?? null;
+  }, [insights]);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -198,7 +206,16 @@ function FacultyDashboardContent() {
         <StatCard title="Classes Today" value={todayStats.classCount} icon={GraduationCap} href="/schedules" />
         <StatCard title="Total Hours" value={todayStats.totalHoursLabel} icon={Clock} href="/schedules" />
         <StatCard title="Next Class" value={todayStats.nextClassTime} description={todayStats.nextClassRoom} icon={CalendarDays} href="/schedules" />
-        <StatCard title="Clearance Status" value="Cleared" icon={FileCheck2} trend="up" trendValue="100%" href="/clearance" />
+        <StatCard
+          title="Clearance Status"
+          value={facultyClearanceProgress ? `${facultyClearanceProgress.completion}%` : 'Loading...'}
+          description={facultyClearanceProgress ? `${facultyClearanceProgress.approved} of ${facultyClearanceProgress.total} approved` : 'Loading clearance data...'}
+          icon={FileCheck2}
+          trend={facultyClearanceProgress && facultyClearanceProgress.completion >= 100 ? 'up' : 'neutral'}
+          trendValue={facultyClearanceProgress ? `${facultyClearanceProgress.completion}%` : undefined}
+          accent={facultyClearanceProgress && facultyClearanceProgress.completion >= 100 ? 'success' : facultyClearanceProgress && facultyClearanceProgress.completion >= 50 ? 'warning' : 'neutral'}
+          href="/clearance"
+        />
       </div>
 
       <div className="grid gap-6 md:grid-cols-7">

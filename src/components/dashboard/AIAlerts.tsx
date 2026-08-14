@@ -72,7 +72,7 @@ export function AIAlerts(props: Readonly<AIAlertsProps>) {
             <Sparkles className="h-4.5 w-4.5 text-blue-600" />
           </div>
           <div>
-            <CardTitle className="text-sm font-semibold text-slate-900">Faculty Insights</CardTitle>
+            <CardTitle className="text-sm font-semibold text-slate-900">Insights</CardTitle>
             <CardDescription className="mt-0.5 text-xs text-slate-500">
               Key updates from your recent activity.
             </CardDescription>

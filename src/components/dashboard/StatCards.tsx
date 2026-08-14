@@ -2,7 +2,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
-import { Badge } from '@/components/ui/badge';
 
 type Accent = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
 
@@ -61,17 +60,6 @@ const ACCENT_STYLES: Record<Accent, { chipBg: string; chipText: string; chipRing
 
 export function StatCard(props: Readonly<StatCardProps>) {
   const { title, value, description, icon: Icon, trend, trendValue, className, href, accent = 'neutral' } = props;
-  let trendVariant: 'success' | 'destructive' | 'secondary' = 'secondary';
-  let trendArrow = '→';
-
-  if (trend === 'up') {
-    trendVariant = 'success';
-    trendArrow = '↑';
-  } else if (trend === 'down') {
-    trendVariant = 'destructive';
-    trendArrow = '↓';
-  }
-
   const style = ACCENT_STYLES[accent];
 
   const cardContent = (
@@ -97,14 +85,6 @@ export function StatCard(props: Readonly<StatCardProps>) {
           <div className="text-3xl font-semibold tracking-tight text-slate-900">{value}</div>
           {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
         </div>
-        {trend && trendValue && (
-          <div className="mt-3 flex items-center gap-2">
-            <Badge variant={trendVariant} className="px-2 py-0.5">
-              {trendArrow} {trendValue}
-            </Badge>
-            <span className="text-xs text-slate-500">vs last month</span>
-          </div>
-        )}
       </CardContent>
     </Card>
   );
