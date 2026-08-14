@@ -98,6 +98,7 @@ function ScheduleLoadingContent() {
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomCapacity, setNewRoomCapacity] = useState('');
   const [newSectionName, setNewSectionName] = useState('');
+  const [isManagePanelOpen, setIsManagePanelOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editSchedule, setEditSchedule] = useState<EditScheduleFormState | null>(null);
   const [editError, setEditError] = useState('');
@@ -786,117 +787,127 @@ function ScheduleLoadingContent() {
             </Card>
 
             <Card>
-              <CardHeader>
-                <CardTitle>Manage Subjects and Rooms</CardTitle>
+              <CardHeader className="pb-3">
+                <button
+                  type="button"
+                  onClick={() => setIsManagePanelOpen((open) => !open)}
+                  className="flex w-full items-center justify-between gap-3 text-left"
+                >
+                  <CardTitle>Manage Subjects and Rooms</CardTitle>
+                  {isManagePanelOpen ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
+                </button>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                  Deleting a subject, room, or section will remove it from the schedule-loading lists, and deleting a subject or room also clears schedules that use it.
-                </div>
-                <div className="space-y-3">
-                  <div className="text-sm font-semibold text-slate-800">Add Subject</div>
-                  <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_140px]">
-                    <Input placeholder="Code (e.g. CS101)" value={newSubjectCode} onChange={(event) => setNewSubjectCode(event.target.value)} />
-                    <Input placeholder="Subject name" value={newSubjectName} onChange={(event) => setNewSubjectName(event.target.value)} />
-                    <Button type="button" onClick={handleCreateSubject} disabled={saving}>
-                      Add Subject
-                    </Button>
-                  </div>
-                  {subjectError && <p className="text-sm text-rose-600">{subjectError}</p>}
-                  <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
-                    {meta.subjects.length === 0 ? (
-                      <div className="text-sm text-slate-500">No subjects yet.</div>
-                    ) : (
-                      meta.subjects.map((subject) => (
-                        <div key={subject.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
-                          <div className="text-sm text-slate-800">
-                            <span className="font-medium">{subject.code}</span> - {subject.name}
-                          </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteSubject(subject.id, `${subject.code} - ${subject.name}`)}
-                            disabled={saving}
-                            aria-label={`Delete subject ${subject.code} - ${subject.name}`}
-                          >
-                            <Trash2 className="h-4 w-4 text-slate-500 hover:text-rose-600" />
-                          </Button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
 
-                <div className="space-y-3">
-                  <div className="text-sm font-semibold text-slate-800">Add Room</div>
-                  <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_140px]">
-                    <Input placeholder="Room name" value={newRoomName} onChange={(event) => setNewRoomName(event.target.value)} />
-                    <Input type="number" min={1} placeholder="Capacity" value={newRoomCapacity} onChange={(event) => setNewRoomCapacity(event.target.value)} />
-                    <Button type="button" onClick={handleCreateRoom} disabled={saving}>
-                      Add Room
-                    </Button>
+              {isManagePanelOpen && (
+                <CardContent className="space-y-6 pt-0">
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    Deleting a subject, room, or section will remove it from the schedule-loading lists, and deleting a subject or room also clears schedules that use it.
                   </div>
-                  {roomError && <p className="text-sm text-rose-600">{roomError}</p>}
-                  <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
-                    {meta.rooms.length === 0 ? (
-                      <div className="text-sm text-slate-500">No rooms yet.</div>
-                    ) : (
-                      meta.rooms.map((room) => (
-                        <div key={room.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
-                          <div className="text-sm text-slate-800">
-                            <span className="font-medium">{room.name}</span> (cap {room.capacity})
+                  <div className="space-y-3">
+                    <div className="text-sm font-semibold text-slate-800">Add Subject</div>
+                    <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_140px]">
+                      <Input placeholder="Code (e.g. CS101)" value={newSubjectCode} onChange={(event) => setNewSubjectCode(event.target.value)} />
+                      <Input placeholder="Subject name" value={newSubjectName} onChange={(event) => setNewSubjectName(event.target.value)} />
+                      <Button type="button" onClick={handleCreateSubject} disabled={saving}>
+                        Add Subject
+                      </Button>
+                    </div>
+                    {subjectError && <p className="text-sm text-rose-600">{subjectError}</p>}
+                    <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+                      {meta.subjects.length === 0 ? (
+                        <div className="text-sm text-slate-500">No subjects yet.</div>
+                      ) : (
+                        meta.subjects.map((subject) => (
+                          <div key={subject.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
+                            <div className="text-sm text-slate-800">
+                              <span className="font-medium">{subject.code}</span> - {subject.name}
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteSubject(subject.id, `${subject.code} - ${subject.name}`)}
+                              disabled={saving}
+                              aria-label={`Delete subject ${subject.code} - ${subject.name}`}
+                            >
+                              <Trash2 className="h-4 w-4 text-slate-500 hover:text-rose-600" />
+                            </Button>
                           </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteRoom(room.id, `${room.name} (cap ${room.capacity})`)}
-                            disabled={saving}
-                            aria-label={`Delete room ${room.name}`}
-                          >
-                            <Trash2 className="h-4 w-4 text-slate-500 hover:text-rose-600" />
-                          </Button>
-                        </div>
-                      ))
-                    )}
+                        ))
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                <div className="space-y-3">
-                  <div className="text-sm font-semibold text-slate-800">Add Section</div>
-                  <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px]">
-                    <Input placeholder="Section name (e.g. 1A)" value={newSectionName} onChange={(event) => setNewSectionName(event.target.value)} />
-                    <Button type="button" onClick={handleCreateSection} disabled={saving}>
-                      Add Section
-                    </Button>
-                  </div>
-                  {sectionError && <p className="text-sm text-rose-600">{sectionError}</p>}
-                  <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
-                    {meta.sections.length === 0 ? (
-                      <div className="text-sm text-slate-500">No sections yet.</div>
-                    ) : (
-                      meta.sections.map((section) => (
-                        <div key={section.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
-                          <div className="text-sm text-slate-800">
-                            <span className="font-medium">{section.name}</span>
+                  <div className="space-y-3">
+                    <div className="text-sm font-semibold text-slate-800">Add Room</div>
+                    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_140px]">
+                      <Input placeholder="Room name" value={newRoomName} onChange={(event) => setNewRoomName(event.target.value)} />
+                      <Input type="number" min={1} placeholder="Capacity" value={newRoomCapacity} onChange={(event) => setNewRoomCapacity(event.target.value)} />
+                      <Button type="button" onClick={handleCreateRoom} disabled={saving}>
+                        Add Room
+                      </Button>
+                    </div>
+                    {roomError && <p className="text-sm text-rose-600">{roomError}</p>}
+                    <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+                      {meta.rooms.length === 0 ? (
+                        <div className="text-sm text-slate-500">No rooms yet.</div>
+                      ) : (
+                        meta.rooms.map((room) => (
+                          <div key={room.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
+                            <div className="text-sm text-slate-800">
+                              <span className="font-medium">{room.name}</span> (cap {room.capacity})
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteRoom(room.id, `${room.name} (cap ${room.capacity})`)}
+                              disabled={saving}
+                              aria-label={`Delete room ${room.name}`}
+                            >
+                              <Trash2 className="h-4 w-4 text-slate-500 hover:text-rose-600" />
+                            </Button>
                           </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteSection(section.id, section.name)}
-                            disabled={saving}
-                            aria-label={`Delete section ${section.name}`}
-                          >
-                            <Trash2 className="h-4 w-4 text-slate-500 hover:text-rose-600" />
-                          </Button>
-                        </div>
-                      ))
-                    )}
+                        ))
+                      )}
+                    </div>
                   </div>
-                </div>
-              </CardContent>
+
+                  <div className="space-y-3">
+                    <div className="text-sm font-semibold text-slate-800">Add Section</div>
+                    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px]">
+                      <Input placeholder="Section name (e.g. 1A)" value={newSectionName} onChange={(event) => setNewSectionName(event.target.value)} />
+                      <Button type="button" onClick={handleCreateSection} disabled={saving}>
+                        Add Section
+                      </Button>
+                    </div>
+                    {sectionError && <p className="text-sm text-rose-600">{sectionError}</p>}
+                    <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+                      {meta.sections.length === 0 ? (
+                        <div className="text-sm text-slate-500">No sections yet.</div>
+                      ) : (
+                        meta.sections.map((section) => (
+                          <div key={section.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
+                            <div className="text-sm text-slate-800">
+                              <span className="font-medium">{section.name}</span>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteSection(section.id, section.name)}
+                              disabled={saving}
+                              aria-label={`Delete section ${section.name}`}
+                            >
+                              <Trash2 className="h-4 w-4 text-slate-500 hover:text-rose-600" />
+                            </Button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              )}
             </Card>
           </div>
         </div>
