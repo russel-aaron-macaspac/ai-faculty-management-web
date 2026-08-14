@@ -143,23 +143,47 @@ function FacultyDashboardContent() {
   const [insightsMeta, setInsightsMeta] = useState<InsightsMeta>(null);
 
   useEffect(() => {
+    let isMounted = true;
+
     const fetchInsights = async () => {
       try {
         const stored = localStorage.getItem('user');
         const userObj = stored ? JSON.parse(stored) : null;
-        const userId = userObj?.id ? String(userObj.id) : undefined;
-        const url = userId ? `/api/ai/insights?user_id=${encodeURIComponent(userId)}` : '/api/ai/insights';
+        const userId = userObj?.supabase_id ? String(userObj.supabase_id) : undefined;
+        const numericUserId = userObj?.id ? String(userObj.id) : undefined;
+        const params = new URLSearchParams();
+        if (userId) params.set('user_id', userId);
+        if (numericUserId) params.set('user_id_numeric', numericUserId);
+        const url = params.toString() ? `/api/ai/insights?${params.toString()}` : '/api/ai/insights';
         const res = await fetch(url, { cache: 'no-store' });
         if (!res.ok) return;
         const payload = await res.json();
+        if (!isMounted) return;
         if (Array.isArray(payload.alerts)) setInsights(payload.alerts as DashboardAlert[]);
         if (payload.meta) setInsightsMeta(payload.meta as InsightsMeta);
       } catch (error) {
-        console.warn('[FacultyDashboard] failed to load AI insights', error);
+        if (isMounted) {
+          console.warn('[FacultyDashboard] failed to load AI insights', error);
+        }
       }
     };
 
     void fetchInsights();
+    const intervalId = window.setInterval(() => {
+      void fetchInsights();
+    }, 15000);
+
+    const handleFocus = () => {
+      void fetchInsights();
+    };
+
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
   return (

@@ -468,9 +468,19 @@ export default function ClearancePage() {
 
       {isFacultyUser && facultyProgress && (
         <Card className="border-slate-200 shadow-sm">
-          <CardHeader className="space-y-1">
+          <CardHeader className="space-y-2">
             <CardTitle>Clearance Progress</CardTitle>
-            <CardDescription>Completion and clearance status summary.</CardDescription>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-700">Next step</p>
+              <p className="mt-1 text-sm font-medium text-amber-900">
+                {facultyProgress.approved >= facultyProgress.total
+                  ? 'All required clearance steps are complete.'
+                  : `${FACULTY_REQUIRED_OFFICES.find((office) => {
+                      const normalizedOffice = normalize(office);
+                      return !facultyStepRecords.some((record) => normalize(record.requiredDocument || '') === normalizedOffice && record.status === 'approved');
+                    }) ?? 'Complete your remaining clearance requirement.'}`}
+              </p>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">

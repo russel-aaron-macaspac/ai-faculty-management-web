@@ -10,6 +10,11 @@ interface Alert {
   title: string;
   message: string;
   recommendation?: string;
+  progress?: {
+    completion: number;
+    approved: number;
+    total: number;
+  };
 }
 
 interface AIAlertsProps {
@@ -98,9 +103,26 @@ export function AIAlerts(props: Readonly<AIAlertsProps>) {
                     <div className={cn('mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full', style.bg)}>
                       <Icon className={cn('h-4 w-4', style.iconClass)} />
                     </div>
-                    <div className="flex-1 space-y-1">
+                    <div className="flex-1 space-y-2">
                       <h4 className="text-sm font-semibold leading-none text-slate-900">{alert.title}</h4>
                       <p className="text-sm text-slate-600">{alert.message}</p>
+
+                      {alert.progress && (
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                          <div className="mb-2 flex items-center justify-between gap-3">
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Completion</p>
+                            <span className="text-lg font-semibold text-slate-900">{alert.progress.completion}%</span>
+                          </div>
+                          <p className="text-sm text-slate-600">{alert.progress.approved} of {alert.progress.total} approved</p>
+                        </div>
+                      )}
+
+                      {alert.recommendation && (
+                        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Next step</p>
+                          <p className="mt-1 text-sm text-slate-700">{alert.recommendation}</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

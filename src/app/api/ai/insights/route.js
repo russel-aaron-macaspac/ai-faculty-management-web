@@ -1,6 +1,6 @@
 import { createSupabaseAdminClient } from '@/lib/supabase/server-client';
 import { NextResponse } from 'next/server';
-import { detectScheduleConflicts } from '@/lib/scheduling/conflictDetection';
+import { FACULTY_REQUIRED_OFFICES } from '@/lib/clearanceOffices';
 
 function isoDateDaysAgo(days) {
   const d = new Date();
@@ -8,10 +8,50 @@ function isoDateDaysAgo(days) {
   return d.toISOString().split('T')[0];
 }
 
+function normalizeOfficeName(value = '') {
+  return String(value).replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function buildFacultyClearanceProgressAlert(clearanceRows = []) {
+  const facultyStepRecords = FACULTY_REQUIRED_OFFICES.map((office) => {
+    const normalizedOffice = normalizeOfficeName(office);
+    const matchingRow = (clearanceRows || []).find((row) => {
+      const officeName = row.office?.name ?? row.requiredDocument ?? '';
+      return normalizeOfficeName(officeName) === normalizedOffice;
+    });
+
+    return {
+      requiredDocument: office,
+      status: matchingRow?.status ?? 'pending',
+    };
+  });
+
+  const approved = facultyStepRecords.filter((record) => record.status === 'approved').length;
+  const total = facultyStepRecords.length;
+  const completion = total > 0 ? Math.round((approved / total) * 100) : 0;
+  const nextOffice = facultyStepRecords.find((record) => record.status !== 'approved')?.requiredDocument;
+
+  return {
+    id: 'faculty-clearance-progress',
+    type: completion >= 100 ? 'success' : 'insight',
+    title: 'Clearance Progress',
+    message: 'Completion and clearance status summary.',
+    progress: {
+      completion,
+      approved,
+      total,
+    },
+    recommendation: nextOffice
+      ? `Your next step is ${nextOffice}. Open the clearance page and complete or follow up on this requirement.`
+      : 'All required clearance steps are complete. No further action is needed.'
+  };
+}
+
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('user_id');
+    const numericUserId = searchParams.get('user_id_numeric');
 
     const supabase = createSupabaseAdminClient();
 
@@ -52,19 +92,6 @@ export async function GET(request) {
       return { date: day, lateCount: count };
     });
 
-    const { data: clearanceRows } = await supabase
-      .from('clearances')
-      .select('document_id, status, office:offices ( office_id, name )')
-      .order('submitted_at', { ascending: false })
-      .limit(1000);
-
-    const pendingByOffice = {};
-    (clearanceRows || []).forEach((r) => {
-      if (r.status !== 'pending') return;
-      const name = r.office?.name ?? 'Unknown Office';
-      pendingByOffice[name] = (pendingByOffice[name] || 0) + 1;
-    });
-
     const alerts = [];
 
     if (topLate.length > 0) {
@@ -78,20 +105,30 @@ export async function GET(request) {
       });
     }
 
-    const pendingOffices = Object.entries(pendingByOffice).map(([office, count]) => ({ office, count }));
-    if (pendingOffices.length > 0) {
-      const top = pendingOffices.sort((a, b) => b.count - a.count)[0];
-      alerts.push({
-        id: 'clearance-backlog',
-        type: 'insight',
-        title: `Clearance Backlog: ${top.office}`,
-        message: `${top.count} pending document(s) in ${top.office}.`,
-        recommendation: 'Ask office admins to review pending documents or enable auto-notifications for submitters.'
-      });
-    }
-
     // Personalized insight if user_id provided
-    if (userId) {
+    if (userId || numericUserId) {
+      const clearedRows = [];
+
+      if (userId) {
+        const { data: bySupabaseId } = await supabase
+          .from('clearances')
+          .select('document_id, status, office:offices ( office_id, name )')
+          .eq('user_id', userId)
+          .order('submitted_at', { ascending: false });
+        if (Array.isArray(bySupabaseId)) clearedRows.push(...bySupabaseId);
+      }
+
+      if (numericUserId && numericUserId !== userId) {
+        const { data: byNumericId } = await supabase
+          .from('clearances')
+          .select('document_id, status, office:offices ( office_id, name )')
+          .eq('user_id', numericUserId)
+          .order('submitted_at', { ascending: false });
+        if (Array.isArray(byNumericId)) clearedRows.push(...byNumericId);
+      }
+
+      alerts.unshift(buildFacultyClearanceProgressAlert(clearedRows));
+
       const userLateCount = lateCountByUser[String(userId)] || 0;
       if (userLateCount >= 1) {
         alerts.unshift({
