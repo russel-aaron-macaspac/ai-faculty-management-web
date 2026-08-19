@@ -180,7 +180,7 @@ export const getDashboardPathForRole = (role: string | undefined): string => {
 export const getClearancePageInfo = (role: string | undefined): { title: string; subtitle: string } => {
   if (role === 'faculty' || role === 'program_chair') {
     return {
-      title: 'Clearance Offices',
+      title: 'Clearance Tracking',
       subtitle: 'Track required office and department signatures for your clearance.',
     };
   }

@@ -19,6 +19,26 @@ import { toast } from '@/lib/toast';
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const APPROVAL_ROLES = new Set(['dean', 'ovpaa', 'registrar', 'hro']);
 
+const getContactHours = (startTime: string, endTime: string) => {
+  const [startHours, startMinutes] = startTime.split(':').map(Number);
+  const [endHours, endMinutes] = endTime.split(':').map(Number);
+  const start = startHours * 60 + startMinutes;
+  const end = endHours * 60 + endMinutes;
+  const hours = (end - start) / 60;
+
+  return Number.isFinite(hours) && hours > 0 ? hours : null;
+};
+
+const getLoadType = (schedule: Schedule) => {
+  const candidate = schedule as Schedule & { loadType?: string; isOverload?: boolean };
+  return candidate.isOverload || candidate.loadType?.toLowerCase() === 'overload' ? 'overload' : 'regular';
+};
+
+const getClassType = (schedule: Schedule) => {
+  const description = schedule.subject?.name?.toLowerCase() || '';
+  return description.includes('(lab') || description.includes('laboratory') ? 'lab' : 'lec';
+};
+
 type LocalUser = {
   id: string;
   role: string;
@@ -38,10 +58,17 @@ interface EditScheduleFormState {
   facultyId: string;
   section: string;
   subjectId: string;
+  subjectCode: string;
+  subjectName: string;
   roomId: string;
+  roomName: string;
   day: string;
   startTime: string;
   endTime: string;
+  units: string;
+  lectureContactHours: string;
+  labContactHours: string;
+  classSize: string;
 }
 
 export function getSelectedLabel<T extends { id?: string | number }>(
@@ -67,9 +94,6 @@ function ScheduleLoadingContent() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [assignmentError, setAssignmentError] = useState('');
-  const [subjectError, setSubjectError] = useState('');
-  const [roomError, setRoomError] = useState('');
-  const [sectionError, setSectionError] = useState('');
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<Schedule[]>([]);
   const [meta, setMeta] = useState<SchedulingMeta>({ faculties: [], subjects: [], rooms: [], sections: [] });
@@ -93,12 +117,10 @@ function ScheduleLoadingContent() {
     startTime: '',
     endTime: '',
   });
-  const [newSubjectCode, setNewSubjectCode] = useState('');
-  const [newSubjectName, setNewSubjectName] = useState('');
-  const [newRoomName, setNewRoomName] = useState('');
-  const [newRoomCapacity, setNewRoomCapacity] = useState('');
-  const [newSectionName, setNewSectionName] = useState('');
-  const [isManagePanelOpen, setIsManagePanelOpen] = useState(false);
+  const [subjectCode, setSubjectCode] = useState('');
+  const [subjectName, setSubjectName] = useState('');
+  const [roomName, setRoomName] = useState('');
+  const [loadDetails, setLoadDetails] = useState({ units: '', lectureContactHours: '', labContactHours: '', classSize: '' });
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editSchedule, setEditSchedule] = useState<EditScheduleFormState | null>(null);
   const [editError, setEditError] = useState('');
@@ -196,22 +218,6 @@ function ScheduleLoadingContent() {
     setExpanded((prev) => ({ ...prev, [facultyId]: !prev[facultyId] }));
   };
 
-  const getLinkedScheduleCount = (predicate: (schedule: Schedule) => boolean) => schedules.filter(predicate).length;
-
-  const buildDeletePrompt = (entity: string, label: string, linkedCount: number) => {
-    const scheduleText = linkedCount === 1 ? '1 linked schedule will be deleted.' : `${linkedCount} linked schedules will be deleted.`;
-    return linkedCount > 0
-      ? `Delete ${entity} ${label}? ${scheduleText}`
-      : `Delete ${entity} ${label}?`;
-  };
-
-  const buildSectionDeletePrompt = (label: string, linkedCount: number) => {
-    const scheduleText = linkedCount === 1 ? '1 schedule references this section.' : `${linkedCount} schedules reference this section.`;
-    return linkedCount > 0
-      ? `Delete section ${label}? ${scheduleText}`
-      : `Delete section ${label}?`;
-  };
-
   // Build a list of faculties from meta and schedules to display in master schedule
   const facultiesList = useMemo(() => buildFacultiesList(meta.faculties, visibleSchedules), [meta.faculties, visibleSchedules]);
 
@@ -243,6 +249,59 @@ function ScheduleLoadingContent() {
   }
 
   // Extract master schedule content to avoid nested ternary in JSX
+  const renderLoadMatrix = (title: string, loadSchedules: Schedule[]) => (
+    <div className="overflow-x-auto px-4 pb-4">
+      <div className="mb-2 border-b border-slate-200 pb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {title}
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Code</TableHead>
+            <TableHead>Description</TableHead>
+            <TableHead>Time</TableHead>
+            <TableHead>Day/s</TableHead>
+            <TableHead>Section</TableHead>
+            <TableHead>Room</TableHead>
+            <TableHead>Units</TableHead>
+            <TableHead>Contact Hrs. Lec</TableHead>
+            <TableHead>Contact Hrs. Lab</TableHead>
+            <TableHead>Class Size</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {loadSchedules.map((item) => {
+            const classType = getClassType(item);
+            const contactHours = getContactHours(item.startTime, item.endTime) ?? '-';
+            return (
+              <TableRow key={item.id}>
+                <TableCell className="font-medium">{item.subject?.code || '-'}</TableCell>
+                <TableCell>{item.subject?.name || '-'}</TableCell>
+                <TableCell>{formatTimeToTwelveHour(item.startTime)} - {formatTimeToTwelveHour(item.endTime)}</TableCell>
+                <TableCell>{item.day || '-'}</TableCell>
+                <TableCell>{item.section || '-'}</TableCell>
+                <TableCell>{item.room?.name || '-'}</TableCell>
+                <TableCell>{item.units ?? '-'}</TableCell>
+                <TableCell>{item.lectureContactHours ?? (classType === 'lec' ? contactHours : '-')}</TableCell>
+                <TableCell>{item.labContactHours ?? (classType === 'lab' ? contactHours : '-')}</TableCell>
+                <TableCell>{item.classSize ?? '-'}</TableCell>
+                <TableCell className="space-x-2 text-right">
+                  <Button type="button" size="sm" variant="outline" onClick={() => openEditScheduleDialog(item)} disabled={saving}>
+                    <Pencil className="mr-1 h-4 w-4" /> Edit
+                  </Button>
+                  <Button type="button" size="sm" variant="destructive" onClick={() => handleDeleteSchedule(item)} disabled={saving}>
+                    <Trash2 className="mr-1 h-4 w-4" /> Delete
+                  </Button>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+
   let masterScheduleContent: ReactNode = null;
   if (loading) {
     masterScheduleContent = (
@@ -266,6 +325,9 @@ function ScheduleLoadingContent() {
                   }
                   return String(s.facultyId ?? s.employeeId ?? '') === String(faculty.id);
                 });
+                const regularSchedules = facultySchedules.filter((schedule) => getLoadType(schedule) === 'regular');
+                const overloadSchedules = facultySchedules.filter((schedule) => getLoadType(schedule) === 'overload');
+                const facultyMeta = meta.faculties.find((item) => String(item.id) === String(faculty.id));
                 const isOpen = Boolean(expanded[faculty.id]);
           return (
             <div key={faculty.id} className="rounded-md border border-slate-200 bg-white">
@@ -284,51 +346,14 @@ function ScheduleLoadingContent() {
               </button>
 
               {isOpen && (
-                <div className="px-4 pb-4">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Subject</TableHead>
-                        <TableHead>Room</TableHead>
-                        <TableHead>Day</TableHead>
-                        <TableHead>Time</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Remarks</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {facultySchedules.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell>
-                            {item.subject?.code} - {item.subject?.name}
-                            {item.section ? <span className="ml-2 text-xs text-slate-500">Section {item.section}</span> : null}
-                          </TableCell>
-                          <TableCell>{item.room?.name}</TableCell>
-                          <TableCell>{item.day}</TableCell>
-                          <TableCell>
-                            {formatTimeToTwelveHour(item.startTime)} - {formatTimeToTwelveHour(item.endTime)}
-                          </TableCell>
-                          <TableCell>{item.status}</TableCell>
-                          <TableCell>
-                            {item.status === 'rejected' && item.remarks ? (
-                              <span className="text-red-600">{item.remarks}</span>
-                            ) : (
-                              <span className="text-slate-400">{item.remarks ? item.remarks : '-'}</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="space-x-2 text-right">
-                            <Button type="button" size="sm" variant="outline" onClick={() => openEditScheduleDialog(item)} disabled={saving}>
-                              <Pencil className="mr-1 h-4 w-4" /> Edit
-                            </Button>
-                            <Button type="button" size="sm" variant="destructive" onClick={() => handleDeleteSchedule(item)} disabled={saving}>
-                              <Trash2 className="mr-1 h-4 w-4" /> Delete
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                <div>
+                  <div className="grid gap-1 border-y border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 sm:grid-cols-3">
+                    <div><span className="font-semibold">Name of Faculty:</span> {faculty.name}</div>
+                    <div><span className="font-semibold">Status of Appointment:</span> FULL-TIME</div>
+                    <div><span className="font-semibold">Designation:</span> {facultyMeta?.role === 'program_chair' ? 'Program Chair' : 'Faculty'}</div>
+                  </div>
+                  {renderLoadMatrix('Regular Load', regularSchedules)}
+                  {overloadSchedules.length > 0 && renderLoadMatrix('Overload', overloadSchedules)}
                 </div>
               )}
             </div>
@@ -337,16 +362,13 @@ function ScheduleLoadingContent() {
       </div>
     );
   }
-  const subjectLabel = getSelectedLabel(meta.subjects, assignment.subjectId, (subject) => `${subject.code} - ${subject.name}`);
-  const roomLabel = getSelectedLabel(meta.rooms, assignment.roomId, (room) => `${room.name} (cap ${room.capacity})`);
-  const sectionLabel = getSelectedLabel(meta.sections, assignment.section, (section) => section.name);
   const selectedFacultyName = meta.faculties.find((faculty) => faculty.id === selectedFacultyId)?.name ?? 'Select a faculty member';
 
   const handleCreateSchedule = async () => {
     if (!user) return;
 
-    if (!assignment.facultyId || !assignment.section || !assignment.subjectId || !assignment.roomId || !assignment.startTime || !assignment.endTime) {
-      setAssignmentError('Choose a faculty member, subject, room, section, day, start time, and end time before creating the schedule.');
+    if (!assignment.facultyId || !subjectCode.trim() || !subjectName.trim() || !assignment.section.trim() || !roomName.trim() || !assignment.startTime || !assignment.endTime) {
+      setAssignmentError('Enter a subject code, subject name, section, room, day, start time, and end time before creating the schedule.');
       return;
     }
 
@@ -355,11 +377,37 @@ function ScheduleLoadingContent() {
       return;
     }
 
+    const numericLoadDetails = Object.fromEntries(
+      Object.entries(loadDetails).map(([key, value]) => [key, value === '' ? undefined : Number(value)])
+    ) as { units?: number; lectureContactHours?: number; labContactHours?: number; classSize?: number };
+    if (Object.values(numericLoadDetails).some((value) => value !== undefined && (!Number.isFinite(value) || value < 0))) {
+      setAssignmentError('Units, contact hours, and class size must be zero or greater.');
+      return;
+    }
+
     setAssignmentError('');
     setSaving(true);
     try {
+      const matchingRoom = meta.rooms.find((room) => room.name.trim().toLowerCase() === roomName.trim().toLowerCase());
+      if (!matchingRoom) {
+        throw new Error(`Room "${roomName.trim()}" was not found. Enter an existing room name.`);
+      }
+
+      const existingSubject = meta.subjects.find(
+        (subject) => subject.code.toLowerCase() === subjectCode.trim().toLowerCase() && subject.name.toLowerCase() === subjectName.trim().toLowerCase()
+      );
+      const subjectId = existingSubject?.id ?? (await scheduleService.createSubject({ code: subjectCode.trim(), name: subjectName.trim() })).data?.id;
+
+      if (!subjectId) {
+        throw new Error('Unable to resolve the subject. Please try again.');
+      }
+
       const result = await scheduleService.createSchedule({
         ...assignment,
+        subjectId,
+        roomId: matchingRoom.id,
+        section: assignment.section.trim(),
+        ...numericLoadDetails,
         createdBy: currentUserName || user.role,
         creatorRole: user.role,
       });
@@ -372,6 +420,10 @@ function ScheduleLoadingContent() {
 
       setConflictResult(null);
       setAssignment({ facultyId: '', section: '', subjectId: '', roomId: '', day: 'Monday', startTime: '', endTime: '' });
+      setSubjectCode('');
+      setSubjectName('');
+      setRoomName('');
+      setLoadDetails({ units: '', lectureContactHours: '', labContactHours: '', classSize: '' });
       await loadData(user);
       toast({ title: 'Done', description: 'Schedule created.', type: 'success' });
     } catch (error) {
@@ -399,138 +451,6 @@ function ScheduleLoadingContent() {
     }
   };
 
-  const handleCreateSubject = async () => {
-    if (!newSubjectCode.trim() || !newSubjectName.trim()) {
-      setSubjectError('Enter both a subject code and a subject name.');
-      return;
-    }
-
-    setSubjectError('');
-    setSaving(true);
-    try {
-      await scheduleService.createSubject({ code: newSubjectCode.trim(), name: newSubjectName.trim() });
-      setNewSubjectCode('');
-      setNewSubjectName('');
-      await loadData(user);
-      toast({ title: 'Subject Added', description: 'Subject was created.', type: 'success' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to create the subject. Please check the code and name, then try again.';
-      setSubjectError(message);
-      toast({ title: 'Create Failed', description: message, type: 'error' });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleCreateRoom = async () => {
-    const capacity = Number(newRoomCapacity);
-    if (!newRoomName.trim() || Number.isNaN(capacity) || capacity <= 0) {
-      setRoomError('Enter a room name and a capacity greater than zero.');
-      return;
-    }
-
-    setRoomError('');
-    setSaving(true);
-    try {
-      await scheduleService.createRoom({ name: newRoomName.trim(), capacity });
-      setNewRoomName('');
-      setNewRoomCapacity('');
-      await loadData(user);
-    } catch (error) {
-      setRoomError(error instanceof Error ? error.message : 'Unable to create the room. Please review the name and capacity and try again.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleCreateSection = async () => {
-    if (!newSectionName.trim()) {
-      setSectionError('Enter a section name before saving.');
-      return;
-    }
-
-    setSectionError('');
-    setSaving(true);
-    try {
-      await scheduleService.createSection({ name: newSectionName.trim() });
-      setNewSectionName('');
-      await loadData(user);
-    } catch (error) {
-      setSectionError(error instanceof Error ? error.message : 'Unable to create the section. Please try again.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDeleteSubject = async (subjectId: string, subjectLabel: string) => {
-    if (!user) return;
-
-    const linkedCount = getLinkedScheduleCount((schedule) => schedule.subjectId === subjectId);
-    const confirmed = globalThis.confirm(buildDeletePrompt('subject', subjectLabel, linkedCount));
-    if (!confirmed) return;
-
-    setSaving(true);
-    try {
-      await scheduleService.deleteSubject(subjectId);
-      if (assignment.subjectId === subjectId) {
-        setAssignment((prev) => ({ ...prev, subjectId: '' }));
-      }
-      await loadData(user);
-      toast({ title: 'Done', description: 'Subject deleted.', type: 'success' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to delete subject.';
-      toast({ title: 'Delete Failed', description: message, type: 'error' });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDeleteRoom = async (roomId: string, roomLabel: string) => {
-    if (!user) return;
-
-    const linkedCount = getLinkedScheduleCount((schedule) => schedule.roomId === roomId);
-    const confirmed = globalThis.confirm(buildDeletePrompt('room', roomLabel, linkedCount));
-    if (!confirmed) return;
-
-    setSaving(true);
-    try {
-      await scheduleService.deleteRoom(roomId);
-      if (assignment.roomId === roomId) {
-        setAssignment((prev) => ({ ...prev, roomId: '' }));
-      }
-      await loadData(user);
-      toast({ title: 'Done', description: 'Room deleted.', type: 'success' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to delete room.';
-      toast({ title: 'Delete Failed', description: message, type: 'error' });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDeleteSection = async (sectionId: string, sectionLabel: string) => {
-    if (!user) return;
-
-    const linkedCount = getLinkedScheduleCount((schedule) => schedule.section === sectionLabel || schedule.section === sectionId);
-    const confirmed = globalThis.confirm(buildSectionDeletePrompt(sectionLabel, linkedCount));
-    if (!confirmed) return;
-
-    setSaving(true);
-    try {
-      await scheduleService.deleteSection(sectionId);
-      if (assignment.section === sectionLabel) {
-        setAssignment((prev) => ({ ...prev, section: '' }));
-      }
-      await loadData(user);
-      toast({ title: 'Done', description: 'Section deleted.', type: 'success' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to delete section.';
-      toast({ title: 'Delete Failed', description: message, type: 'error' });
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const openEditScheduleDialog = (item: Schedule) => {
     const facultyId = String(item.facultyId ?? item.employeeId ?? '');
     const subjectId = String(item.subjectId ?? item.subject?.id ?? '');
@@ -541,10 +461,17 @@ function ScheduleLoadingContent() {
       facultyId,
       section: item.section || '',
       subjectId,
+      subjectCode: item.subject?.code || '',
+      subjectName: item.subject?.name || '',
       roomId,
+      roomName: item.room?.name || '',
       day: item.day || 'Monday',
       startTime: item.startTime || '',
       endTime: item.endTime || '',
+      units: item.units == null ? '' : String(item.units),
+      lectureContactHours: item.lectureContactHours == null ? '' : String(item.lectureContactHours),
+      labContactHours: item.labContactHours == null ? '' : String(item.labContactHours),
+      classSize: item.classSize == null ? '' : String(item.classSize),
     });
     setEditError('');
     setIsEditDialogOpen(true);
@@ -553,7 +480,7 @@ function ScheduleLoadingContent() {
   const handleUpdateSchedule = async () => {
     if (!user || !editSchedule) return;
 
-    if (!editSchedule.facultyId || !editSchedule.subjectId || !editSchedule.roomId || !editSchedule.day || !editSchedule.startTime || !editSchedule.endTime) {
+    if (!editSchedule.facultyId || !editSchedule.subjectCode.trim() || !editSchedule.subjectName.trim() || !editSchedule.roomName.trim() || !editSchedule.day || !editSchedule.startTime || !editSchedule.endTime) {
       setEditError('Choose a faculty member, subject, room, day, start time, and end time before saving.');
       return;
     }
@@ -566,16 +493,35 @@ function ScheduleLoadingContent() {
     setEditError('');
     setSaving(true);
     try {
+      const existingSubject = meta.subjects.find(
+        (subject) => subject.code.toLowerCase() === editSchedule.subjectCode.trim().toLowerCase() && subject.name.toLowerCase() === editSchedule.subjectName.trim().toLowerCase()
+      );
+      const subjectId = existingSubject?.id ?? (await scheduleService.createSubject({
+        code: editSchedule.subjectCode.trim(),
+        name: editSchedule.subjectName.trim(),
+      })).data?.id;
+      const matchingRoom = meta.rooms.find((room) => room.name.trim().toLowerCase() === editSchedule.roomName.trim().toLowerCase());
+      if (!subjectId) {
+        throw new Error('Unable to resolve the subject. Please try again.');
+      }
+      if (!matchingRoom) {
+        throw new Error(`Room "${editSchedule.roomName.trim()}" was not found. Enter an existing room name.`);
+      }
+
       await scheduleService.updateSchedule(editSchedule.id, {
         actorId: String(user.id),
         actorRole: user.role,
         facultyId: editSchedule.facultyId,
         section: editSchedule.section || undefined,
-        subjectId: editSchedule.subjectId,
-        roomId: editSchedule.roomId,
+        subjectId,
+        roomId: matchingRoom.id,
         day: editSchedule.day,
         startTime: editSchedule.startTime,
         endTime: editSchedule.endTime,
+        units: editSchedule.units === '' ? undefined : Number(editSchedule.units),
+        lectureContactHours: editSchedule.lectureContactHours === '' ? undefined : Number(editSchedule.lectureContactHours),
+        labContactHours: editSchedule.labContactHours === '' ? undefined : Number(editSchedule.labContactHours),
+        classSize: editSchedule.classSize === '' ? undefined : Number(editSchedule.classSize),
       });
 
       setIsEditDialogOpen(false);
@@ -659,62 +605,53 @@ function ScheduleLoadingContent() {
                 <CardTitle>Program Chair Scheduling</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 md:col-span-2 lg:col-span-3">
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 sm:col-span-2 xl:col-span-4">
                     <div className="text-xs uppercase tracking-wide text-slate-500">Selected Faculty</div>
                     <div className="text-sm font-medium text-slate-900">{selectedFacultyName}</div>
                   </div>
-                  <div>
-                    <div className="text-sm font-medium">Subject</div>
-                    <Select value={assignment.subjectId} onValueChange={(value) => setAssignment((prev) => ({ ...prev, subjectId: value || '' }))}>
-                      <SelectTrigger>
-                        <SelectValue>{subjectLabel || 'Select subject'}</SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {meta.subjects.map((subject) => (
-                          <SelectItem key={subject.id} value={subject.id}>
-                            {subject.code} - {subject.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium text-slate-700">Subject code</div>
+                    <Input
+                      className="h-10"
+                      placeholder="e.g. CS101"
+                      value={subjectCode}
+                      onChange={(event) => setSubjectCode(event.target.value)}
+                    />
                   </div>
-                  <div>
-                    <div className="text-sm font-medium">Room</div>
-                    <Select value={assignment.roomId} onValueChange={(value) => setAssignment((prev) => ({ ...prev, roomId: value || '' }))}>
-                      <SelectTrigger>
-                        <SelectValue>{roomLabel || 'Select room'}</SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {meta.rooms.map((room) => (
-                          <SelectItem key={room.id} value={room.id}>
-                            {room.name} (cap {room.capacity})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium text-slate-700">Subject name</div>
+                    <Input
+                      className="h-10"
+                      placeholder="Subject name"
+                      value={subjectName}
+                      onChange={(event) => setSubjectName(event.target.value)}
+                    />
                   </div>
-                  <div>
-                    <div className="text-sm font-medium">Section</div>
-                    <Select value={assignment.section} onValueChange={(value) => setAssignment((prev) => ({ ...prev, section: value || '' }))}>
-                      <SelectTrigger>
-                        <SelectValue>{sectionLabel || 'Select section'}</SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {meta.sections.map((section) => (
-                          <SelectItem key={section.id} value={section.name}>
-                            {section.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium text-slate-700">Room</div>
+                    <Input
+                      className="h-10"
+                      placeholder="e.g. ComLab 1"
+                      value={roomName}
+                      onChange={(event) => setRoomName(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium text-slate-700">Section</div>
+                    <Input
+                      className="h-10"
+                      placeholder="e.g. 1A"
+                      value={assignment.section}
+                      onChange={(event) => setAssignment((prev) => ({ ...prev, section: event.target.value }))}
+                    />
                   </div>
                 </div>
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div>
-                    <div className="text-sm font-medium">Day</div>
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium text-slate-700">Day</div>
                     <Select value={assignment.day} onValueChange={(value) => setAssignment((prev) => ({ ...prev, day: value || 'Monday' }))}>
-                      <SelectTrigger>
+                      <SelectTrigger className="h-10">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -726,14 +663,35 @@ function ScheduleLoadingContent() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <div className="text-sm font-medium">Start Time</div>
-                    <Input type="time" value={assignment.startTime} onChange={(event) => setAssignment((prev) => ({ ...prev, startTime: event.target.value }))} />
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium text-slate-700">Start Time</div>
+                    <Input className="h-10" type="time" value={assignment.startTime} onChange={(event) => setAssignment((prev) => ({ ...prev, startTime: event.target.value }))} />
                   </div>
-                  <div>
-                    <div className="text-sm font-medium">End Time</div>
-                    <Input type="time" value={assignment.endTime} onChange={(event) => setAssignment((prev) => ({ ...prev, endTime: event.target.value }))} />
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium text-slate-700">End Time</div>
+                    <Input className="h-10" type="time" value={assignment.endTime} onChange={(event) => setAssignment((prev) => ({ ...prev, endTime: event.target.value }))} />
                   </div>
+                  <div aria-hidden="true" className="hidden xl:block" />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  {[
+                    ['units', 'Units'],
+                    ['lectureContactHours', 'Contact Hrs. Lec'],
+                    ['labContactHours', 'Contact Hrs. Lab'],
+                    ['classSize', 'Class Size'],
+                  ].map(([field, label]) => (
+                    <div key={field} className="space-y-1">
+                      <div className="text-sm font-medium text-slate-700">{label}</div>
+                      <Input
+                        className="h-10"
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        value={loadDetails[field as keyof typeof loadDetails]}
+                        onChange={(event) => setLoadDetails((current) => ({ ...current, [field]: event.target.value.replace(/\D/g, '') }))}
+                      />
+                    </div>
+                  ))}
                 </div>
                 <Button onClick={handleCreateSchedule} disabled={saving}>
                   {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Create Schedule
@@ -786,129 +744,6 @@ function ScheduleLoadingContent() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader className="pb-3">
-                <button
-                  type="button"
-                  onClick={() => setIsManagePanelOpen((open) => !open)}
-                  className="flex w-full items-center justify-between gap-3 text-left"
-                >
-                  <CardTitle>Manage Subjects and Rooms</CardTitle>
-                  {isManagePanelOpen ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
-                </button>
-              </CardHeader>
-
-              {isManagePanelOpen && (
-                <CardContent className="space-y-6 pt-0">
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                    Deleting a subject, room, or section will remove it from the schedule-loading lists, and deleting a subject or room also clears schedules that use it.
-                  </div>
-                  <div className="space-y-3">
-                    <div className="text-sm font-semibold text-slate-800">Add Subject</div>
-                    <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_140px]">
-                      <Input placeholder="Code (e.g. CS101)" value={newSubjectCode} onChange={(event) => setNewSubjectCode(event.target.value)} />
-                      <Input placeholder="Subject name" value={newSubjectName} onChange={(event) => setNewSubjectName(event.target.value)} />
-                      <Button type="button" onClick={handleCreateSubject} disabled={saving}>
-                        Add Subject
-                      </Button>
-                    </div>
-                    {subjectError && <p className="text-sm text-rose-600">{subjectError}</p>}
-                    <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
-                      {meta.subjects.length === 0 ? (
-                        <div className="text-sm text-slate-500">No subjects yet.</div>
-                      ) : (
-                        meta.subjects.map((subject) => (
-                          <div key={subject.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
-                            <div className="text-sm text-slate-800">
-                              <span className="font-medium">{subject.code}</span> - {subject.name}
-                            </div>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDeleteSubject(subject.id, `${subject.code} - ${subject.name}`)}
-                              disabled={saving}
-                              aria-label={`Delete subject ${subject.code} - ${subject.name}`}
-                            >
-                              <Trash2 className="h-4 w-4 text-slate-500 hover:text-rose-600" />
-                            </Button>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="text-sm font-semibold text-slate-800">Add Room</div>
-                    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_140px]">
-                      <Input placeholder="Room name" value={newRoomName} onChange={(event) => setNewRoomName(event.target.value)} />
-                      <Input type="number" min={1} placeholder="Capacity" value={newRoomCapacity} onChange={(event) => setNewRoomCapacity(event.target.value)} />
-                      <Button type="button" onClick={handleCreateRoom} disabled={saving}>
-                        Add Room
-                      </Button>
-                    </div>
-                    {roomError && <p className="text-sm text-rose-600">{roomError}</p>}
-                    <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
-                      {meta.rooms.length === 0 ? (
-                        <div className="text-sm text-slate-500">No rooms yet.</div>
-                      ) : (
-                        meta.rooms.map((room) => (
-                          <div key={room.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
-                            <div className="text-sm text-slate-800">
-                              <span className="font-medium">{room.name}</span> (cap {room.capacity})
-                            </div>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDeleteRoom(room.id, `${room.name} (cap ${room.capacity})`)}
-                              disabled={saving}
-                              aria-label={`Delete room ${room.name}`}
-                            >
-                              <Trash2 className="h-4 w-4 text-slate-500 hover:text-rose-600" />
-                            </Button>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="text-sm font-semibold text-slate-800">Add Section</div>
-                    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px]">
-                      <Input placeholder="Section name (e.g. 1A)" value={newSectionName} onChange={(event) => setNewSectionName(event.target.value)} />
-                      <Button type="button" onClick={handleCreateSection} disabled={saving}>
-                        Add Section
-                      </Button>
-                    </div>
-                    {sectionError && <p className="text-sm text-rose-600">{sectionError}</p>}
-                    <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
-                      {meta.sections.length === 0 ? (
-                        <div className="text-sm text-slate-500">No sections yet.</div>
-                      ) : (
-                        meta.sections.map((section) => (
-                          <div key={section.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
-                            <div className="text-sm text-slate-800">
-                              <span className="font-medium">{section.name}</span>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDeleteSection(section.id, section.name)}
-                              disabled={saving}
-                              aria-label={`Delete section ${section.name}`}
-                            >
-                              <Trash2 className="h-4 w-4 text-slate-500 hover:text-rose-600" />
-                            </Button>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              )}
-            </Card>
           </div>
         </div>
       )}
@@ -982,76 +817,42 @@ function ScheduleLoadingContent() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Edit Schedule</DialogTitle>
           </DialogHeader>
 
           {editSchedule && (
             <div className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <div className="text-sm font-medium">Faculty</div>
-                  <Select value={editSchedule.facultyId} onValueChange={(value) => setEditSchedule((prev) => (prev ? { ...prev, facultyId: value || '' } : prev))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select faculty" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {meta.faculties.map((faculty) => (
-                        <SelectItem key={faculty.id} value={faculty.id}>
-                          {faculty.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+                <div className="space-y-1 md:col-span-2">
+                  <div className="text-sm font-medium text-slate-700">Faculty</div>
+                  <Input className="h-10 bg-slate-50" value={meta.faculties.find((faculty) => faculty.id === editSchedule.facultyId)?.name || 'Selected faculty'} readOnly />
                 </div>
 
-                <div>
-                  <div className="text-sm font-medium">Section</div>
-                  <Select value={editSchedule.section} onValueChange={(value) => setEditSchedule((prev) => (prev ? { ...prev, section: value || '' } : prev))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select section" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {meta.sections.map((section) => (
-                        <SelectItem key={section.id} value={section.name}>
-                          {section.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-1 md:col-span-2">
+                  <div className="text-sm font-medium text-slate-700">Section</div>
+                  <Input className="h-10" value={editSchedule.section} onChange={(event) => setEditSchedule((prev) => (prev ? { ...prev, section: event.target.value } : prev))} />
                 </div>
 
-                <div>
-                  <div className="text-sm font-medium">Subject</div>
-                  <Select value={editSchedule.subjectId} onValueChange={(value) => setEditSchedule((prev) => (prev ? { ...prev, subjectId: value || '' } : prev))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select subject" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {meta.subjects.map((subject) => (
-                        <SelectItem key={subject.id} value={subject.id}>
-                          {subject.code} - {subject.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-1">
+                  <div className="text-sm font-medium text-slate-700">Subject code</div>
+                  <Input className="h-10" value={editSchedule.subjectCode} onChange={(event) => setEditSchedule((prev) => (prev ? { ...prev, subjectCode: event.target.value } : prev))} />
                 </div>
 
-                <div>
-                  <div className="text-sm font-medium">Room</div>
-                  <Select value={editSchedule.roomId} onValueChange={(value) => setEditSchedule((prev) => (prev ? { ...prev, roomId: value || '' } : prev))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select room" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {meta.rooms.map((room) => (
-                        <SelectItem key={room.id} value={room.id}>
-                          {room.name} (cap {room.capacity})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-1">
+                  <div className="text-sm font-medium text-slate-700">Room</div>
+                  <Input
+                    className="h-10"
+                    placeholder="e.g. ComLab 1"
+                    value={editSchedule.roomName}
+                    onChange={(event) => setEditSchedule((prev) => (prev ? { ...prev, roomName: event.target.value } : prev))}
+                  />
+                </div>
+
+                <div className="space-y-1 md:col-span-2">
+                  <div className="text-sm font-medium text-slate-700">Subject name</div>
+                  <Input className="h-10" value={editSchedule.subjectName} onChange={(event) => setEditSchedule((prev) => (prev ? { ...prev, subjectName: event.target.value } : prev))} />
                 </div>
               </div>
 
@@ -1079,6 +880,26 @@ function ScheduleLoadingContent() {
                   <div className="text-sm font-medium">End Time</div>
                   <Input type="time" value={editSchedule.endTime} onChange={(event) => setEditSchedule((prev) => (prev ? { ...prev, endTime: event.target.value } : prev))} />
                 </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-4">
+                {[
+                  ['units', 'Units'],
+                  ['lectureContactHours', 'Contact Hrs. Lec'],
+                  ['labContactHours', 'Contact Hrs. Lab'],
+                  ['classSize', 'Class Size'],
+                ].map(([field, label]) => (
+                  <div key={field}>
+                    <div className="text-sm font-medium">{label}</div>
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={editSchedule[field as keyof EditScheduleFormState]}
+                      onChange={(event) => setEditSchedule((prev) => (prev ? { ...prev, [field]: event.target.value.replace(/\D/g, '') } : prev))}
+                    />
+                  </div>
+                ))}
               </div>
 
               {editError && <p className="text-sm text-rose-600">{editError}</p>}

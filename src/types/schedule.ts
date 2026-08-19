@@ -8,6 +8,10 @@ export interface Schedule {
   day: string;
   startTime: string;
   endTime: string;
+  units?: number | null;
+  lectureContactHours?: number | null;
+  labContactHours?: number | null;
+  classSize?: number | null;
   status:
     | 'pending_program_chair'
     | 'pending_dean'

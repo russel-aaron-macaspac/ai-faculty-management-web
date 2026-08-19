@@ -23,13 +23,37 @@ function buildFacultyClearanceProgressAlert(clearanceRows = []) {
     return {
       requiredDocument: office,
       status: matchingRow?.status ?? 'pending',
+      submitted: Boolean(matchingRow) && matchingRow?.status !== 'rejected',
     };
   });
 
   const approved = facultyStepRecords.filter((record) => record.status === 'approved').length;
   const total = facultyStepRecords.length;
   const completion = total > 0 ? Math.round((approved / total) * 100) : 0;
-  const nextOffice = facultyStepRecords.find((record) => record.status !== 'approved')?.requiredDocument;
+  const submitted = facultyStepRecords.filter((record) => record.submitted).length;
+  const rejectedOffice = facultyStepRecords.find((record) => record.status === 'rejected')?.requiredDocument;
+  const nextOffice = facultyStepRecords.find((record) => !record.submitted)?.requiredDocument;
+
+  let stage = 'Ready to submit';
+  let recommendation = nextOffice
+    ? `Submit your clearance to ${nextOffice}.`
+    : 'Submit each required clearance to begin the review process.';
+
+  if (approved === total) {
+    stage = 'Clearance complete';
+    recommendation = 'All required clearances are approved. No further action is needed.';
+  } else if (rejectedOffice) {
+    stage = 'Action required';
+    recommendation = `Resubmit your clearance to ${rejectedOffice} and review the rejection reason.`;
+  } else if (submitted === total) {
+    stage = 'Awaiting office review';
+    recommendation = 'All required clearances are submitted. Follow up with offices that still show as pending.';
+  } else if (submitted > 0) {
+    stage = 'Submission in progress';
+    recommendation = nextOffice
+      ? `Submit your clearance to ${nextOffice}; the other submissions are already in review.`
+      : 'Complete the remaining clearance submissions.';
+  }
 
   return {
     id: 'faculty-clearance-progress',
@@ -38,12 +62,12 @@ function buildFacultyClearanceProgressAlert(clearanceRows = []) {
     message: 'Completion and clearance status summary.',
     progress: {
       completion,
+      submitted,
       approved,
       total,
+      stage,
     },
-    recommendation: nextOffice
-      ? `Your next step is ${nextOffice}. Open the clearance page and complete or follow up on this requirement.`
-      : 'All required clearance steps are complete. No further action is needed.'
+    recommendation,
   };
 }
 

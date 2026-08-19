@@ -6,7 +6,7 @@ import { Attendance } from '@/types/attendance';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { Loader2, Search, AlertTriangle, Filter, Sparkles, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { Loader2, Search, AlertTriangle, Sparkles, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { format } from 'date-fns';
 import { StoredUser, normalize } from '@/lib/stringUtils';
 import { formatTimeToTwelveHour, formatAttendanceTimestampToTime } from '@/lib/timeUtils';
@@ -608,11 +608,6 @@ export default function AttendancePage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Attendance Log</h1>
           <p className="text-slate-500 mt-1">Live RFID + attendance in one page.</p>
-        </div>
-        <div className="flex gap-3">
-          <Button variant="outline" className="border-slate-200">
-            <Filter className="mr-2 h-4 w-4 text-slate-500" /> Filter
-          </Button>
         </div>
       </div>
 

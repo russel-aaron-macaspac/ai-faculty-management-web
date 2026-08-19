@@ -78,7 +78,15 @@ function SchedulesContent() {
     }
 
     const currentName = (user.full_name || user.name || '').toLowerCase();
-    return schedules.filter((row) => String(row.facultyId) === String(user.id) || (row.facultyName || '').toLowerCase() === currentName);
+    return schedules
+      .filter((row) => String(row.facultyId) === String(user.id) || (row.facultyName || '').toLowerCase() === currentName)
+      .sort((first, second) => {
+        const firstDayIndex = DAYS.indexOf(first.day);
+        const secondDayIndex = DAYS.indexOf(second.day);
+        const dayOrder = (firstDayIndex === -1 ? DAYS.length : firstDayIndex) - (secondDayIndex === -1 ? DAYS.length : secondDayIndex);
+
+        return dayOrder || first.startTime.localeCompare(second.startTime);
+      });
   }, [schedules, user]);
 
   let scheduleContent: React.ReactNode;

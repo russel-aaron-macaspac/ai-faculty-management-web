@@ -8,6 +8,10 @@ interface CreateSchedulePayload {
   day: string;
   startTime: string;
   endTime: string;
+  units?: number;
+  lectureContactHours?: number;
+  labContactHours?: number;
+  classSize?: number;
   createdBy: string;
   creatorRole: string;
 }
@@ -22,6 +26,10 @@ interface UpdateSchedulePayload {
   day: string;
   startTime: string;
   endTime: string;
+  units?: number;
+  lectureContactHours?: number;
+  labContactHours?: number;
+  classSize?: number;
 }
 
 interface SubjectPayload {

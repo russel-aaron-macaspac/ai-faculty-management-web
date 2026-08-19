@@ -13,6 +13,10 @@ const BASE_SCHEDULE_SELECT = `
   day,
   start_time,
   end_time,
+  units,
+  lecture_contact_hours,
+  lab_contact_hours,
+  class_size,
   status,
   created_by,
   approved_by,
@@ -48,6 +52,10 @@ const SCHEDULE_SELECT_WITH_SECTION = `
   day,
   start_time,
   end_time,
+  units,
+  lecture_contact_hours,
+  lab_contact_hours,
+  class_size,
   status,
   created_by,
   approved_by,
@@ -73,6 +81,12 @@ const SCHEDULE_SELECT_WITH_SECTION = `
     capacity
   )
 `;
+
+const LEGACY_SCHEDULE_SELECT = BASE_SCHEDULE_SELECT
+  .replace("  units,\n", "")
+  .replace("  lecture_contact_hours,\n", "")
+  .replace("  lab_contact_hours,\n", "")
+  .replace("  class_size,\n", "");
 
 /* Helpers */
 function isMissingSectionColumnError(error) {
@@ -206,7 +220,7 @@ export async function GET(request) {
 
     let { data, error } = await query;
 
-    if (error && isMissingSectionColumnError(error)) {
+    if (error) {
       let fallbackQuery = supabase
         .from("schedules")
         .select(BASE_SCHEDULE_SELECT)
@@ -220,11 +234,30 @@ export async function GET(request) {
       const fallbackResponse = await fallbackQuery;
       data = fallbackResponse.data;
       error = fallbackResponse.error;
+
+      if (error) {
+        let legacyQuery = supabase
+          .from("schedules")
+          .select(LEGACY_SCHEDULE_SELECT)
+          .order("day", { ascending: true })
+          .order("start_time", { ascending: true });
+
+        if (facultyId) {
+          legacyQuery = legacyQuery.eq("faculty_id", facultyId);
+        }
+
+        const legacyResponse = await legacyQuery;
+        data = legacyResponse.data;
+        error = legacyResponse.error;
+      }
     }
 
     if (error) {
       console.error("[SCHEDULING GET ERROR]", error);
-      return NextResponse.json({ error: "Failed to fetch schedules" }, { status: 500 });
+      return NextResponse.json(
+        { error: "Failed to fetch schedules", details: error.message ?? String(error) },
+        { status: 500 }
+      );
     }
 
     const formatted = (data || []).map((row) => {
@@ -241,6 +274,10 @@ export async function GET(request) {
         day: row.day,
         startTime: String(row.start_time).slice(0, 5),
         endTime: String(row.end_time).slice(0, 5),
+        units: row.units ?? null,
+        lectureContactHours: row.lecture_contact_hours ?? null,
+        labContactHours: row.lab_contact_hours ?? null,
+        classSize: row.class_size ?? null,
         status: row.status,
         createdBy: row.created_by,
         approvedBy: row.approved_by,
@@ -267,7 +304,7 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { facultyId, section, subjectId, roomId, day, startTime, endTime, createdBy, creatorRole } = body;
+    const { facultyId, section, subjectId, roomId, day, startTime, endTime, units, lectureContactHours, labContactHours, classSize, createdBy, creatorRole } = body;
 
     if (!facultyId || !subjectId || !roomId || !day || !startTime || !endTime || !createdBy) {
       return NextResponse.json(
@@ -421,6 +458,10 @@ export async function POST(request) {
       day,
       start_time: normalizedStart,
       end_time: normalizedEnd,
+      units: units ?? null,
+      lecture_contact_hours: lectureContactHours ?? null,
+      lab_contact_hours: labContactHours ?? null,
+      class_size: classSize ?? null,
       status: getInitialStatusForCreator(creatorRole),
       created_by: resolvedCreator.userId ?? undefined,
       ...(section ? { section } : {}),

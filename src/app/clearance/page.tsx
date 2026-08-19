@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { clearanceService } from '@/services/clearanceService';
 import { Clearance } from '@/types/clearance';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -251,8 +251,33 @@ export default function ClearancePage() {
     const approved = facultyStepRecords.filter((record) => record.status === 'approved').length;
     const submitted = facultyStepRecords.filter((record) => record.status === 'submitted').length;
     const rejected = facultyStepRecords.filter((record) => record.status === 'rejected').length;
-    const pending = facultyStepRecords.filter((record) => record.status === 'pending').length;
+    const pending = facultyStepRecords.filter((record) => !record._isRequiredPlaceholder && record.status === 'pending').length;
     const completion = Math.round((approved / facultyStepRecords.length) * 100);
+    const submittedCount = facultyStepRecords.filter((record) => !record._isRequiredPlaceholder && record.status !== 'rejected').length;
+    const submissionCompletion = Math.round((submittedCount / facultyStepRecords.length) * 100);
+    const rejectedOffice = facultyStepRecords.find((record) => record.status === 'rejected')?.requiredDocument;
+    const nextUnsubmittedOffice = facultyStepRecords.find((record) => record._isRequiredPlaceholder)?.requiredDocument;
+
+    let stage = 'Ready to submit';
+    let nextStep = nextUnsubmittedOffice
+      ? `Submit your clearance to ${nextUnsubmittedOffice}.`
+      : 'Submit each required clearance to begin the review process.';
+
+    if (approved === facultyStepRecords.length) {
+      stage = 'Clearance complete';
+      nextStep = 'All required clearances are approved. No further action is needed.';
+    } else if (rejectedOffice) {
+      stage = 'Action required';
+      nextStep = `Resubmit your clearance to ${rejectedOffice} and review the rejection reason below.`;
+    } else if (submittedCount === facultyStepRecords.length) {
+      stage = 'Awaiting office review';
+      nextStep = 'All required clearances are submitted. Follow up with offices that still show as pending.';
+    } else if (submittedCount > 0) {
+      stage = 'Submission in progress';
+      nextStep = nextUnsubmittedOffice
+        ? `Submit your clearance to ${nextUnsubmittedOffice}; the other submissions are already in review.`
+        : 'Complete the remaining clearance submissions.';
+    }
 
     return {
       approved,
@@ -261,6 +286,10 @@ export default function ClearancePage() {
       pending,
       total: facultyStepRecords.length,
       completion,
+      submittedCount,
+      submissionCompletion,
+      stage,
+      nextStep,
     };
   }, [facultyStepRecords, isFacultyUser]);
 
@@ -422,7 +451,6 @@ export default function ClearancePage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#D4A017]">Clearance tracking</p>
           <h1 className="text-3xl font-semibold tracking-tight text-slate-900">{pageTitle}</h1>
           <p className="text-slate-500">{pageSubtitle}</p>
         </div>
@@ -469,30 +497,24 @@ export default function ClearancePage() {
       {isFacultyUser && facultyProgress && (
         <Card className="border-slate-200 shadow-sm">
           <CardHeader className="space-y-2">
-            <CardTitle>Clearance Progress</CardTitle>
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-amber-700">Next step</p>
-              <p className="mt-1 text-sm font-medium text-amber-900">
-                {facultyProgress.approved >= facultyProgress.total
-                  ? 'All required clearance steps are complete.'
-                  : `${FACULTY_REQUIRED_OFFICES.find((office) => {
-                      const normalizedOffice = normalize(office);
-                      return !facultyStepRecords.some((record) => normalize(record.requiredDocument || '') === normalizedOffice && record.status === 'approved');
-                    }) ?? 'Complete your remaining clearance requirement.'}`}
-              </p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-amber-700">Current stage</p>
+              <p className="mt-1 text-sm font-semibold text-amber-900">{facultyProgress.stage}</p>
+              <p className="mt-1 text-sm text-amber-900">{facultyProgress.nextStep}</p>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm text-slate-500">Completion</p>
-                <p className="text-3xl font-semibold tracking-[-0.02em] text-slate-900">{facultyProgress.completion}%</p>
-                <p className="text-sm text-slate-500">{facultyProgress.approved} of {facultyProgress.total} approved</p>
+                <p className="text-sm text-slate-500">Submission progress</p>
+                <p className="text-3xl font-semibold tracking-[-0.02em] text-slate-900">{facultyProgress.submissionCompletion}%</p>
+                <p className="text-sm text-slate-500">{facultyProgress.submittedCount} of {facultyProgress.total} submitted</p>
+                <p className="mt-1 text-xs text-slate-500">Approval progress: {facultyProgress.approved} of {facultyProgress.total} approved</p>
               </div>
             </div>
 
             <Progress
-              value={facultyProgress.completion}
+              value={facultyProgress.submissionCompletion}
               className="h-2"
               indicatorClassName="bg-gradient-to-r from-[#0F172A] via-[#D4A017] to-emerald-600"
             />
