@@ -122,8 +122,13 @@ export default function ToastContainer() {
       return toast;
     });
 
-    commitToasts(nextToasts);
-    timersRef.current.remove = setTimeout(removeToast, ANIMATION_DURATION, id);
+    toastsRef.current = nextToasts;
+    setToasts(nextToasts);
+    timersRef.current.remove = setTimeout(() => {
+      const remainingToasts = toastsRef.current.filter((toast) => toast.id !== id);
+      toastsRef.current = remainingToasts;
+      setToasts(remainingToasts);
+    }, ANIMATION_DURATION);
   };
 
   if (toasts.length === 0) return null;
