@@ -164,7 +164,7 @@ export function Sidebar({ user, collapsed = false, onToggle }: Readonly<SidebarP
         <Button
           variant="ghost"
           size="icon"
-          className="text-slate-400 hover:bg-white/10 hover:text-white"
+          className="hidden text-slate-400 hover:bg-white/10 hover:text-white md:inline-flex"
           onClick={onToggle}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -177,10 +177,7 @@ export function Sidebar({ user, collapsed = false, onToggle }: Readonly<SidebarP
           bordered section — first thing you see after the brand, rather
           than a footer element that felt disconnected from the nav flow. */}
       <div className={cn('border-b border-white/10 py-4', collapsed ? 'px-3' : 'px-4')}>
-        <div className={cn('flex rounded-[10px] border border-white/10 bg-white/5 p-2.5', collapsed ? 'justify-center' : 'items-center gap-3')}>
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[#D4A017]/15 font-sans text-sm font-semibold text-[#D4A017] ring-1 ring-[#D4A017]/20">
-            {displayName?.charAt(0) ?? 'U'}
-          </div>
+        <div className={cn('rounded-[10px] border border-white/10 bg-white/5 p-2.5', collapsed && 'text-center')}>
           <div className={cn('flex min-w-0 flex-col', collapsed && 'hidden')}>
             <span className="truncate font-sans text-sm font-medium text-white">{displayName || user?.role}</span>
             <Badge variant="outline" className="mt-0.5 w-fit border-white/10 bg-transparent px-1.5 py-0 font-sans text-[10px] capitalize text-slate-400">
