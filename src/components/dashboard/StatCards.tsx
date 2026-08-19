@@ -51,10 +51,10 @@ const ACCENT_STYLES: Record<Accent, { chipBg: string; chipText: string; chipRing
     border: 'border-l-rose-400',
   },
   info: {
-    chipBg: 'bg-blue-50',
-    chipText: 'text-blue-600',
-    chipRing: 'ring-blue-100',
-    border: 'border-l-blue-400',
+    chipBg: 'bg-amber-50',
+    chipText: 'text-amber-600',
+    chipRing: 'ring-amber-100',
+    border: 'border-l-amber-400',
   },
 };
 
@@ -82,7 +82,7 @@ export function StatCard(props: Readonly<StatCardProps>) {
       </CardHeader>
       <CardContent className="flex flex-1 flex-col justify-between">
         <div>
-          <div className="text-3xl font-semibold tracking-tight text-slate-900">{value}</div>
+          <div className="text-3xl font-semibold tracking-[-0.02em] text-slate-900">{value}</div>
           {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
         </div>
       </CardContent>

@@ -471,7 +471,7 @@ export default function ClearancePage() {
           <CardHeader className="space-y-2">
             <CardTitle>Clearance Progress</CardTitle>
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-700">Next step</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-amber-700">Next step</p>
               <p className="mt-1 text-sm font-medium text-amber-900">
                 {facultyProgress.approved >= facultyProgress.total
                   ? 'All required clearance steps are complete.'
@@ -486,7 +486,7 @@ export default function ClearancePage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-sm text-slate-500">Completion</p>
-                <p className="text-3xl font-semibold tracking-tight text-slate-900">{facultyProgress.completion}%</p>
+                <p className="text-3xl font-semibold tracking-[-0.02em] text-slate-900">{facultyProgress.completion}%</p>
                 <p className="text-sm text-slate-500">{facultyProgress.approved} of {facultyProgress.total} approved</p>
               </div>
             </div>

@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { StatCard } from '@/components/dashboard/StatCards';
 import { AIAlerts } from '@/components/dashboard/AIAlerts';
 import { User } from '@/types/user';
-import { CalendarDays, Clock, FileCheck2, GraduationCap } from 'lucide-react';
+import { Activity, CalendarDays, Clock, FileCheck2, GraduationCap } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
 import { Schedule } from '@/types/schedule';
 import { parseTimeToMinutes, formatTimeToTwelveHour, getTimeStatus } from '@/lib/timeUtils';
@@ -194,6 +194,13 @@ function FacultyDashboardContent() {
     };
   }, []);
 
+  let attendanceStatusClass = 'text-slate-500';
+  if (myAttendance) {
+    attendanceStatusClass = myAttendance.status === 'late' ? 'text-amber-600' : 'text-emerald-600';
+  }
+  const latenessSeries = insightsMeta?.latenessSeries ?? [];
+  const maxLateCount = Math.max(...latenessSeries.map((entry) => entry.lateCount), 1);
+
   return (
     <div className="space-y-6">
       <div className="space-y-2">
@@ -256,23 +263,60 @@ function FacultyDashboardContent() {
         <div className="md:col-span-3 lg:col-span-2 space-y-6">
         <div className="surface-panel rounded-[12px] p-6 text-center">
           <h3 className="mb-2 font-semibold text-slate-900">My Attendance</h3>
-          <div className="my-4 text-3xl font-bold text-[#16A34A]">{myAttendance ? myAttendance.status : 'No record'}</div>
+          <div className={`my-4 text-3xl font-bold tracking-[-0.02em] ${attendanceStatusClass}`}>
+            {myAttendance ? myAttendance.status : 'No record'}
+          </div>
           <div className="text-sm text-slate-500">{myAttendance ? `Clocked in at ${myAttendance.timeIn || '—'}` : 'No attendance found for today'}</div>
+          <div className="mt-5 border-t border-slate-100 pt-4">
+            {myAttendance ? (
+              <div className="flex items-center gap-3 text-left">
+                <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+                  <Activity className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2 text-xs font-semibold text-slate-700">
+                    <span>Today&apos;s check-in</span>
+                    <span className="text-slate-500">{myAttendance.timeIn || '—'}</span>
+                  </div>
+                  <div className="mt-2 h-1.5 rounded-full bg-slate-100">
+                    <div className={`h-full w-2/5 rounded-full ${myAttendance.status === 'late' ? 'bg-amber-400' : 'bg-emerald-500'}`} />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-slate-200 bg-slate-50/70 px-3 py-3 text-xs text-slate-500">
+                <Activity className="h-4 w-4 text-slate-400" />
+                <span>Your attendance trend will appear here.</span>
+              </div>
+            )}
+          </div>
         </div>
-        {insightsMeta?.latenessSeries && (
-          <div className="surface-panel rounded-[12px] p-6">
+        <div className="surface-panel rounded-[12px] p-6">
             <h3 className="mb-2 font-semibold text-slate-900">Lateness (14d)</h3>
             <div className="mb-2 text-sm text-slate-600">Recent late arrivals per day</div>
-            <div className="flex flex-wrap gap-2 text-xs text-slate-700">
-              {insightsMeta.latenessSeries.map((s: { date: string; lateCount: number }) => (
-                <div key={s.date} className="rounded-lg border border-slate-100 bg-slate-50 p-2">
-                  <div className="font-medium">{s.lateCount}</div>
-                  <div className="text-[10px] text-slate-500">{s.date.slice(5)}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+            {latenessSeries.length > 0 ? (
+              <div className="flex h-24 items-end gap-1.5 border-b border-slate-200 px-1 pt-4" aria-label="Lateness trend">
+                {latenessSeries.map((entry) => (
+                  <div key={entry.date} className="group relative flex h-full flex-1 items-end justify-center" title={`${entry.date}: ${entry.lateCount} late arrivals`}>
+                    <div
+                      className="w-full max-w-3 rounded-t-sm bg-amber-400 transition-all group-hover:bg-amber-500"
+                      style={{ height: `${Math.max((entry.lateCount / maxLateCount) * 100, 8)}%` }}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex h-24 items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/70 text-xs text-slate-500">
+                <span>No lateness trend data yet.</span>
+              </div>
+            )}
+            {latenessSeries.length > 0 && (
+              <div className="mt-2 flex justify-between text-[10px] text-slate-400">
+                <span>{latenessSeries[0].date.slice(5)}</span>
+                <span>{latenessSeries[latenessSeries.length - 1].date.slice(5)}</span>
+              </div>
+            )}
+        </div>
         </div>
       </div>
     </div>

@@ -145,7 +145,7 @@ export default function ReportsPage() {
             <div className="flex justify-between items-start">
                <div>
                   <p className="text-sm font-medium text-slate-500">Avg. Attendance Rate</p>
-                  <p className="text-3xl font-bold text-slate-900 mt-2">{metrics.avgAttendance}%</p>
+                  <p className="text-3xl font-bold tracking-[-0.02em] text-slate-900 mt-2">{metrics.avgAttendance}%</p>
                </div>
                <div className="p-2 bg-emerald-50 rounded-lg"><TrendingUp className="h-5 w-5 text-emerald-500" /></div>
             </div>
@@ -159,7 +159,7 @@ export default function ReportsPage() {
             <div className="flex justify-between items-start">
                <div>
                   <p className="text-sm font-medium text-slate-500">Total Hours Logged</p>
-                  <p className="text-3xl font-bold text-slate-900 mt-2">{metrics.totalHours}</p>
+                  <p className="text-3xl font-bold tracking-[-0.02em] text-slate-900 mt-2">{metrics.totalHours}</p>
                </div>
                <div className="p-2 bg-red-50 rounded-lg"><Clock className="h-5 w-5 text-red-500" /></div>
             </div>
@@ -173,7 +173,7 @@ export default function ReportsPage() {
             <div className="flex justify-between items-start">
                <div>
                   <p className="text-sm font-medium text-slate-500">Clearance Compliance</p>
-                  <p className="text-3xl font-bold text-slate-900 mt-2">{metrics.clearanceCompliance}%</p>
+                  <p className="text-3xl font-bold tracking-[-0.02em] text-slate-900 mt-2">{metrics.clearanceCompliance}%</p>
                </div>
                <div className="p-2 bg-amber-50 rounded-lg"><FileCheck2 className="h-5 w-5 text-amber-500" /></div>
             </div>
@@ -187,7 +187,7 @@ export default function ReportsPage() {
             <div className="flex justify-between items-start">
                <div>
                   <p className="text-sm font-medium text-slate-500">Active Personnel</p>
-                  <p className="text-3xl font-bold text-slate-900 mt-2">{metrics.activePersonnel}</p>
+                  <p className="text-3xl font-bold tracking-[-0.02em] text-slate-900 mt-2">{metrics.activePersonnel}</p>
                </div>
                <div className="p-2 bg-red-50 rounded-lg"><Users className="h-5 w-5 text-red-500" /></div>
             </div>

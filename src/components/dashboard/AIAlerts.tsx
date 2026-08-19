@@ -36,9 +36,9 @@ const ALERT_STYLES: Record<
   },
   insight: {
     icon: Lightbulb,
-    iconClass: 'text-blue-600',
-    bg: 'bg-blue-50',
-    border: 'border-l-blue-400',
+    iconClass: 'text-amber-600',
+    bg: 'bg-amber-50',
+    border: 'border-l-amber-400',
   },
   success: {
     icon: CheckCircle2,
@@ -68,8 +68,8 @@ export function AIAlerts(props: Readonly<AIAlertsProps>) {
           accent comes from the icon chip, not a full-bleed dark block. */}
       <div className="flex items-center justify-between border-b border-slate-100 bg-white px-6 py-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-blue-50">
-            <Sparkles className="h-4.5 w-4.5 text-blue-600" />
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-amber-50">
+            <Sparkles className="h-4.5 w-4.5 text-amber-600" />
           </div>
           <div>
             <CardTitle className="text-sm font-semibold text-slate-900">Insights</CardTitle>
@@ -110,7 +110,7 @@ export function AIAlerts(props: Readonly<AIAlertsProps>) {
                       {alert.progress && (
                         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                           <div className="mb-2 flex items-center justify-between gap-3">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Completion</p>
+                            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Completion</p>
                             <span className="text-lg font-semibold text-slate-900">{alert.progress.completion}%</span>
                           </div>
                           <p className="text-sm text-slate-600">{alert.progress.approved} of {alert.progress.total} approved</p>
@@ -119,7 +119,7 @@ export function AIAlerts(props: Readonly<AIAlertsProps>) {
 
                       {alert.recommendation && (
                         <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Next step</p>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">Next step</p>
                           <p className="mt-1 text-sm text-slate-700">{alert.recommendation}</p>
                         </div>
                       )}
