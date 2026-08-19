@@ -72,20 +72,23 @@ export default function ProfilePage() {
         <p className="text-slate-500">Review and update your account details.</p>
       </div>
 
-      <Card className="surface-panel max-w-4xl border-0 shadow-none">
+      <Card className="surface-panel w-full max-w-5xl border-0 shadow-none">
         <CardHeader className="border-b border-slate-200/80 pb-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <CardTitle className="text-2xl">{user.name}</CardTitle>
               <CardDescription className="mt-2 flex flex-wrap items-center gap-2">
                 <Badge variant="secondary" className="capitalize">{user.role.replaceAll('_', ' ')}</Badge>
-                <Badge variant="outline">{profileDetails.department}</Badge>
-                <Badge variant="info">{profileDetails.position}</Badge>
               </CardDescription>
             </div>
 
             <div>
-              <Button variant="outline" onClick={() => setIsEditOpen(true)}>Edit profile</Button>
+              <Button
+                className="bg-[#D4A017] text-[#0F172A] hover:bg-[#B8860B]"
+                onClick={() => setIsEditOpen(true)}
+              >
+                Edit profile
+              </Button>
               <Dialog open={isEditOpen} onOpenChange={(open) => setIsEditOpen(open)}>
                 <DialogContent className="sm:max-w-md">
                   <DialogHeader>
@@ -136,32 +139,32 @@ export default function ProfilePage() {
         </CardHeader>
 
         <CardContent className="grid gap-6 py-6 sm:grid-cols-2">
-          <div className="space-y-2 rounded-[12px] border border-slate-200 bg-slate-50/80 p-4">
+          <div className="space-y-2 pb-2">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Email</div>
             <div className="text-sm text-slate-900" style={{ wordBreak: 'break-word' }}>{user.email}</div>
           </div>
 
-          <div className="space-y-2 rounded-[12px] border border-slate-200 bg-slate-50/80 p-4">
+          <div className="space-y-2 pb-2">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Employee ID</div>
             <div className="text-sm text-slate-900">{profileDetails.employeeId}</div>
           </div>
 
-          <div className="space-y-2 rounded-[12px] border border-slate-200 bg-slate-50/80 p-4">
+          <div className="space-y-2 pb-2">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Position</div>
             <div className="text-sm text-slate-900">{profileDetails.position}</div>
           </div>
 
-          <div className="space-y-2 rounded-[12px] border border-slate-200 bg-slate-50/80 p-4">
+          <div className="space-y-2 pb-2">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Hire Date</div>
             <div className="text-sm text-slate-900">{profileDetails.hireDate}</div>
           </div>
 
-          <div className="space-y-2 rounded-[12px] border border-slate-200 bg-slate-50/80 p-4 sm:col-span-2">
+          <div className="space-y-2 pb-2 sm:col-span-2">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Phone</div>
             <div className="text-sm text-slate-900">{profileDetails.phone}</div>
           </div>
 
-          <div className="space-y-2 rounded-[12px] border border-slate-200 bg-slate-50/80 p-4 sm:col-span-2">
+          <div className="space-y-2 pb-2 sm:col-span-2">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Address</div>
             <div className="text-sm text-slate-900">{profileDetails.address}</div>
           </div>
