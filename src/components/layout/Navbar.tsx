@@ -3,7 +3,6 @@
 import { Menu, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { NotificationCenter } from '@/components/NotificationCenter';
-import { Badge } from '@/components/ui/badge';
 import { User } from '@/types/user';
 
 interface NavbarProps {
@@ -21,7 +20,6 @@ export function Navbar({ onMenuClick, user = null }: Readonly<NavbarProps>) {
         <Button variant="ghost" size="icon" className="md:hidden" onClick={onMenuClick} aria-label="Open navigation">
           <Menu className="h-5 w-5" />
         </Button>
-
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
             <ShieldCheck className="h-4 w-4 text-[#D4A017]" />

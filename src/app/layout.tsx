@@ -4,7 +4,7 @@ import "./globals.css";
 import ToastContainer from '@/components/Toast/ToastContainer';
 
 const inter = Inter({
-  variable: "--font-sans",
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 

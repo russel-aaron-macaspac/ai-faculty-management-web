@@ -11,6 +11,7 @@ export function DashboardLayout({ children }: Readonly<{ children: React.ReactNo
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -27,7 +28,7 @@ export function DashboardLayout({ children }: Readonly<{ children: React.ReactNo
 
   if (loading) {
     return (
-      <div className="flex min-h-screen overflow-hidden bg-background text-foreground university-shell">
+      <div className="flex h-screen bg-background text-foreground university-shell">
         {/* Sidebar skeleton — mirrors the real sidebar's width/structure so
             there's no layout shift when the actual shell mounts. */}
         <div className="hidden w-64 shrink-0 flex-col gap-6 border-r border-slate-200 bg-white p-4 md:flex">
@@ -73,7 +74,7 @@ export function DashboardLayout({ children }: Readonly<{ children: React.ReactNo
   if (!user) return null;
 
   return (
-    <div className="flex min-h-screen overflow-hidden bg-background text-foreground university-shell">
+    <div className="flex h-screen bg-background text-foreground university-shell">
       {/* Mobile sidebar overlay — fades rather than snapping in/out */}
       <button
         type="button"
@@ -88,15 +89,19 @@ export function DashboardLayout({ children }: Readonly<{ children: React.ReactNo
 
       {/* Sidebar Desktop & Mobile */}
       <div
-        className={`fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] ${
+        className={`fixed inset-y-0 left-0 z-50 h-screen w-72 shrink-0 transform transition-[width,transform] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } md:relative md:translate-x-0`}
+        } md:relative md:translate-x-0 ${sidebarCollapsed ? 'md:w-20' : 'md:w-72'}`}
       >
-        <Sidebar user={user} />
+        <Sidebar
+          user={user}
+          collapsed={sidebarCollapsed}
+          onToggle={() => setSidebarCollapsed((collapsed) => !collapsed)}
+        />
       </div>
 
       {/* Main content */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <Navbar onMenuClick={() => setSidebarOpen(true)} user={user} />
         <main className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
           <div className="mx-auto max-w-7xl animate-in fade-in slide-in-from-bottom-2 duration-300">
