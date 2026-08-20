@@ -32,6 +32,29 @@ export async function POST(request) {
     }
 
     const supabase = createSupabaseAdminClient();
+
+    const { data: existingSubject, error: existingSubjectError } = await supabase
+      .from("subjects")
+      .select("id, code, name")
+      .ilike("code", code)
+      .maybeSingle();
+
+    if (existingSubjectError) {
+      console.error("[SUBJECTS POST LOOKUP ERROR]", existingSubjectError);
+      return NextResponse.json({ error: "Failed to check existing subject" }, { status: 500 });
+    }
+
+    if (existingSubject) {
+      if (existingSubject.name.trim().toLowerCase() === name.toLowerCase()) {
+        return NextResponse.json({ message: "Subject already exists", data: existingSubject }, { status: 200 });
+      }
+
+      return NextResponse.json(
+        { error: `Subject code ${existingSubject.code} is already assigned to ${existingSubject.name}` },
+        { status: 409 }
+      );
+    }
+
     const { data, error } = await supabase
       .from("subjects")
       .insert({ code, name })
@@ -40,6 +63,9 @@ export async function POST(request) {
 
     if (error) {
       console.error("[SUBJECTS POST ERROR]", error);
+      if (error.code === "23505") {
+        return NextResponse.json({ error: "A subject with this code already exists" }, { status: 409 });
+      }
       return NextResponse.json({ error: "Failed to create subject" }, { status: 500 });
     }
 
