@@ -12,6 +12,7 @@ interface CreateSchedulePayload {
   lectureContactHours?: number;
   labContactHours?: number;
   classSize?: number;
+  loadType: 'regular' | 'overload';
   createdBy: string;
   creatorRole: string;
 }
@@ -30,6 +31,7 @@ interface UpdateSchedulePayload {
   lectureContactHours?: number;
   labContactHours?: number;
   classSize?: number;
+  loadType: 'regular' | 'overload';
 }
 
 interface SubjectPayload {

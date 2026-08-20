@@ -17,6 +17,7 @@ const BASE_SCHEDULE_SELECT = `
   lecture_contact_hours,
   lab_contact_hours,
   class_size,
+  load_type,
   status,
   created_by,
   approved_by,
@@ -56,6 +57,7 @@ const SCHEDULE_SELECT_WITH_SECTION = `
   lecture_contact_hours,
   lab_contact_hours,
   class_size,
+  load_type,
   status,
   created_by,
   approved_by,
@@ -278,6 +280,7 @@ export async function GET(request) {
         lectureContactHours: row.lecture_contact_hours ?? null,
         labContactHours: row.lab_contact_hours ?? null,
         classSize: row.class_size ?? null,
+        loadType: row.load_type ?? 'regular',
         status: row.status,
         createdBy: row.created_by,
         approvedBy: row.approved_by,
@@ -304,13 +307,17 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { facultyId, section, subjectId, roomId, day, startTime, endTime, units, lectureContactHours, labContactHours, classSize, createdBy, creatorRole } = body;
+    const { facultyId, section, subjectId, roomId, day, startTime, endTime, units, lectureContactHours, labContactHours, classSize, loadType, createdBy, creatorRole } = body;
 
     if (!facultyId || !subjectId || !roomId || !day || !startTime || !endTime || !createdBy) {
       return NextResponse.json(
         { error: "facultyId, subjectId, roomId, day, startTime, endTime, and createdBy are required" },
         { status: 400 }
       );
+    }
+
+    if (!['regular', 'overload'].includes(loadType)) {
+      return NextResponse.json({ error: "loadType must be regular or overload" }, { status: 400 });
     }
 
     // Normalize times to HH:MM
@@ -462,6 +469,7 @@ export async function POST(request) {
       lecture_contact_hours: lectureContactHours ?? null,
       lab_contact_hours: labContactHours ?? null,
       class_size: classSize ?? null,
+      load_type: loadType,
       status: getInitialStatusForCreator(creatorRole),
       created_by: resolvedCreator.userId ?? undefined,
       ...(section ? { section } : {}),

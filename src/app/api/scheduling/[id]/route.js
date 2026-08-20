@@ -31,7 +31,7 @@ export async function PUT(request, { params }) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const { actorId, actorRole, facultyId, subjectId, roomId, section, day, startTime, endTime, units, lectureContactHours, labContactHours, classSize } = body;
+    const { actorId, actorRole, facultyId, subjectId, roomId, section, day, startTime, endTime, units, lectureContactHours, labContactHours, classSize, loadType } = body;
 
     if (!actorId || !actorRole) {
       return NextResponse.json({ error: "actorId and actorRole are required" }, { status: 400 });
@@ -42,6 +42,10 @@ export async function PUT(request, { params }) {
         { error: "facultyId, subjectId, roomId, day, startTime, and endTime are required" },
         { status: 400 }
       );
+    }
+
+    if (!['regular', 'overload'].includes(loadType)) {
+      return NextResponse.json({ error: "loadType must be regular or overload" }, { status: 400 });
     }
 
     const normalizedStart = normalizeHHMM(startTime);
@@ -73,6 +77,7 @@ export async function PUT(request, { params }) {
       lecture_contact_hours: lectureContactHours ?? null,
       lab_contact_hours: labContactHours ?? null,
       class_size: classSize ?? null,
+      load_type: loadType,
       approved_by: null,
       approved_at: null,
       remarks: null,

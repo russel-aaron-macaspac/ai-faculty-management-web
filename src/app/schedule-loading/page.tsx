@@ -77,6 +77,7 @@ interface EditScheduleFormState {
   day: string;
   startTime: string;
   endTime: string;
+  loadType: 'regular' | 'overload';
   units: string;
   lectureContactHours: string;
   labContactHours: string;
@@ -132,6 +133,7 @@ function ScheduleLoadingContent() {
   const [subjectCode, setSubjectCode] = useState('');
   const [subjectName, setSubjectName] = useState('');
   const [roomName, setRoomName] = useState('');
+  const [loadType, setLoadType] = useState<'regular' | 'overload'>('regular');
   const [loadDetails, setLoadDetails] = useState({ units: '', lectureContactHours: '', labContactHours: '', classSize: '' });
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editSchedule, setEditSchedule] = useState<EditScheduleFormState | null>(null);
@@ -420,6 +422,7 @@ function ScheduleLoadingContent() {
         roomId: matchingRoom.id,
         section: assignment.section.trim(),
         ...numericLoadDetails,
+        loadType,
         createdBy: currentUserName || user.role,
         creatorRole: user.role,
       });
@@ -436,6 +439,7 @@ function ScheduleLoadingContent() {
       setSubjectName('');
       setRoomName('');
       setLoadDetails({ units: '', lectureContactHours: '', labContactHours: '', classSize: '' });
+      setLoadType('regular');
       await loadData(user);
       toast({ title: 'Done', description: 'Schedule created.', type: 'success' });
     } catch (error) {
@@ -480,6 +484,7 @@ function ScheduleLoadingContent() {
       day: item.day || 'Monday',
       startTime: item.startTime || '',
       endTime: item.endTime || '',
+      loadType: item.loadType === 'overload' ? 'overload' : 'regular',
       units: item.units == null ? '' : String(item.units),
       lectureContactHours: item.lectureContactHours == null ? '' : String(item.lectureContactHours),
       labContactHours: item.labContactHours == null ? '' : String(item.labContactHours),
@@ -534,6 +539,7 @@ function ScheduleLoadingContent() {
         lectureContactHours: editSchedule.lectureContactHours === '' ? undefined : Number(editSchedule.lectureContactHours),
         labContactHours: editSchedule.labContactHours === '' ? undefined : Number(editSchedule.labContactHours),
         classSize: editSchedule.classSize === '' ? undefined : Number(editSchedule.classSize),
+        loadType: editSchedule.loadType,
       });
 
       setIsEditDialogOpen(false);
@@ -683,7 +689,18 @@ function ScheduleLoadingContent() {
                     <div className="text-sm font-medium text-slate-700">End Time</div>
                     <Input className="h-10" type="time" value={assignment.endTime} onChange={(event) => setAssignment((prev) => ({ ...prev, endTime: event.target.value }))} />
                   </div>
-                  <div aria-hidden="true" className="hidden xl:block" />
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium text-slate-700">Load Type</div>
+                    <Select value={loadType} onValueChange={(value) => setLoadType(value as 'regular' | 'overload')}>
+                      <SelectTrigger className="h-10">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="regular">Regular Load</SelectItem>
+                        <SelectItem value="overload">Overload</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   {[
@@ -895,6 +912,18 @@ function ScheduleLoadingContent() {
               </div>
 
               <div className="grid gap-4 md:grid-cols-4">
+                <div>
+                  <div className="text-sm font-medium">Load Type</div>
+                  <Select value={editSchedule.loadType} onValueChange={(value) => setEditSchedule((prev) => (prev ? { ...prev, loadType: value as 'regular' | 'overload' } : prev))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="regular">Regular Load</SelectItem>
+                      <SelectItem value="overload">Overload</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 {[
                   ['units', 'Units'],
                   ['lectureContactHours', 'Contact Hrs. Lec'],

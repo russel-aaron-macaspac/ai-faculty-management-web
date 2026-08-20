@@ -12,6 +12,7 @@ export interface Schedule {
   lectureContactHours?: number | null;
   labContactHours?: number | null;
   classSize?: number | null;
+  loadType?: 'regular' | 'overload' | null;
   status:
     | 'pending_program_chair'
     | 'pending_dean'
