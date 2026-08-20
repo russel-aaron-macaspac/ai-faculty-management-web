@@ -45,20 +45,17 @@ export default function ProfilePage() {
   }
 
   let department = 'Operations';
-  let position = 'System Administrator';
 
   if (isFacultyLikeRole(user.role)) {
     department = 'Computer Science';
-    position = user.role === 'program_chair' ? 'Program Chair' : 'Associate Professor';
   } else if (isApprovalOfficer(user.role)) {
     department = 'Administration';
-    position = 'Officer';
   }
 
   const profileDetails = {
     employeeId: user.id,
     department,
-    position,
+    statusOfAppointment: user.statusOfAppointment || 'Not set',
     phone: (user as any).phone || '+63 917 123 4567',
     address: (user as any).address || '123 Main St, Springfield, ST 12345',
     hireDate: 'Aug 15, 2022',
@@ -150,8 +147,8 @@ export default function ProfilePage() {
           </div>
 
           <div className="space-y-2 pb-2">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Position</div>
-            <div className="text-sm text-slate-900">{profileDetails.position}</div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status of Appointment</div>
+            <div className="text-sm capitalize text-slate-900">{profileDetails.statusOfAppointment}</div>
           </div>
 
           <div className="space-y-2 pb-2">

@@ -5,4 +5,5 @@ export interface Faculty {
   department: string;
   phone: string;
   status: 'active' | 'on_leave' | 'inactive';
+  statusOfAppointment: 'full-time' | 'part-time';
 }

@@ -37,6 +37,7 @@ const facultySchema = z.object({
   department: z.string().trim().min(1, { message: 'Enter the department or college.' }),
   phone: z.string().trim().min(1, { message: 'Enter a contact number.' }),
   status: z.enum(['active', 'on_leave', 'inactive']),
+  statusOfAppointment: z.enum(['full-time', 'part-time']),
 });
 
 type SortKey = 'fullName' | 'email' | 'status';
@@ -63,6 +64,7 @@ export default function FacultyPage() {
       department: '',
       phone: '',
       status: 'active',
+      statusOfAppointment: 'full-time',
     },
   });
 
@@ -112,6 +114,7 @@ export default function FacultyPage() {
       department: record.department,
       phone: record.phone,
       status: record.status,
+      statusOfAppointment: record.statusOfAppointment,
     });
     setIsAddOpen(true);
   };
@@ -198,7 +201,7 @@ export default function FacultyPage() {
     if (!open) {
       setEditingId(null);
       setFormError(null);
-      form.reset({ fullName: '', email: '', department: '', phone: '', status: 'active' });
+      form.reset({ fullName: '', email: '', department: '', phone: '', status: 'active', statusOfAppointment: 'full-time' });
     }
   };
 
@@ -351,6 +354,27 @@ export default function FacultyPage() {
                           <SelectItem value="active">Active</SelectItem>
                           <SelectItem value="on_leave">On Leave</SelectItem>
                           <SelectItem value="inactive">Inactive</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="statusOfAppointment"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Status of Appointment</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select appointment status" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="full-time">Full-time</SelectItem>
+                          <SelectItem value="part-time">Part-time</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />

@@ -23,7 +23,7 @@ export async function GET() {
       await Promise.all([
         supabase
           .from("users")
-          .select("user_id, supabase_id, first_name, middle_name, last_name, role")
+          .select("user_id, supabase_id, first_name, middle_name, last_name, role, status_of_appointment")
           .in("role", ["faculty", "program_chair"])
           .eq("status", "active")
           .order("last_name", { ascending: true }),
@@ -58,6 +58,7 @@ export async function GET() {
         id: String(f.user_id ?? f.supabase_id),
         name: [f.first_name, f.middle_name, f.last_name].filter(Boolean).join(" "),
         role: f.role,
+        statusOfAppointment: f.status_of_appointment || null,
         })),
       subjects: subjects || [],
       rooms: rooms || [],

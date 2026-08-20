@@ -5,9 +5,13 @@ export async function PUT(req, { params }) {
   try {
     const { id } = params || {};
     const body = await req.json();
-    const { fullName, email, department, phone, status } = body || {};
+    const { fullName, email, department, phone, status, statusOfAppointment } = body || {};
 
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+
+    if (statusOfAppointment !== undefined && !['full-time', 'part-time'].includes(statusOfAppointment)) {
+      return NextResponse.json({ error: 'Status of appointment must be full-time or part-time' }, { status: 400 });
+    }
 
     const supabase = createSupabaseAdminClient();
 
@@ -22,6 +26,7 @@ export async function PUT(req, { params }) {
     if (department !== undefined) updates.department = department;
     if (phone !== undefined) updates.phone = phone;
     if (status !== undefined) updates.status = status;
+    if (statusOfAppointment !== undefined) updates.status_of_appointment = statusOfAppointment || null;
 
     const { data, error } = await supabase.from('users').update(updates).eq('user_id', id).select('user_id, first_name, middle_name, last_name');
 

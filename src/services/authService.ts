@@ -9,6 +9,7 @@ export interface AuthUser {
   email: string;
   role: UserRole;
   full_name: string;
+  statusOfAppointment?: "full-time" | "part-time" | null;
 }
 
 export interface LoginResponse {

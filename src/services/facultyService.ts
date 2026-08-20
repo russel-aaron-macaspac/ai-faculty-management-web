@@ -2,9 +2,9 @@ import { Faculty } from '@/types/faculty';
 import { delay } from './api';
 
 let mockFacultyData: Faculty[] = [
-  { id: 'f1', fullName: 'Dr. Alice Brown', email: 'alice@university.edu', department: 'Computer Science', phone: '+1234567890', status: 'active' },
-  { id: 'f2', fullName: 'Prof. Bob Wilson', email: 'bob@university.edu', department: 'Mathematics', phone: '+1987654321', status: 'on_leave' },
-  { id: 'f3', fullName: 'Dr. Charlie Davis', email: 'charlie@university.edu', department: 'Physics', phone: '+1122334455', status: 'active' },
+  { id: 'f1', fullName: 'Dr. Alice Brown', email: 'alice@university.edu', department: 'Computer Science', phone: '+1234567890', status: 'active', statusOfAppointment: 'full-time' },
+  { id: 'f2', fullName: 'Prof. Bob Wilson', email: 'bob@university.edu', department: 'Mathematics', phone: '+1987654321', status: 'on_leave', statusOfAppointment: 'part-time' },
+  { id: 'f3', fullName: 'Dr. Charlie Davis', email: 'charlie@university.edu', department: 'Physics', phone: '+1122334455', status: 'active', statusOfAppointment: 'full-time' },
 ];
 
 export const facultyService = {
@@ -24,6 +24,7 @@ export const facultyService = {
         department: u.department || '',
         phone: u.phone || '',
         status: u.status || 'active',
+        statusOfAppointment: u.statusOfAppointment || 'full-time',
       }));
 
       return mapped;
@@ -45,7 +46,7 @@ export const facultyService = {
       const res = await fetch('/api/users/faculty', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fullName: data.fullName, email: data.email, department: data.department, phone: data.phone, status: data.status }),
+        body: JSON.stringify({ fullName: data.fullName, email: data.email, department: data.department, phone: data.phone, status: data.status, statusOfAppointment: data.statusOfAppointment }),
       });
       if (!res.ok) throw new Error('Failed to create faculty');
       const payload = await res.json();
@@ -58,6 +59,7 @@ export const facultyService = {
         department: data.department || '',
         phone: data.phone || '',
         status: data.status || 'active',
+        statusOfAppointment: data.statusOfAppointment,
       };
 
       // Keep local mock in sync for fallbacks
@@ -80,7 +82,7 @@ export const facultyService = {
       const res = await fetch(`/api/users/faculty/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fullName: data.fullName, email: data.email, department: data.department, phone: data.phone, status: data.status }),
+        body: JSON.stringify({ fullName: data.fullName, email: data.email, department: data.department, phone: data.phone, status: data.status, statusOfAppointment: data.statusOfAppointment }),
       });
       if (!res.ok) throw new Error('Failed to update faculty');
       const payload = await res.json();
@@ -93,6 +95,7 @@ export const facultyService = {
         department: data.department || (mockFacultyData.find(f => f.id === id)?.department ?? ''),
         phone: data.phone || (mockFacultyData.find(f => f.id === id)?.phone ?? ''),
         status: data.status || (mockFacultyData.find(f => f.id === id)?.status ?? 'active'),
+        statusOfAppointment: data.statusOfAppointment || (mockFacultyData.find(f => f.id === id)?.statusOfAppointment ?? 'full-time'),
       };
 
       const index = mockFacultyData.findIndex(f => f.id === id);

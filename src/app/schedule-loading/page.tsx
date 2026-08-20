@@ -46,8 +46,20 @@ type LocalUser = {
   name?: string;
 };
 
+enum AppointmentStatus {
+  FullTime = 'full-time',
+  PartTime = 'part-time',
+}
+
+type FacultyMeta = {
+  id: string;
+  name: string;
+  role: string;
+  statusOfAppointment?: AppointmentStatus | null;
+};
+
 interface SchedulingMeta {
-  faculties: Array<{ id: string; name: string; role: string }>;
+  faculties: FacultyMeta[];
   subjects: Array<{ id: string; code: string; name: string }>;
   rooms: Array<{ id: string; name: string; capacity: number }>;
   sections: Array<{ id: string; name: string }>;
@@ -349,7 +361,7 @@ function ScheduleLoadingContent() {
                 <div>
                   <div className="grid gap-1 border-y border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 sm:grid-cols-3">
                     <div><span className="font-semibold">Name of Faculty:</span> {faculty.name}</div>
-                    <div><span className="font-semibold">Status of Appointment:</span> FULL-TIME</div>
+                    <div><span className="font-semibold">Status of Appointment:</span> {(facultyMeta?.statusOfAppointment || faculty.statusOfAppointment || 'Not set').replace(/^\w/, (letter) => letter.toUpperCase())}</div>
                     <div><span className="font-semibold">Designation:</span> {facultyMeta?.role === 'program_chair' ? 'Program Chair' : 'Faculty'}</div>
                   </div>
                   {renderLoadMatrix('Regular Load', regularSchedules)}
@@ -921,19 +933,19 @@ function ScheduleLoadingContent() {
 }
 
 function buildFacultiesList(
-  metaFaculties: Array<{ id: string; name: string; role: string }>,
+  metaFaculties: FacultyMeta[],
   schedules: Schedule[]
 ) {
   const normalize = (s?: string | null) => (s ? s.trim().toLowerCase() : '');
 
-  const nm = new Map<string, { ids: Set<string>; name: string }>();
+  const nm = new Map<string, { ids: Set<string>; name: string; statusOfAppointment?: AppointmentStatus | null }>();
 
   metaFaculties.forEach((f) => {
     const name = f?.name ?? '';
     const id = f?.id ? String(f.id) : '';
     const n = normalize(name);
     if (!n) return;
-    if (!nm.has(n)) nm.set(n, { ids: new Set(), name });
+    if (!nm.has(n)) nm.set(n, { ids: new Set(), name, statusOfAppointment: f.statusOfAppointment });
     if (id) {
       const bucket = nm.get(n);
       if (bucket) bucket.ids.add(id);
@@ -952,12 +964,12 @@ function buildFacultiesList(
     }
   });
 
-  const result: Array<{ id: string; name: string }> = [];
-  nm.forEach(({ ids, name }) => {
+  const result: Array<{ id: string; name: string; statusOfAppointment?: AppointmentStatus | null }> = [];
+  nm.forEach(({ ids, name, statusOfAppointment }) => {
     if (ids.size > 0) {
-      result.push({ id: Array.from(ids.values())[0], name });
+      result.push({ id: Array.from(ids.values())[0], name, statusOfAppointment });
     } else {
-      result.push({ id: `name:${name}`, name });
+      result.push({ id: `name:${name}`, name, statusOfAppointment });
     }
   });
 
