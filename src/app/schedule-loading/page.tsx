@@ -912,18 +912,6 @@ function ScheduleLoadingContent() {
               </div>
 
               <div className="grid gap-4 md:grid-cols-4">
-                <div>
-                  <div className="text-sm font-medium">Load Type</div>
-                  <Select value={editSchedule.loadType} onValueChange={(value) => setEditSchedule((prev) => (prev ? { ...prev, loadType: value as 'regular' | 'overload' } : prev))}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="regular">Regular Load</SelectItem>
-                      <SelectItem value="overload">Overload</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
                 {[
                   ['units', 'Units'],
                   ['lectureContactHours', 'Contact Hrs. Lec'],
