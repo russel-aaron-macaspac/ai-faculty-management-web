@@ -24,6 +24,7 @@ export async function POST(request) {
     const fullName = typeof body?.fullName === 'string' ? body.fullName.trim() : '';
     const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
     const password = typeof body?.password === 'string' ? body.password : '';
+    const department = typeof body?.department === 'string' ? body.department.trim() : '';
     const phone = typeof body?.phone === 'string' ? body.phone.trim() : '';
     const status = typeof body?.status === 'string' ? body.status : '';
     const statusOfAppointment = typeof body?.statusOfAppointment === 'string' ? body.statusOfAppointment : '';
@@ -53,6 +54,10 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Phone number is required.' }, { status: 400 });
     }
 
+    if (!department) {
+      return NextResponse.json({ error: 'Department is required.' }, { status: 400 });
+    }
+
     if (!ALLOWED_STATUSES.includes(status)) {
       return NextResponse.json({ error: 'Select a valid account status.' }, { status: 400 });
     }
@@ -62,6 +67,21 @@ export async function POST(request) {
     }
 
     supabase = createSupabaseAdminClient();
+    const { data: departmentRecord, error: departmentError } = await supabase
+      .from('departments')
+      .select('department_id')
+      .ilike('name', department)
+      .maybeSingle();
+
+    if (departmentError) {
+      console.error('[ACCOUNT DEPARTMENT LOOKUP ERROR]', departmentError);
+      return NextResponse.json({ error: 'Unable to verify the department.' }, { status: 500 });
+    }
+
+    if (!departmentRecord) {
+      return NextResponse.json({ error: 'Select a department that exists in the system.' }, { status: 400 });
+    }
+
     const { data: existingUser, error: existingError } = await supabase
       .from('users')
       .select('user_id')
@@ -107,6 +127,7 @@ export async function POST(request) {
         email,
         password_hash: passwordHash,
         role,
+        department_id: departmentRecord.department_id,
         phone_number: phone,
         status,
         status_of_appointment: statusOfAppointment,

@@ -12,10 +12,30 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 
+const DEPARTMENTS = [
+  'Accounting Information System',
+  'Accountancy',
+  'Psychology',
+  'Education',
+  'Information Technology',
+  'Multimedia Arts',
+  'Communication',
+  'Tourism Management',
+  'Hospitality Management',
+  'Business Administration',
+  'Radiologic Technology',
+  'Physical Therapy',
+  'Nursing',
+  'Biology',
+  'Pharmacy',
+  'Medical Laboratory Science',
+] as const;
+
 const accountSchema = z.object({
   fullName: z.string().trim().min(2, 'Enter the faculty member’s full name.'),
   email: z.string().trim().email('Enter a valid email address.'),
   password: z.string().min(12, 'Use at least 12 characters.').regex(/[A-Za-z]/, 'Include at least one letter.').regex(/\d/, 'Include at least one number.'),
+  department: z.enum(DEPARTMENTS, { message: 'Select a department.' }),
   phone: z.string().trim().min(1, 'Enter a contact number.'),
   status: z.enum(['active', 'on_leave', 'inactive'], { message: 'Select an account status.' }),
   statusOfAppointment: z.enum(['full-time', 'part-time'], { message: 'Select a status of appointment.' }),
@@ -38,7 +58,7 @@ function AccountCreationContent() {
   const [createdAccount, setCreatedAccount] = useState<{ name: string; email: string; role: string } | null>(null);
   const form = useForm<AccountFormValues>({
     resolver: zodResolver(accountSchema),
-    defaultValues: { fullName: '', email: '', password: '', phone: '', status: 'active', statusOfAppointment: 'full-time', role: 'faculty' },
+    defaultValues: { fullName: '', email: '', password: '', department: undefined, phone: '', status: 'active', statusOfAppointment: 'full-time', role: 'faculty' },
   });
 
   const onSubmit = async (values: AccountFormValues) => {
@@ -55,7 +75,7 @@ function AccountCreationContent() {
       if (!response.ok) throw new Error(payload?.error || 'Unable to create the account.');
 
       setCreatedAccount({ name: payload.data.name, email: payload.data.email, role: payload.data.role });
-      form.reset({ fullName: '', email: '', password: '', phone: '', status: 'active', statusOfAppointment: 'full-time', role: 'faculty' });
+      form.reset({ fullName: '', email: '', password: '', department: undefined, phone: '', status: 'active', statusOfAppointment: 'full-time', role: 'faculty' });
       toast({ title: 'Account created', description: `${payload.data.name} can now sign in.`, type: 'success' });
     } catch (error) {
       toast({ title: 'Account creation failed', description: error instanceof Error ? error.message : 'Please try again.', type: 'error' });
@@ -103,6 +123,15 @@ function AccountCreationContent() {
             </div>
             <p className="text-xs text-slate-500">Use at least 12 characters, including a letter and a number.</p>
             {form.formState.errors.password && <p className="text-sm text-red-600">{form.formState.errors.password.message}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="department">Department</Label>
+            <Select value={form.watch('department') ?? ''} onValueChange={(value) => form.setValue('department', value as AccountFormValues['department'], { shouldValidate: true })}>
+              <SelectTrigger id="department" aria-invalid={!!form.formState.errors.department}><SelectValue placeholder="Select a department" /></SelectTrigger>
+              <SelectContent>{DEPARTMENTS.map((department) => <SelectItem key={department} value={department}>{department}</SelectItem>)}</SelectContent>
+            </Select>
+            {form.formState.errors.department && <p className="text-sm text-red-600">{form.formState.errors.department.message}</p>}
           </div>
 
           <div className="space-y-2">
