@@ -30,7 +30,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Plus, Trash2, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Loader2, Plus, Trash2 } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
 import { toast } from '@/lib/toast';
 
@@ -327,7 +327,6 @@ export function FacultyLoadGrid({
             <TableHead className="min-w-[70px]">Lec</TableHead>
             <TableHead className="min-w-[70px]">Lab</TableHead>
             <TableHead className="min-w-[90px]">Class Size</TableHead>
-            <TableHead className="min-w-[110px]">Status</TableHead>
             <TableHead className="text-right">&nbsp;</TableHead>
           </TableRow>
         </TableHeader>
@@ -351,7 +350,7 @@ export function FacultyLoadGrid({
                 />
               </TableCell>
               <TableCell>
-                <Select value={row.day} onValueChange={(value) => updateRow(loadType, row.localId, 'day', value)}>
+                <Select value={row.day} onValueChange={(value) => updateRow(loadType, row.localId, 'day', value ?? 'Monday')}>
                   <SelectTrigger className="h-9">
                     <SelectValue />
                   </SelectTrigger>
@@ -432,9 +431,6 @@ export function FacultyLoadGrid({
                   onChange={(e) => updateRow(loadType, row.localId, 'classSize', e.target.value)}
                 />
               </TableCell>
-              <TableCell>
-                <RowStatusBadge status={row.status} message={row.statusMessage} />
-              </TableCell>
               <TableCell className="text-right">
                 <Button
                   type="button"
@@ -494,29 +490,4 @@ export function FacultyLoadGrid({
       </CardContent>
     </Card>
   );
-}
-
-function RowStatusBadge({ status, message }: { status: RowStatus; message?: string }) {
-  if (status === 'saving') {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs text-slate-500">
-        <Loader2 className="h-3 w-3 animate-spin" /> Saving
-      </span>
-    );
-  }
-  if (status === 'saved') {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
-        <CheckCircle2 className="h-3 w-3" /> Saved
-      </span>
-    );
-  }
-  if (status === 'conflict' || status === 'error') {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs text-rose-600" title={message}>
-        <AlertTriangle className="h-3 w-3" /> {status === 'conflict' ? 'Conflict' : 'Error'}
-      </span>
-    );
-  }
-  return <span className="text-xs text-slate-400">—</span>;
 }
