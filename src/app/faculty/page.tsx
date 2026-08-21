@@ -94,7 +94,7 @@ export default function FacultyPage() {
         toast({ title: 'Faculty Created', description: 'New faculty record added.', type: 'success' });
       }
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Unable to save this faculty record. Please review the form and try again.';
+      const msg = error instanceof Error ? error.message : 'Save failed. Please try again.';
       setFormError(msg);
       toast({ title: 'Save Failed', description: msg, type: 'error' });
       return;
@@ -125,7 +125,7 @@ export default function FacultyPage() {
         await facultyService.deleteFaculty(id);
         toast({ title: 'Deleted', description: 'Faculty record deleted.', type: 'info' });
       } catch (err) {
-        toast({ title: 'Delete Failed', description: err instanceof Error ? err.message : 'Failed to delete faculty.', type: 'error' });
+        toast({ title: 'Delete Failed', description: err instanceof Error ? err.message : 'Delete failed.', type: 'error' });
       }
       loadData();
     }

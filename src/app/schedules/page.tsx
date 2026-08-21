@@ -148,17 +148,17 @@ function SchedulesContent() {
 
   const generateAvailabilityMatrix = () => {
     if (!matrixInput.startTime || !matrixInput.endTime) {
-      setAvailabilityError('Please choose both a start and end time.');
+      setAvailabilityError('Choose a start and end time.');
       return;
     }
 
     if (matrixInput.startTime >= matrixInput.endTime) {
-      setAvailabilityError('The availability end time must be later than the start time.');
+      setAvailabilityError('End time must be after start time.');
       return;
     }
 
     if (matrixInput.selectedDays.length === 0) {
-      setAvailabilityError('Select at least one day for your availability schedule.');
+      setAvailabilityError('Select at least one day.');
       return;
     }
 
@@ -186,14 +186,14 @@ function SchedulesContent() {
 
   const handleSaveAvailability = async () => {
     if (!user?.id) {
-      setAvailabilityError('Sign in again before saving availability.');
+      setAvailabilityError('Please sign in again.');
       return;
     }
 
     const rowsToSave = generatedAvailabilityRows.length > 0 ? generatedAvailabilityRows : availabilityRows;
     const invalidRow = rowsToSave.find((row) => !row.day || !row.startTime || !row.endTime || row.startTime >= row.endTime);
     if (invalidRow) {
-      setAvailabilityError('Each availability row needs a day, a start time, and an end time that is later than the start time.');
+      setAvailabilityError('Complete each availability row.');
       return;
     }
 
@@ -202,9 +202,9 @@ function SchedulesContent() {
     try {
       await scheduleService.saveFacultyAvailability(String(user.id), rowsToSave);
       setAvailabilityRows(rowsToSave);
-      toast({ title: 'Availability Saved', description: 'Your availability schedule was saved successfully.', type: 'success' });
+      toast({ title: 'Availability Saved', description: 'Availability saved.', type: 'success' });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to save availability.';
+      const message = error instanceof Error ? error.message : 'Could not save availability.';
       setAvailabilityError(message);
       toast({ title: 'Save Failed', description: message, type: 'error' });
     } finally {

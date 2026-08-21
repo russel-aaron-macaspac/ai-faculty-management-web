@@ -122,13 +122,13 @@ export default function ClearancePage() {
     setUploadError('');
 
     if (!docName.trim()) {
-      setUploadError('Enter a document name before submitting.');
+      setUploadError('Document name is required.');
       return;
     }
 
     const employeeId = currentUser?.supabase_id ?? '';
     if (!employeeId) {
-      setUploadError('Your account is missing the Supabase user UUID. Please log out and sign in again.');
+      setUploadError('Please sign in again.');
       return;
     }
 
@@ -140,7 +140,7 @@ export default function ClearancePage() {
       void loadData(currentUser ?? undefined);
   toast({ title: 'Clearance Uploaded', description: 'Document uploaded for review.', type: 'success' });
     } catch (error) {
-  const msg = error instanceof Error ? error.message : 'Unable to submit this document. Please try again.';
+  const msg = error instanceof Error ? error.message : 'Upload failed. Please try again.';
   setUploadError(msg);
   toast({ title: 'Upload Failed', description: msg, type: 'error' });
     } finally {
@@ -153,13 +153,13 @@ export default function ClearancePage() {
 
     const employeeId = currentUser.supabase_id ?? '';
     if (!employeeId) {
-      toast({ title: 'Submission Failed', description: 'Your account is missing the Supabase user UUID. Please log out and sign in again.', type: 'error' });
+      toast({ title: 'Submission Failed', description: 'Please sign in again.', type: 'error' });
       return;
     }
 
     const officeId = officeIdMap.get(normalize(officeName));
     if (!officeId) {
-      toast({ title: 'Submission Failed', description: `Could not resolve ${officeName} to an office record.`, type: 'error' });
+      toast({ title: 'Submission Failed', description: 'Office not found.', type: 'error' });
       return;
     }
 
@@ -169,7 +169,7 @@ export default function ClearancePage() {
       await loadData(currentUser);
       toast({ title: 'Clearance Submitted', description: `${officeName} has been submitted for review.`, type: 'success' });
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Unable to submit this clearance. Please try again.';
+      const msg = error instanceof Error ? error.message : 'Submission failed. Please try again.';
       toast({ title: 'Submission Failed', description: msg, type: 'error' });
     } finally {
       setSubmittingOfficeId(null);
@@ -314,7 +314,7 @@ export default function ClearancePage() {
       }
       toast({ title: 'Decision Saved', description: `Record ${decision}.`, type: toastType });
     } catch (err) {
-      toast({ title: 'Decision Failed', description: err instanceof Error ? err.message : 'Failed to update status', type: 'error' });
+      toast({ title: 'Decision Failed', description: err instanceof Error ? err.message : 'Could not update status.', type: 'error' });
     } finally {
       setActionLoadingId(null);
     }

@@ -382,12 +382,12 @@ function ScheduleLoadingContent() {
     if (!user) return;
 
     if (!assignment.facultyId || !subjectCode.trim() || !subjectName.trim() || !assignment.section.trim() || !roomName.trim() || !assignment.startTime || !assignment.endTime) {
-      setAssignmentError('Enter a subject code, subject name, section, room, day, start time, and end time before creating the schedule.');
+      setAssignmentError('Complete all schedule fields.');
       return;
     }
 
     if (assignment.startTime >= assignment.endTime) {
-      setAssignmentError('End time must be later than the start time.');
+      setAssignmentError('End time must be after start time.');
       return;
     }
 
@@ -395,7 +395,7 @@ function ScheduleLoadingContent() {
       Object.entries(loadDetails).map(([key, value]) => [key, value === '' ? undefined : Number(value)])
     ) as { units?: number; lectureContactHours?: number; labContactHours?: number; classSize?: number };
     if (Object.values(numericLoadDetails).some((value) => value !== undefined && (!Number.isFinite(value) || value < 0))) {
-      setAssignmentError('Units, contact hours, and class size must be zero or greater.');
+      setAssignmentError('Values cannot be negative.');
       return;
     }
 
@@ -404,7 +404,7 @@ function ScheduleLoadingContent() {
     try {
       const matchingRoom = meta.rooms.find((room) => room.name.trim().toLowerCase() === roomName.trim().toLowerCase());
       if (!matchingRoom) {
-        throw new Error(`Room "${roomName.trim()}" was not found. Enter an existing room name.`);
+        throw new Error('Room not found.');
       }
 
       const existingSubject = meta.subjects.find(
@@ -413,7 +413,7 @@ function ScheduleLoadingContent() {
       const subjectId = existingSubject?.id ?? (await scheduleService.createSubject({ code: subjectCode.trim(), name: subjectName.trim() })).data?.id;
 
       if (!subjectId) {
-        throw new Error('Unable to resolve the subject. Please try again.');
+        throw new Error('Subject not found.');
       }
 
       const result = await scheduleService.createSchedule({
@@ -429,7 +429,7 @@ function ScheduleLoadingContent() {
 
       if (!result.success) {
         setConflictResult(result.conflict);
-        toast({ title: 'Schedule Conflict', description: 'Unable to create schedule due to conflicts.', type: 'warning' });
+        toast({ title: 'Schedule Conflict', description: 'This schedule conflicts with another.', type: 'warning' });
         return;
       }
 
@@ -443,7 +443,7 @@ function ScheduleLoadingContent() {
       await loadData(user);
       toast({ title: 'Done', description: 'Schedule created.', type: 'success' });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to create the schedule. Please review the selected values and try again.';
+      const message = error instanceof Error ? error.message : 'Could not create schedule.';
       setAssignmentError(message);
       toast({ title: 'Create Failed', description: message, type: 'error' });
     } finally {
@@ -461,7 +461,7 @@ function ScheduleLoadingContent() {
       await loadData(user);
       toast({ title: 'Done', description: `Schedule ${action}d.`, type: 'success' });
     } catch (error) {
-      toast({ title: 'Action Failed', description: error instanceof Error ? error.message : 'Failed to process approval decision', type: 'error' });
+      toast({ title: 'Action Failed', description: error instanceof Error ? error.message : 'Could not process the decision.', type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -498,12 +498,12 @@ function ScheduleLoadingContent() {
     if (!user || !editSchedule) return;
 
     if (!editSchedule.facultyId || !editSchedule.subjectCode.trim() || !editSchedule.subjectName.trim() || !editSchedule.roomName.trim() || !editSchedule.day || !editSchedule.startTime || !editSchedule.endTime) {
-      setEditError('Choose a faculty member, subject, room, day, start time, and end time before saving.');
+      setEditError('Complete all schedule fields.');
       return;
     }
 
     if (editSchedule.startTime >= editSchedule.endTime) {
-      setEditError('End time must be later than the start time.');
+      setEditError('End time must be after start time.');
       return;
     }
 
@@ -519,10 +519,10 @@ function ScheduleLoadingContent() {
       })).data?.id;
       const matchingRoom = meta.rooms.find((room) => room.name.trim().toLowerCase() === editSchedule.roomName.trim().toLowerCase());
       if (!subjectId) {
-        throw new Error('Unable to resolve the subject. Please try again.');
+        throw new Error('Subject not found.');
       }
       if (!matchingRoom) {
-        throw new Error(`Room "${editSchedule.roomName.trim()}" was not found. Enter an existing room name.`);
+        throw new Error('Room not found.');
       }
 
       await scheduleService.updateSchedule(editSchedule.id, {
@@ -547,7 +547,7 @@ function ScheduleLoadingContent() {
       await loadData(user);
       toast({ title: 'Done', description: 'Schedule updated.', type: 'success' });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to update schedule.';
+      const message = error instanceof Error ? error.message : 'Could not update schedule.';
       setEditError(message);
       toast({ title: 'Update Failed', description: message, type: 'error' });
     } finally {
@@ -570,7 +570,7 @@ function ScheduleLoadingContent() {
       await loadData(user);
       toast({ title: 'Done', description: 'Schedule deleted.', type: 'success' });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to delete schedule.';
+      const message = error instanceof Error ? error.message : 'Could not delete schedule.';
       toast({ title: 'Delete Failed', description: message, type: 'error' });
     } finally {
       setSaving(false);

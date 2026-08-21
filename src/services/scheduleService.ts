@@ -82,7 +82,7 @@ export const scheduleService = {
 
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(text || 'Failed to fetch scheduling metadata');
+      throw new Error(text || 'Could not load scheduling data.');
     }
 
     return res.json();
@@ -105,7 +105,7 @@ export const scheduleService = {
 
     if (!res.ok) {
       const { error } = await res.json();
-      throw new Error(error ?? 'Failed to create schedule');
+      throw new Error(error ?? 'Could not create schedule.');
     }
 
     const data = await res.json();
@@ -121,7 +121,7 @@ export const scheduleService = {
 
     if (!res.ok) {
       const { error } = await res.json();
-      throw new Error(error ?? 'Failed to update schedule');
+      throw new Error(error ?? 'Could not update schedule.');
     }
 
     return res.json();
@@ -136,7 +136,7 @@ export const scheduleService = {
 
     if (!res.ok) {
       const { error } = await res.json();
-      throw new Error(error ?? 'Failed to delete schedule');
+      throw new Error(error ?? 'Could not delete schedule.');
     }
 
     return res.json();
@@ -147,7 +147,7 @@ export const scheduleService = {
 
     if (!res.ok) {
       const { error } = await res.json();
-      throw new Error(error ?? 'Failed to fetch faculty availability');
+      throw new Error(error ?? 'Could not load availability.');
     }
 
     const { data } = await res.json();
@@ -163,7 +163,7 @@ export const scheduleService = {
 
     if (!res.ok) {
       const { error } = await res.json();
-      throw new Error(error ?? 'Failed to save faculty availability');
+      throw new Error(error ?? 'Could not save availability.');
     }
 
     return res.json();
@@ -174,7 +174,7 @@ export const scheduleService = {
 
     if (!res.ok) {
       const { error } = await res.json();
-      throw new Error(error ?? 'Failed to fetch pending approvals');
+      throw new Error(error ?? 'Could not load approvals.');
     }
 
     const { data } = await res.json();
@@ -197,7 +197,7 @@ export const scheduleService = {
 
     if (!res.ok) {
       const { error } = await res.json();
-      throw new Error(error ?? 'Failed to process approval decision');
+      throw new Error(error ?? 'Could not process approval.');
     }
 
     return res.json();
@@ -212,7 +212,7 @@ export const scheduleService = {
 
     if (!res.ok) {
       const { error } = await res.json();
-      throw new Error(error ?? 'Failed to create subject');
+      throw new Error(error ?? 'Could not create subject.');
     }
 
     return res.json();
@@ -227,7 +227,7 @@ export const scheduleService = {
 
     if (!res.ok) {
       const { error } = await res.json();
-      throw new Error(error ?? 'Failed to update subject');
+      throw new Error(error ?? 'Could not update subject.');
     }
 
     return res.json();
@@ -238,7 +238,7 @@ export const scheduleService = {
 
     if (!res.ok) {
       const { error } = await res.json();
-      throw new Error(error ?? 'Failed to delete subject');
+      throw new Error(error ?? 'Could not delete subject.');
     }
 
     return res.json();
@@ -253,7 +253,7 @@ export const scheduleService = {
 
     if (!res.ok) {
       const { error } = await res.json();
-      throw new Error(error ?? 'Failed to create room');
+      throw new Error(error ?? 'Could not create room.');
     }
 
     return res.json();
@@ -268,7 +268,7 @@ export const scheduleService = {
 
     if (!res.ok) {
       const { error } = await res.json();
-      throw new Error(error ?? 'Failed to update room');
+      throw new Error(error ?? 'Could not update room.');
     }
 
     return res.json();
@@ -279,7 +279,7 @@ export const scheduleService = {
 
     if (!res.ok) {
       const { error } = await res.json();
-      throw new Error(error ?? 'Failed to delete room');
+      throw new Error(error ?? 'Could not delete room.');
     }
 
     return res.json();
@@ -294,7 +294,7 @@ export const scheduleService = {
 
     if (!res.ok) {
       const { error } = await res.json();
-      throw new Error(error ?? 'Failed to create section');
+      throw new Error(error ?? 'Could not create section.');
     }
 
     return res.json();
@@ -309,7 +309,7 @@ export const scheduleService = {
 
     if (!res.ok) {
       const { error } = await res.json();
-      throw new Error(error ?? 'Failed to update section');
+      throw new Error(error ?? 'Could not update section.');
     }
 
     return res.json();
@@ -320,7 +320,7 @@ export const scheduleService = {
 
     if (!res.ok) {
       const { error } = await res.json();
-      throw new Error(error ?? 'Failed to delete section');
+      throw new Error(error ?? 'Could not delete section.');
     }
 
     return res.json();

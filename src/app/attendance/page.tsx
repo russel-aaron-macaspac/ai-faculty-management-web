@@ -79,9 +79,9 @@ function buildScanValidationSummary(scan: {
 
   if (scan.status === 'not_registered') {
     return {
-      title: 'Validation unavailable: unregistered card',
+      title: 'Card not registered',
       tone: 'slate',
-      details: [reason || 'Card is not linked to an active user account.'],
+      details: [reason || 'This card is not linked to an active account.'],
     };
   }
 
@@ -91,13 +91,13 @@ function buildScanValidationSummary(scan: {
     const scheduleWindow = `${toScheduleTimeLabel(analysis?.schedule?.startTime)} - ${toScheduleTimeLabel(analysis?.schedule?.endTime)}`;
 
     return {
-      title: 'Room validation failed',
+      title: 'Wrong room',
       tone: 'rose',
       details: [
-        analysis?.message || reason || 'Scanned device room does not match scheduled room.',
+        analysis?.message || reason || 'The scanned room does not match the schedule.',
         `Expected room: ${expectedRoom} | Device room: ${analysis?.deviceRoom || 'Unknown'}`,
-        `Scheduled time window: ${scheduleWindow}`,
-        analysis?.recommendation || 'Proceed to your assigned room and rescan.',
+        `Scheduled: ${scheduleWindow}`,
+        analysis?.recommendation || 'Go to the assigned room and scan again.',
       ],
     };
   }
@@ -107,19 +107,19 @@ function buildScanValidationSummary(scan: {
       title: 'No schedule detected',
       tone: 'amber',
       details: [
-        analysis?.message || reason || 'No schedule found for this user at scan time.',
-        analysis?.recommendation || 'Verify schedule assignment before finalizing this attendance.',
+        analysis?.message || reason || 'No schedule was found for this scan.',
+        analysis?.recommendation || 'Check your schedule before scanning again.',
       ],
     };
   }
 
   if (status === 'unauthorized_access' || status === 'outside_schedule') {
     return {
-      title: 'Schedule validation warning',
+      title: 'Schedule warning',
       tone: 'amber',
       details: [
-        analysis?.message || reason || 'Scan has schedule constraints to review.',
-        analysis?.recommendation || 'Review schedule assignment before finalizing this attendance.',
+        analysis?.message || reason || 'This scan is outside the schedule.',
+        analysis?.recommendation || 'Check your schedule before scanning again.',
       ],
     };
   }
@@ -128,7 +128,7 @@ function buildScanValidationSummary(scan: {
     return {
       title: 'Scan failed',
       tone: 'rose',
-      details: [reason || analysis?.message || 'Scan could not be validated.'],
+      details: [reason || analysis?.message || 'The scan could not be verified.'],
     };
   }
 

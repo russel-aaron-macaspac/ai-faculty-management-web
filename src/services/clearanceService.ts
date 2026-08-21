@@ -71,7 +71,7 @@ export const clearanceService = {
   async getFileUrl(path: string): Promise<string> {
     const res = await fetch(`/api/clearances/file?path=${encodeURIComponent(path)}`);
     const json = await res.json();
-    if (!res.ok) throw new Error(json.error ?? 'Failed to get file URL');
+    if (!res.ok) throw new Error(json.error ?? 'Could not get file.');
     return json.url;
   },
 
@@ -80,7 +80,7 @@ export const clearanceService = {
     if (!res.ok) {
       const text = await res.text();
       const json = text ? JSON.parse(text) : {};
-      throw new Error(json.error ?? 'Failed to delete document');
+      throw new Error(json.error ?? 'Could not delete document.');
     }
     return res.json();
   },
@@ -98,7 +98,7 @@ export const clearanceService = {
     });
     if (!res.ok) {
       const { error } = await res.json();
-      throw new Error(error ?? 'Failed to update clearance status');
+      throw new Error(error ?? 'Could not update clearance.');
     }
     return res.json();
   },
@@ -111,7 +111,7 @@ export const clearanceService = {
     });
     if (!res.ok) {
       const { error } = await res.json();
-      throw new Error(error ?? 'Failed to approve clearance');
+      throw new Error(error ?? 'Could not approve clearance.');
     }
     return res.json();
   },
@@ -124,7 +124,7 @@ export const clearanceService = {
     });
     if (!res.ok) {
       const { error } = await res.json();
-      throw new Error(error ?? 'Failed to reject clearance');
+      throw new Error(error ?? 'Could not reject clearance.');
     }
     return res.json();
   },
@@ -137,7 +137,7 @@ export const clearanceService = {
     });
     if (!res.ok) {
       const { error } = await res.json();
-      throw new Error(error ?? 'Failed to add note');
+      throw new Error(error ?? 'Could not add note.');
     }
     return res.json();
   },

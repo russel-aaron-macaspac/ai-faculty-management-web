@@ -48,7 +48,7 @@ export const facultyService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fullName: data.fullName, email: data.email, department: data.department, phone: data.phone, status: data.status, statusOfAppointment: data.statusOfAppointment }),
       });
-      if (!res.ok) throw new Error('Failed to create faculty');
+      if (!res.ok) throw new Error('Could not create faculty.');
       const payload = await res.json();
       const created = payload?.data || null;
 
@@ -84,7 +84,7 @@ export const facultyService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fullName: data.fullName, email: data.email, department: data.department, phone: data.phone, status: data.status, statusOfAppointment: data.statusOfAppointment }),
       });
-      if (!res.ok) throw new Error('Failed to update faculty');
+      if (!res.ok) throw new Error('Could not update faculty.');
       const payload = await res.json();
       const updated = payload?.data || null;
 
@@ -114,7 +114,7 @@ export const facultyService = {
   deleteFaculty: async (id: string): Promise<void> => {
     try {
       const res = await fetch(`/api/users/faculty/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed to delete faculty');
+      if (!res.ok) throw new Error('Could not delete faculty.');
       // soft-delete on server; remove from local mock as well
       mockFacultyData = mockFacultyData.filter(f => f.id !== id);
     } catch (err) {

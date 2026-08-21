@@ -134,7 +134,7 @@ function ScheduleApprovalsContent() {
         type: 'success',
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : `Unable to update schedule approval by ${approvalLabel}.`;
+      const message = error instanceof Error ? error.message : 'Could not update approval.';
       toast({ title: 'Approval Failed', description: message, type: 'error' });
     } finally {
       setSaving(false);
@@ -162,7 +162,7 @@ function ScheduleApprovalsContent() {
 
       const failures = results.filter((result) => result.status === 'rejected');
       if (failures.length > 0) {
-        throw new Error(`${failures.length} schedule${failures.length === 1 ? '' : 's'} could not be processed.`);
+        throw new Error('Some schedules could not be processed.');
       }
 
       await loadSchedules();
@@ -175,7 +175,7 @@ function ScheduleApprovalsContent() {
         type: 'success',
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : `Unable to update faculty schedule group by ${approvalLabel}.`;
+      const message = error instanceof Error ? error.message : 'Could not update approvals.';
       toast({ title: 'Approval Failed', description: message, type: 'error' });
     } finally {
       setSaving(false);

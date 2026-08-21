@@ -112,7 +112,7 @@ export default function ProfilePage() {
                             body: JSON.stringify({ id: user.id, phone: phoneInput, address: addressInput }),
                           });
                           const json = await res.json();
-                          if (!res.ok) throw new Error(json?.error || 'Failed to update');
+                          if (!res.ok) throw new Error(json?.error || 'Could not update profile.');
 
                           // Update localStorage and state
                           const updatedUser = { ...(user as any), phone: phoneInput, address: addressInput } as User & { phone?: string; address?: string };
@@ -121,7 +121,7 @@ export default function ProfilePage() {
                           toast({ title: 'Saved', description: 'Profile updated.', type: 'success' });
                           setIsEditOpen(false);
                         } catch (err) {
-                          const msg = err instanceof Error ? err.message : 'Failed to save';
+                          const msg = err instanceof Error ? err.message : 'Could not save profile.';
                           toast({ title: 'Save Failed', description: msg, type: 'error' });
                         } finally {
                           setSaving(false);

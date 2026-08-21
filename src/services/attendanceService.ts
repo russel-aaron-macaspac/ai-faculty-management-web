@@ -81,7 +81,7 @@ export const attendanceService = {
       });
 
       if (!response.ok) {
-        throw new Error(`Attendance API failed with status ${response.status}`);
+        throw new Error('Could not load attendance.');
       }
 
       const payload = await response.json();

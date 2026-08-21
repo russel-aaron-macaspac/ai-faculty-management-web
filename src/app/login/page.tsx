@@ -26,11 +26,11 @@ const loginSchema = z.object({
   email: z
     .string()
     .trim()
-    .min(1, { message: 'Email address is required.' })
+    .min(1, { message: 'Email is required.' })
     .refine((value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value), {
       message: 'Enter a valid school email address.',
     }),
-  password: z.string().min(1, { message: 'Password is required.' }).min(6, { message: 'Password must be at least 6 characters long.' }),
+  password: z.string().min(1, { message: 'Password is required.' }).min(6, { message: 'Password must be at least 6 characters.' }),
 });
 
 export default function LoginPage() {
@@ -67,12 +67,12 @@ export default function LoginPage() {
       router.push(getDashboardPathForRole(response.user.role));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '';
-      let nextError = 'Unable to sign in right now. Please try again.';
+      let nextError = 'Sign-in failed. Please try again.';
 
       if (message) {
         nextError = /invalid|credential|password|email/i.test(message)
-          ? 'Incorrect email or password. Check your credentials and try again.'
-          : message;
+          ? 'Incorrect email or password.'
+          : 'Sign-in failed. Please try again.';
       }
 
   setError(nextError);

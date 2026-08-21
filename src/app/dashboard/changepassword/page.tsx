@@ -21,15 +21,15 @@ import { toast } from '@/lib/toast';
 const changePasswordSchema = z
   .object({
     oldPassword: z.string().min(1, 'Current password is required.'),
-    newPassword: z.string().min(8, 'New password must be at least 8 characters.'),
-    confirmPassword: z.string().min(1, 'Please confirm your new password.'),
+    newPassword: z.string().min(8, 'Use at least 8 characters.'),
+    confirmPassword: z.string().min(1, 'Confirm your new password.'),
   })
   .refine((data) => data.newPassword === data.confirmPassword, {
     message: 'Passwords do not match.',
     path: ['confirmPassword'],
   })
   .refine((data) => data.oldPassword !== data.newPassword, {
-    message: 'New password must be different from the current password.',
+    message: 'Use a different password.',
     path: ['newPassword'],
   });
 
@@ -92,7 +92,7 @@ export default function ChangePasswordPage() {
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        const msg = (data && (data.error || data.message)) || 'Something went wrong.';
+        const msg = (data && (data.error || data.message)) || 'Update failed.';
         toast({ title: 'Update Failed', description: msg, type: 'error' });
         return;
       }
@@ -100,7 +100,7 @@ export default function ChangePasswordPage() {
       toast({ title: 'Password Updated', description: 'Password updated successfully.', type: 'success' });
       form.reset();
     } catch {
-      toast({ title: 'Network Error', description: 'Please try again.', type: 'error' });
+      toast({ title: 'Connection Error', description: 'Try again.', type: 'error' });
     } finally {
       setIsLoading(false);
     }
