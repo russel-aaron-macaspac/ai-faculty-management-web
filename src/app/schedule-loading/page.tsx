@@ -8,13 +8,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertTriangle, CheckCircle2, Loader2, XCircle, ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react';
+import { CheckCircle2, Loader2, XCircle, ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
 import { useRouter } from 'next/navigation';
 import { Schedule } from '@/types/schedule';
 import { formatTimeToTwelveHour } from '@/lib/timeUtils';
 import { isFacultyLikeRole } from '@/lib/roleConfig';
 import { toast } from '@/lib/toast';
+import { FacultyLoadGrid } from '@/components/Facultyloadgrid';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const APPROVAL_ROLES = new Set(['dean', 'ovpaa', 'registrar', 'hro']);
@@ -106,35 +107,12 @@ function ScheduleLoadingContent() {
   const [user, setUser] = useState<LocalUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [assignmentError, setAssignmentError] = useState('');
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<Schedule[]>([]);
   const [meta, setMeta] = useState<SchedulingMeta>({ faculties: [], subjects: [], rooms: [], sections: [] });
   const [selectedFacultyId, setSelectedFacultyId] = useState('');
   const [selectedFacultyLoading, setSelectedFacultyLoading] = useState(false);
   const [selectedFacultyAvailability, setSelectedFacultyAvailability] = useState<Array<{ day: string; startTime: string; endTime: string }>>([]);
-  const [conflictResult, setConflictResult] = useState<null | {
-    conflict_type: 'faculty' | 'room' | 'availability';
-    conflicts: Array<{ conflict_type: string; details: unknown[] }>;
-    suggestions: {
-      suggested_rooms: Array<{ id: string; name: string; capacity: number }>;
-      suggested_time_slots: Array<{ day: string; start_time: string; end_time: string }>;
-    };
-  }>(null);
-  const [assignment, setAssignment] = useState({
-    facultyId: '',
-    section: '',
-    subjectId: '',
-    roomId: '',
-    day: 'Monday',
-    startTime: '',
-    endTime: '',
-  });
-  const [subjectCode, setSubjectCode] = useState('');
-  const [subjectName, setSubjectName] = useState('');
-  const [roomName, setRoomName] = useState('');
-  const [loadType, setLoadType] = useState<'regular' | 'overload'>('regular');
-  const [loadDetails, setLoadDetails] = useState({ units: '', lectureContactHours: '', labContactHours: '', classSize: '' });
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editSchedule, setEditSchedule] = useState<EditScheduleFormState | null>(null);
   const [editError, setEditError] = useState('');
@@ -196,7 +174,6 @@ function ScheduleLoadingContent() {
     const nextSelectedFacultyId = meta.faculties.find((faculty) => faculty.id === selectedFacultyId)?.id || meta.faculties[0]?.id || '';
     if (nextSelectedFacultyId && nextSelectedFacultyId !== selectedFacultyId) {
       setSelectedFacultyId(nextSelectedFacultyId);
-      setAssignment((prev) => ({ ...prev, facultyId: nextSelectedFacultyId }));
     }
   }, [meta.faculties, selectedFacultyId]);
 
@@ -211,7 +188,6 @@ function ScheduleLoadingContent() {
         if (cancelled) return;
 
         setSelectedFacultyAvailability(entries.map((entry) => ({ day: entry.day, startTime: entry.startTime, endTime: entry.endTime })));
-        setAssignment((prev) => ({ ...prev, facultyId: selectedFacultyId }));
       } catch {
         if (!cancelled) setSelectedFacultyAvailability([]);
       } finally {
@@ -378,79 +354,6 @@ function ScheduleLoadingContent() {
   }
   const selectedFacultyName = meta.faculties.find((faculty) => faculty.id === selectedFacultyId)?.name ?? 'Select a faculty member';
 
-  const handleCreateSchedule = async () => {
-    if (!user) return;
-
-    if (!assignment.facultyId || !subjectCode.trim() || !subjectName.trim() || !assignment.section.trim() || !roomName.trim() || !assignment.startTime || !assignment.endTime) {
-      setAssignmentError('Complete all schedule fields.');
-      return;
-    }
-
-    if (assignment.startTime >= assignment.endTime) {
-      setAssignmentError('End time must be after start time.');
-      return;
-    }
-
-    const numericLoadDetails = Object.fromEntries(
-      Object.entries(loadDetails).map(([key, value]) => [key, value === '' ? undefined : Number(value)])
-    ) as { units?: number; lectureContactHours?: number; labContactHours?: number; classSize?: number };
-    if (Object.values(numericLoadDetails).some((value) => value !== undefined && (!Number.isFinite(value) || value < 0))) {
-      setAssignmentError('Values cannot be negative.');
-      return;
-    }
-
-    setAssignmentError('');
-    setSaving(true);
-    try {
-      const matchingRoom = meta.rooms.find((room) => room.name.trim().toLowerCase() === roomName.trim().toLowerCase());
-      if (!matchingRoom) {
-        throw new Error('Room not found.');
-      }
-
-      const existingSubject = meta.subjects.find(
-        (subject) => subject.code.toLowerCase() === subjectCode.trim().toLowerCase() && subject.name.toLowerCase() === subjectName.trim().toLowerCase()
-      );
-      const subjectId = existingSubject?.id ?? (await scheduleService.createSubject({ code: subjectCode.trim(), name: subjectName.trim() })).data?.id;
-
-      if (!subjectId) {
-        throw new Error('Subject not found.');
-      }
-
-      const result = await scheduleService.createSchedule({
-        ...assignment,
-        subjectId,
-        roomId: matchingRoom.id,
-        section: assignment.section.trim(),
-        ...numericLoadDetails,
-        loadType,
-        createdBy: currentUserName || user.role,
-        creatorRole: user.role,
-      });
-
-      if (!result.success) {
-        setConflictResult(result.conflict);
-        toast({ title: 'Schedule Conflict', description: 'This schedule conflicts with another.', type: 'warning' });
-        return;
-      }
-
-      setConflictResult(null);
-      setAssignment({ facultyId: '', section: '', subjectId: '', roomId: '', day: 'Monday', startTime: '', endTime: '' });
-      setSubjectCode('');
-      setSubjectName('');
-      setRoomName('');
-      setLoadDetails({ units: '', lectureContactHours: '', labContactHours: '', classSize: '' });
-      setLoadType('regular');
-      await loadData(user);
-      toast({ title: 'Done', description: 'Schedule created.', type: 'success' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not create schedule.';
-      setAssignmentError(message);
-      toast({ title: 'Create Failed', description: message, type: 'error' });
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleApprovalDecision = async (scheduleId: string, action: 'approve' | 'reject') => {
     if (!user) return;
     const remarks = action === 'reject' ? prompt('Please provide rejection remarks:', '') || '' : '';
@@ -600,10 +503,7 @@ function ScheduleLoadingContent() {
                     <button
                       key={faculty.id}
                       type="button"
-                      onClick={() => {
-                        setSelectedFacultyId(faculty.id);
-                        setAssignment((prev) => ({ ...prev, facultyId: faculty.id }));
-                      }}
+                      onClick={() => setSelectedFacultyId(faculty.id)}
                       className={`w-full rounded-lg border px-3 py-3 text-left transition-colors ${
                         isSelected ? 'border-red-300 bg-red-50 text-red-900' : 'border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50'
                       }`}
@@ -618,151 +518,15 @@ function ScheduleLoadingContent() {
           </Card>
 
           <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Program Chair Scheduling</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 sm:col-span-2 xl:col-span-4">
-                    <div className="text-xs uppercase tracking-wide text-slate-500">Selected Faculty</div>
-                    <div className="text-sm font-medium text-slate-900">{selectedFacultyName}</div>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium text-slate-700">Subject code</div>
-                    <Input
-                      className="h-10"
-                      placeholder="e.g. CS101"
-                      value={subjectCode}
-                      onChange={(event) => setSubjectCode(event.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium text-slate-700">Subject name</div>
-                    <Input
-                      className="h-10"
-                      placeholder="Subject name"
-                      value={subjectName}
-                      onChange={(event) => setSubjectName(event.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium text-slate-700">Room</div>
-                    <Input
-                      className="h-10"
-                      placeholder="e.g. ComLab 1"
-                      value={roomName}
-                      onChange={(event) => setRoomName(event.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium text-slate-700">Section</div>
-                    <Input
-                      className="h-10"
-                      placeholder="e.g. 1A"
-                      value={assignment.section}
-                      onChange={(event) => setAssignment((prev) => ({ ...prev, section: event.target.value }))}
-                    />
-                  </div>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium text-slate-700">Day</div>
-                    <Select value={assignment.day} onValueChange={(value) => setAssignment((prev) => ({ ...prev, day: value || 'Monday' }))}>
-                      <SelectTrigger className="h-10">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {DAYS.map((day) => (
-                          <SelectItem key={day} value={day}>
-                            {day}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium text-slate-700">Start Time</div>
-                    <Input className="h-10" type="time" value={assignment.startTime} onChange={(event) => setAssignment((prev) => ({ ...prev, startTime: event.target.value }))} />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium text-slate-700">End Time</div>
-                    <Input className="h-10" type="time" value={assignment.endTime} onChange={(event) => setAssignment((prev) => ({ ...prev, endTime: event.target.value }))} />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium text-slate-700">Load Type</div>
-                    <Select value={loadType} onValueChange={(value) => setLoadType(value as 'regular' | 'overload')}>
-                      <SelectTrigger className="h-10">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="regular">Regular Load</SelectItem>
-                        <SelectItem value="overload">Overload</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                  {[
-                    ['units', 'Units'],
-                    ['lectureContactHours', 'Contact Hrs. Lec'],
-                    ['labContactHours', 'Contact Hrs. Lab'],
-                    ['classSize', 'Class Size'],
-                  ].map(([field, label]) => (
-                    <div key={field} className="space-y-1">
-                      <div className="text-sm font-medium text-slate-700">{label}</div>
-                      <Input
-                        className="h-10"
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        value={loadDetails[field as keyof typeof loadDetails]}
-                        onChange={(event) => setLoadDetails((current) => ({ ...current, [field]: event.target.value.replace(/\D/g, '') }))}
-                      />
-                    </div>
-                  ))}
-                </div>
-                <Button onClick={handleCreateSchedule} disabled={saving}>
-                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Create Schedule
-                </Button>
-                {assignmentError && <p className="text-sm text-rose-600">{assignmentError}</p>}
-                {conflictResult && (
-                  <div className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-4">
-                    <div className="flex items-center gap-2 font-medium text-amber-900">
-                      <AlertTriangle className="h-4 w-4" />
-                      Conflict detected: {conflictResult.conflict_type}
-                    </div>
-                    <div className="text-sm text-amber-800">Found {conflictResult.conflicts.length} conflict group(s). Adjust room/time before retrying.</div>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div>
-                        <h3 className="text-sm font-semibold text-slate-800">Suggested Rooms</h3>
-                        <ul className="list-disc pl-5 text-sm text-slate-700">
-                          {conflictResult.suggestions.suggested_rooms.length === 0 ? (
-                            <li>No available room suggestions for this time slot.</li>
-                          ) : (
-                            conflictResult.suggestions.suggested_rooms.map((room) => <li key={room.id}>{room.name} (cap {room.capacity})</li>)
-                          )}
-                        </ul>
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-semibold text-slate-800">Suggested Time Slots</h3>
-                        <ul className="list-disc pl-5 text-sm text-slate-700">
-                          {conflictResult.suggestions.suggested_time_slots.length === 0 ? (
-                            <li>No available time suggestions within faculty availability.</li>
-                          ) : (
-                            conflictResult.suggestions.suggested_time_slots.map((slot, index) => (
-                              <li key={`${slot.day}-${slot.start_time}-${index}`}>
-                                {slot.day}: {formatTimeToTwelveHour(slot.start_time)} - {formatTimeToTwelveHour(slot.end_time)}
-                              </li>
-                            ))
-                          )}
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <FacultyLoadGrid
+              facultyId={selectedFacultyId}
+              facultyName={selectedFacultyName}
+              rooms={meta.rooms}
+              subjects={meta.subjects}
+              createdBy={currentUserName || user?.role || ''}
+              creatorRole={user?.role || ''}
+              onSaved={() => loadData(user)}
+            />
 
             <Card>
               <CardHeader>
