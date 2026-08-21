@@ -16,6 +16,9 @@ const accountSchema = z.object({
   fullName: z.string().trim().min(2, 'Enter the faculty member’s full name.'),
   email: z.string().trim().email('Enter a valid email address.'),
   password: z.string().min(12, 'Use at least 12 characters.').regex(/[A-Za-z]/, 'Include at least one letter.').regex(/\d/, 'Include at least one number.'),
+  phone: z.string().trim().min(1, 'Enter a contact number.'),
+  status: z.enum(['active', 'on_leave', 'inactive'], { message: 'Select an account status.' }),
+  statusOfAppointment: z.enum(['full-time', 'part-time'], { message: 'Select a status of appointment.' }),
   role: z.enum(['faculty', 'program_chair'], { message: 'Select a faculty role.' }),
 });
 
@@ -35,7 +38,7 @@ function AccountCreationContent() {
   const [createdAccount, setCreatedAccount] = useState<{ name: string; email: string; role: string } | null>(null);
   const form = useForm<AccountFormValues>({
     resolver: zodResolver(accountSchema),
-    defaultValues: { fullName: '', email: '', password: '', role: 'faculty' },
+    defaultValues: { fullName: '', email: '', password: '', phone: '', status: 'active', statusOfAppointment: 'full-time', role: 'faculty' },
   });
 
   const onSubmit = async (values: AccountFormValues) => {
@@ -52,7 +55,7 @@ function AccountCreationContent() {
       if (!response.ok) throw new Error(payload?.error || 'Unable to create the account.');
 
       setCreatedAccount({ name: payload.data.name, email: payload.data.email, role: payload.data.role });
-      form.reset({ fullName: '', email: '', password: '', role: 'faculty' });
+      form.reset({ fullName: '', email: '', password: '', phone: '', status: 'active', statusOfAppointment: 'full-time', role: 'faculty' });
       toast({ title: 'Account created', description: `${payload.data.name} can now sign in.`, type: 'success' });
     } catch (error) {
       toast({ title: 'Account creation failed', description: error instanceof Error ? error.message : 'Please try again.', type: 'error' });
@@ -100,6 +103,32 @@ function AccountCreationContent() {
             </div>
             <p className="text-xs text-slate-500">Use at least 12 characters, including a letter and a number.</p>
             {form.formState.errors.password && <p className="text-sm text-red-600">{form.formState.errors.password.message}</p>}
+          </div>
+
+          <div className="space-y-2">
+              <Label htmlFor="phone">Phone</Label>
+              <Input id="phone" type="tel" autoComplete="tel" placeholder="e.g. 09171234567" {...form.register('phone')} aria-invalid={!!form.formState.errors.phone} />
+              {form.formState.errors.phone && <p className="text-sm text-red-600">{form.formState.errors.phone.message}</p>}
+          </div>
+
+          <div className="grid gap-5 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="status">Status</Label>
+              <Select value={form.watch('status')} onValueChange={(value) => form.setValue('status', value as AccountFormValues['status'], { shouldValidate: true })}>
+                <SelectTrigger id="status" aria-invalid={!!form.formState.errors.status}><SelectValue placeholder="Select a status" /></SelectTrigger>
+                <SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="on_leave">On leave</SelectItem><SelectItem value="inactive">Inactive</SelectItem></SelectContent>
+              </Select>
+              {form.formState.errors.status && <p className="text-sm text-red-600">{form.formState.errors.status.message}</p>}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="statusOfAppointment">Status of Appointment</Label>
+              <Select value={form.watch('statusOfAppointment')} onValueChange={(value) => form.setValue('statusOfAppointment', value as AccountFormValues['statusOfAppointment'], { shouldValidate: true })}>
+                <SelectTrigger id="statusOfAppointment" aria-invalid={!!form.formState.errors.statusOfAppointment}><SelectValue placeholder="Select appointment status" /></SelectTrigger>
+                <SelectContent><SelectItem value="full-time">Full-time</SelectItem><SelectItem value="part-time">Part-time</SelectItem></SelectContent>
+              </Select>
+              {form.formState.errors.statusOfAppointment && <p className="text-sm text-red-600">{form.formState.errors.statusOfAppointment.message}</p>}
+            </div>
           </div>
 
           <div className="space-y-2">

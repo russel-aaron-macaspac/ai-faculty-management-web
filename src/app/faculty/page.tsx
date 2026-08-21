@@ -224,9 +224,7 @@ export default function FacultyPage() {
           <EmptyState
             icon={Users}
             title="No faculty members found"
-            description="Try a different search term or create a new record to start building the roster."
-            actionLabel="Add Faculty"
-            onAction={() => setIsAddOpen(true)}
+            description="Try a different search term or ask an administrator to create a faculty account."
           />
         </TableCell>
       </TableRow>
@@ -270,12 +268,9 @@ export default function FacultyPage() {
         </div>
 
         <Dialog open={isAddOpen} onOpenChange={openChange}>
-          <Button onClick={() => setIsAddOpen(true)} className="self-start lg:self-auto">
-            Add Faculty
-          </Button>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle>{editingId ? 'Edit Faculty' : 'Add New Faculty'}</DialogTitle>
+              <DialogTitle>Edit Faculty</DialogTitle>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">

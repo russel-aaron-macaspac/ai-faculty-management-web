@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
 
 const ALLOWED_ROLES = ['faculty', 'program_chair'];
+const ALLOWED_STATUSES = ['active', 'on_leave', 'inactive'];
+const ALLOWED_APPOINTMENT_STATUSES = ['full-time', 'part-time'];
 const PASSWORD_MIN_LENGTH = 12;
 
 function splitName(fullName) {
@@ -22,6 +24,9 @@ export async function POST(request) {
     const fullName = typeof body?.fullName === 'string' ? body.fullName.trim() : '';
     const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
     const password = typeof body?.password === 'string' ? body.password : '';
+    const phone = typeof body?.phone === 'string' ? body.phone.trim() : '';
+    const status = typeof body?.status === 'string' ? body.status : '';
+    const statusOfAppointment = typeof body?.statusOfAppointment === 'string' ? body.statusOfAppointment : '';
     const role = typeof body?.role === 'string' ? body.role : '';
 
     if (fullName.length < 2) {
@@ -42,6 +47,18 @@ export async function POST(request) {
 
     if (!ALLOWED_ROLES.includes(role)) {
       return NextResponse.json({ error: 'Select a valid faculty role.' }, { status: 400 });
+    }
+
+    if (!phone) {
+      return NextResponse.json({ error: 'Phone number is required.' }, { status: 400 });
+    }
+
+    if (!ALLOWED_STATUSES.includes(status)) {
+      return NextResponse.json({ error: 'Select a valid account status.' }, { status: 400 });
+    }
+
+    if (!ALLOWED_APPOINTMENT_STATUSES.includes(statusOfAppointment)) {
+      return NextResponse.json({ error: 'Select a valid status of appointment.' }, { status: 400 });
     }
 
     supabase = createSupabaseAdminClient();
@@ -90,7 +107,9 @@ export async function POST(request) {
         email,
         password_hash: passwordHash,
         role,
-        status: 'active',
+        phone_number: phone,
+        status,
+        status_of_appointment: statusOfAppointment,
       })
       .select('user_id, first_name, middle_name, last_name, email, role')
       .single();
