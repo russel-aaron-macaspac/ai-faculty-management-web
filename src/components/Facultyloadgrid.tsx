@@ -30,7 +30,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Trash2, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
 import { toast } from '@/lib/toast';
 
@@ -126,6 +126,7 @@ function isRowComplete(row: LoadRow): boolean {
 }
 
 const NUMERIC_FIELDS = ['units', 'lectureContactHours', 'labContactHours', 'classSize'] as const;
+const TEXT_INPUT_CLASS = 'h-9 focus:ring-2 focus:ring-blue-300';
 
 export function FacultyLoadGrid({
   facultyId,
@@ -316,17 +317,18 @@ export function FacultyLoadGrid({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="min-w-[100px]">Code</TableHead>
-            <TableHead className="min-w-[200px]">Description</TableHead>
+            <TableHead className="min-w-[130px]">Code</TableHead>
+            <TableHead className="min-w-[260px]">Description</TableHead>
             <TableHead className="min-w-[130px]">Day</TableHead>
             <TableHead className="min-w-[110px]">Start</TableHead>
             <TableHead className="min-w-[110px]">End</TableHead>
-            <TableHead className="min-w-[120px]">Section</TableHead>
-            <TableHead className="min-w-[140px]">Room</TableHead>
+            <TableHead className="min-w-[150px]">Section</TableHead>
+            <TableHead className="min-w-[160px]">Room</TableHead>
             <TableHead className="min-w-[70px]">Units</TableHead>
             <TableHead className="min-w-[70px]">Lec</TableHead>
             <TableHead className="min-w-[70px]">Lab</TableHead>
             <TableHead className="min-w-[90px]">Class Size</TableHead>
+            <TableHead className="min-w-[130px]">Status</TableHead>
             <TableHead className="text-right">&nbsp;</TableHead>
           </TableRow>
         </TableHeader>
@@ -335,17 +337,19 @@ export function FacultyLoadGrid({
             <TableRow key={row.localId}>
               <TableCell>
                 <Input
-                  className="h-9"
+                  className={TEXT_INPUT_CLASS}
                   value={row.code}
                   placeholder="e.g. IT201"
+                  title={row.code}
                   onChange={(e) => updateRow(loadType, row.localId, 'code', e.target.value)}
                 />
               </TableCell>
               <TableCell>
                 <Input
-                  className="h-9"
+                  className={TEXT_INPUT_CLASS}
                   value={row.description}
                   placeholder="Course title"
+                  title={row.description}
                   onChange={(e) => updateRow(loadType, row.localId, 'description', e.target.value)}
                 />
               </TableCell>
@@ -381,17 +385,19 @@ export function FacultyLoadGrid({
               </TableCell>
               <TableCell>
                 <Input
-                  className="h-9"
+                  className={TEXT_INPUT_CLASS}
                   value={row.section}
                   placeholder="e.g. BSIT2B"
+                  title={row.section}
                   onChange={(e) => updateRow(loadType, row.localId, 'section', e.target.value)}
                 />
               </TableCell>
               <TableCell>
                 <Input
-                  className="h-9"
+                  className={TEXT_INPUT_CLASS}
                   value={row.roomName}
                   placeholder="e.g. ComLab 1"
+                  title={row.roomName}
                   onChange={(e) => updateRow(loadType, row.localId, 'roomName', e.target.value)}
                 />
               </TableCell>
@@ -430,6 +436,9 @@ export function FacultyLoadGrid({
                   value={row.classSize}
                   onChange={(e) => updateRow(loadType, row.localId, 'classSize', e.target.value)}
                 />
+              </TableCell>
+              <TableCell>
+                <RowStatusBadge status={row.status} message={row.statusMessage} />
               </TableCell>
               <TableCell className="text-right">
                 <Button
@@ -490,4 +499,30 @@ export function FacultyLoadGrid({
       </CardContent>
     </Card>
   );
+}
+
+function RowStatusBadge({ status, message }: { status: RowStatus; message?: string }) {
+  if (status === 'saving') {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+        <Loader2 className="h-3 w-3 animate-spin" /> Saving
+      </span>
+    );
+  }
+  if (status === 'saved') {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+        <CheckCircle2 className="h-3 w-3" /> Saved
+      </span>
+    );
+  }
+  if (status === 'conflict' || status === 'error') {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-600" title={message}>
+        <AlertTriangle className="h-3 w-3 shrink-0" />
+        {message ?? (status === 'conflict' ? 'Conflict' : 'Error')}
+      </span>
+    );
+  }
+  return <span className="text-xs text-slate-400">—</span>;
 }

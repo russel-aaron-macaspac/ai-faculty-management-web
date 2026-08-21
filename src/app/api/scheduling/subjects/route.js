@@ -33,10 +33,14 @@ export async function POST(request) {
 
     const supabase = createSupabaseAdminClient();
 
+    // Reuse an existing subject only if BOTH code and name match exactly.
+    // A code alone matching is fine — the same code can be shared across
+    // multiple subjects (e.g. IT301 -> "Networking 2", IT301 -> "Networking 3").
     const { data: existingSubject, error: existingSubjectError } = await supabase
       .from("subjects")
       .select("id, code, name")
       .ilike("code", code)
+      .ilike("name", name)
       .maybeSingle();
 
     if (existingSubjectError) {
@@ -45,14 +49,7 @@ export async function POST(request) {
     }
 
     if (existingSubject) {
-      if (existingSubject.name.trim().toLowerCase() === name.toLowerCase()) {
-        return NextResponse.json({ message: "Subject already exists", data: existingSubject }, { status: 200 });
-      }
-
-      return NextResponse.json(
-        { error: `Subject code ${existingSubject.code} is already assigned to ${existingSubject.name}` },
-        { status: 409 }
-      );
+      return NextResponse.json({ message: "Subject already exists", data: existingSubject }, { status: 200 });
     }
 
     const { data, error } = await supabase
@@ -63,9 +60,6 @@ export async function POST(request) {
 
     if (error) {
       console.error("[SUBJECTS POST ERROR]", error);
-      if (error.code === "23505") {
-        return NextResponse.json({ error: "A subject with this code already exists" }, { status: 409 });
-      }
       return NextResponse.json({ error: "Failed to create subject" }, { status: 500 });
     }
 
