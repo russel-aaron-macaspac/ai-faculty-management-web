@@ -20,6 +20,11 @@ import { FacultyLoadGrid } from '@/components/Facultyloadgrid';
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const APPROVAL_ROLES = new Set(['dean', 'ovpaa', 'registrar', 'hro']);
 
+const getRoomDisplayName = (roomName?: string | null) => {
+  if (/\b(tbd|tba)\b/i.test(roomName || '')) return 'TBA';
+  return /\b(online|virtual|remote)\b/i.test(roomName || '') ? 'Online' : roomName || '-';
+};
+
 const getContactHours = (startTime: string, endTime: string) => {
   const [startHours, startMinutes] = startTime.split(':').map(Number);
   const [endHours, endMinutes] = endTime.split(':').map(Number);
@@ -271,7 +276,7 @@ function ScheduleLoadingContent() {
                 <TableCell>{formatTimeToTwelveHour(item.startTime)} - {formatTimeToTwelveHour(item.endTime)}</TableCell>
                 <TableCell>{item.day || '-'}</TableCell>
                 <TableCell>{item.section || '-'}</TableCell>
-                <TableCell>{item.room?.name || '-'}</TableCell>
+                <TableCell>{getRoomDisplayName(item.room?.name)}</TableCell>
                 <TableCell>{item.units ?? '-'}</TableCell>
                 <TableCell>{item.lectureContactHours ?? (classType === 'lec' ? contactHours : '-')}</TableCell>
                 <TableCell>{item.labContactHours ?? (classType === 'lab' ? contactHours : '-')}</TableCell>

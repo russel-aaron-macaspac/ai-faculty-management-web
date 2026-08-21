@@ -24,6 +24,12 @@ type DashboardAlert = {
   recommendation?: string;
 };
 
+const getRoomDisplayName = (roomName?: string | null) => {
+  if (/\btba\b|\btbd\b/i.test(roomName || '')) return 'TBA';
+  if (/\b(online|virtual|remote)\b/i.test(roomName || '')) return 'Online';
+  return roomName || 'TBD';
+};
+
 export default function FacultyDashboardPage() {
   return (
     <RouteGuard requiredRoles={['faculty', 'program_chair', 'admin']} fallbackPath="/login">
@@ -98,7 +104,7 @@ function FacultyDashboardContent() {
       classCount: ownClassesToday.length,
       totalHoursLabel,
       nextClassTime: nextClass ? formatTimeToTwelveHour(nextClass.startTime) : 'No more today',
-      nextClassRoom: nextClass?.room?.name || nextClass?.subjectOrRole || nextClass?.subject?.name || 'No upcoming class',
+      nextClassRoom: nextClass ? getRoomDisplayName(nextClass.room?.name) : 'No upcoming class',
       ownClassesToday,
     };
   }, [schedules, user]);
@@ -128,7 +134,7 @@ function FacultyDashboardContent() {
     // upcoming class reminder
     const nextClass = todayStats.ownClassesToday[0];
     if (nextClass) {
-      alerts.push({ id: 'upcoming-class', type: 'info', title: 'Upcoming Class Reminder', message: `${nextClass.subjectOrRole ?? nextClass.subject?.name} begins at ${formatTimeToTwelveHour(nextClass.startTime)} in ${nextClass.room?.name ?? 'TBD'}.` });
+      alerts.push({ id: 'upcoming-class', type: 'info', title: 'Upcoming Class Reminder', message: `${nextClass.subjectOrRole ?? nextClass.subject?.name} begins at ${formatTimeToTwelveHour(nextClass.startTime)} in ${getRoomDisplayName(nextClass.room?.name)}.` });
     }
 
     // attendance alert for late / anomaly
@@ -246,7 +252,7 @@ function FacultyDashboardContent() {
                           {formatTimeToTwelveHour(schedule.startTime)} - {formatTimeToTwelveHour(schedule.endTime)} {schedule.subjectOrRole ?? schedule.subject?.name}
                         </div>
                         <div className="text-xs text-slate-500">
-                          {schedule.room?.name ? `Room ${schedule.room.name}` : 'Location TBD'}
+                          {schedule.room?.name ? `Room ${getRoomDisplayName(schedule.room.name)}` : 'Location TBD'}
                         </div>
                       </div>
                       <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${status.color}`}>

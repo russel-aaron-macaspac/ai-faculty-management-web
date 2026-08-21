@@ -17,6 +17,24 @@ function normalizeHHMM(value) {
   return `${hours}:${minutes}`;
 }
 
+function isOnlineRoom(roomName) {
+  return /\b(online|virtual|remote|tbd|tba)\b/i.test(String(roomName || ""));
+}
+
+async function createVirtualRoom(supabase, { name, capacity }) {
+  const { data, error } = await supabase
+    .from("rooms")
+    .insert({
+      name: `${name} - ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      capacity: Math.max(Number(capacity) || 1, 1),
+    })
+    .select("id")
+    .single();
+
+  if (error) throw error;
+  return data.id;
+}
+
 async function fetchScheduleById(supabase, id) {
   const { data, error } = await supabase
     .from("schedules")
@@ -66,10 +84,24 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: "You can only edit schedules you created" }, { status: 403 });
     }
 
+    const { data: selectedRoom, error: roomError } = await supabase
+      .from("rooms")
+      .select("name")
+      .eq("id", roomId)
+      .maybeSingle();
+
+    if (roomError || !selectedRoom) {
+      return NextResponse.json({ error: "Room not found" }, { status: 400 });
+    }
+
+    const storedRoomId = isOnlineRoom(selectedRoom.name)
+      ? await createVirtualRoom(supabase, { name: selectedRoom.name, capacity: classSize })
+      : roomId;
+
     const updatePayload = {
       faculty_id: facultyId,
       subject_id: subjectId,
-      room_id: roomId,
+      room_id: storedRoomId,
       day,
       start_time: normalizedStart,
       end_time: normalizedEnd,

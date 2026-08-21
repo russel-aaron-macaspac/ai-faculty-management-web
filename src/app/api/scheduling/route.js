@@ -203,6 +203,24 @@ function normalizeHHMM(t) {
   return `${hh}:${mm}`;
 }
 
+function isOnlineRoom(roomName) {
+  return /\b(online|virtual|remote|tbd|tba)\b/i.test(String(roomName || ""));
+}
+
+async function createVirtualRoom(supabase, { name, capacity }) {
+  const { data, error } = await supabase
+    .from("rooms")
+    .insert({
+      name: `${name} - ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      capacity: Math.max(Number(capacity) || 1, 1),
+    })
+    .select("id")
+    .single();
+
+  if (error) throw error;
+  return data.id;
+}
+
 /* GET handler */
 export async function GET(request) {
   try {
@@ -423,6 +441,18 @@ export async function POST(request) {
     }
     console.info("[SCHEDULING POST] resolvedFaculty:", resolvedFaculty);
     console.info("[SCHEDULING POST] resolvedCreator:", resolvedCreator);
+
+    const { data: selectedRoom, error: roomError } = await supabase
+      .from("rooms")
+      .select("name")
+      .eq("id", roomId)
+      .maybeSingle();
+
+    if (roomError || !selectedRoom) {
+      return NextResponse.json({ error: "Room not found" }, { status: 400 });
+    }
+
+    let storedRoomId = roomId;
     let conflictResult = { hasConflict: false };
     try {
       conflictResult = await detectScheduleConflicts(supabase, {
@@ -439,6 +469,14 @@ export async function POST(request) {
     }
 
     if (conflictResult.hasConflict) {
+      console.info("[SCHEDULING POST] conflict result:", {
+        conflictType: conflictResult.conflict_type,
+        conflicts: conflictResult.conflicts?.map((conflict) => ({
+          type: conflict.conflict_type,
+          count: conflict.details?.length ?? 0,
+          details: conflict.conflict_type === "availability" ? conflict.details : undefined,
+        })),
+      });
       const suggestions = await generateConflictSuggestions(supabase, {
         userId: resolvedFaculty.userId ?? null,
         userUuid: resolvedFaculty.userUuid ?? null,
@@ -458,10 +496,17 @@ export async function POST(request) {
       );
     }
 
+    if (isOnlineRoom(selectedRoom.name)) {
+      storedRoomId = await createVirtualRoom(supabase, {
+        name: selectedRoom.name,
+        capacity: classSize,
+      });
+    }
+
     const insertPayload = {
       faculty_id: resolvedFaculty.userId ?? undefined,
       subject_id: subjectId,
-      room_id: roomId,
+      room_id: storedRoomId,
       day,
       start_time: normalizedStart,
       end_time: normalizedEnd,

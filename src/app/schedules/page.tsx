@@ -11,6 +11,11 @@ import { Loader2 } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
 import { Schedule } from '@/types/schedule';
 import { formatTimeToTwelveHour } from '@/lib/timeUtils';
+
+const getRoomDisplayName = (roomName?: string | null) => {
+  if (/\b(tbd|tba)\b/i.test(roomName || '')) return 'TBA';
+  return /\b(online|virtual|remote)\b/i.test(roomName || '') ? 'Online' : roomName || '-';
+};
 import { isFacultyLikeRole } from '@/lib/roleConfig';
 import { toast } from '@/lib/toast';
 
@@ -119,7 +124,7 @@ function SchedulesContent() {
                 {item.subject?.code} - {item.subject?.name}
                 {item.section ? <span className="ml-2 text-xs text-slate-500">Section {item.section}</span> : null}
               </TableCell>
-              <TableCell>{item.room?.name}</TableCell>
+              <TableCell>{getRoomDisplayName(item.room?.name)}</TableCell>
               <TableCell>{item.day}</TableCell>
               <TableCell>
                 {formatTimeToTwelveHour(item.startTime)} - {formatTimeToTwelveHour(item.endTime)}

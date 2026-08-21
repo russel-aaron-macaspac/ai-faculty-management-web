@@ -235,7 +235,15 @@ export function FacultyLoadGrid({
       });
 
       if (!result.success) {
-        setRowStatus(loadType, row.localId, 'conflict', 'Conflicts with an existing schedule.');
+        const conflictType = result.conflict.conflict_type;
+        const message = conflictType === 'availability'
+          ? 'Faculty availability does not include this day and time.'
+          : conflictType === 'faculty'
+            ? 'Faculty already has an overlapping schedule.'
+            : conflictType === 'room'
+              ? 'This physical room is already occupied during this time.'
+              : 'Schedule conflict detected.';
+        setRowStatus(loadType, row.localId, 'conflict', message);
         return false;
       }
 

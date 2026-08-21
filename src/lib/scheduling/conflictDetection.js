@@ -27,6 +27,10 @@ function toHHMM(minutes) {
   return `${hours}:${mins}`;
 }
 
+function isOnlineRoom(roomName) {
+  return /\b(online|virtual|remote|tbd|tba)\b/i.test(String(roomName || ""));
+}
+
 function findFreeSlots({ availabilityRows, occupiedRows, durationMinutes }) {
   const slots = [];
 
@@ -108,6 +112,16 @@ export async function detectScheduleConflicts(supabase, payload) {
     throw schedulesError;
   }
 
+  const { data: selectedRoom, error: roomError } = await supabase
+    .from("rooms")
+    .select("name")
+    .eq("id", roomId)
+    .maybeSingle();
+
+  if (roomError) {
+    throw roomError;
+  }
+
   const overlappingRows = (daySchedules || []).filter((row) =>
     overlaps(startTime, endTime, String(row.start_time).slice(0, 5), String(row.end_time).slice(0, 5))
   );
@@ -117,7 +131,9 @@ export async function detectScheduleConflicts(supabase, payload) {
     if (userUuid != null && row.faculty_id_uuid && String(row.faculty_id_uuid) === String(userUuid)) return true;
     return false;
   });
-  const roomConflicts = overlappingRows.filter((row) => String(row.room_id) === String(roomId));
+  const roomConflicts = isOnlineRoom(selectedRoom?.name)
+    ? []
+    : overlappingRows.filter((row) => String(row.room_id) === String(roomId));
 
   let availabilityRows = [];
   try {
@@ -140,9 +156,21 @@ export async function detectScheduleConflicts(supabase, payload) {
   }
 
   const withinAvailability = availabilityRows.some(
-    (row) =>
-      startTime >= String(row.start_time).slice(0, 5) &&
-      endTime <= String(row.end_time).slice(0, 5)
+    (row) => {
+      const availabilityStart = toMinutes(String(row.start_time).slice(0, 5));
+      const availabilityEnd = toMinutes(String(row.end_time).slice(0, 5));
+      const requestedStart = toMinutes(startTime);
+      const requestedEnd = toMinutes(endTime);
+
+      return (
+        availabilityStart !== null &&
+        availabilityEnd !== null &&
+        requestedStart !== null &&
+        requestedEnd !== null &&
+        requestedStart >= availabilityStart &&
+        requestedEnd <= availabilityEnd
+      );
+    }
   );
 
   const conflicts = [];
