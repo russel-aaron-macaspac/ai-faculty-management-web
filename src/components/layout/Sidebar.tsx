@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { 
   LayoutDashboard, 
   Users, 
+  UserPlus,
   UserSquare2, 
   Calendar, 
   Clock, 
@@ -48,6 +49,7 @@ export function Sidebar({ user, collapsed = false, onToggle }: Readonly<SidebarP
   // Admin Links
   const adminLinks = [
     { href: '/dashboard/admin', label: 'Dashboard', icon: LayoutDashboard },
+    { href: '/dashboard/admin/accounts', label: 'Account Creation', icon: UserPlus },
     { href: '/faculty', label: 'Faculty Management', icon: Users },
     { href: '/attendance', label: 'Attendance Monitoring', icon: Clock },
     { href: '/clearance', label: 'Clearance Compliance', icon: FileCheck2 },
@@ -117,7 +119,12 @@ export function Sidebar({ user, collapsed = false, onToggle }: Readonly<SidebarP
 
   const renderLink = (link: { href: string; label: string; icon: typeof LayoutDashboard }) => {
     const Icon = link.icon;
-    const isActive = pathname === link.href || (pathname.startsWith(link.href) && link.href !== '/dashboard' && link.href !== '#');
+    const isActive = pathname === link.href || (
+      link.label !== 'Dashboard' &&
+      pathname.startsWith(link.href) &&
+      link.href !== '/dashboard' &&
+      link.href !== '#'
+    );
     return (
       <Link
         key={link.label}
