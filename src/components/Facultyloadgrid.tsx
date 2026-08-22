@@ -24,7 +24,7 @@
  *   />
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -54,6 +54,12 @@ interface LoadRow {
   classSize: string;
   status: RowStatus;
   statusMessage?: string;
+}
+
+interface TimeRow {
+  day: string;
+  startTime: string;
+  endTime: string;
 }
 
 interface RoomOption {
@@ -102,6 +108,23 @@ function blankRow(): LoadRow {
   };
 }
 
+function blankTimeRows(): TimeRow[] {
+  return [{ day: 'Monday', startTime: '', endTime: '' }];
+}
+
+function loadConsultationRows(facultyId: string): TimeRow[] {
+  if (typeof window === 'undefined' || !facultyId) return blankTimeRows();
+
+  try {
+    const stored = localStorage.getItem(`faculty-load-times-${facultyId}`);
+    const parsed = stored ? (JSON.parse(stored) as { consultation?: TimeRow[] }) : null;
+    const savedRows = parsed?.consultation?.filter((row) => row.startTime || row.endTime) ?? [];
+    return savedRows.length > 0 ? savedRows : blankTimeRows();
+  } catch {
+    return blankTimeRows();
+  }
+}
+
 function isRowBlank(row: LoadRow): boolean {
   return (
     !row.code.trim() &&
@@ -139,8 +162,14 @@ export function FacultyLoadGrid({
 }: FacultyLoadGridProps) {
   const [regularRows, setRegularRows] = useState<LoadRow[]>([blankRow()]);
   const [overloadRows, setOverloadRows] = useState<LoadRow[]>([blankRow()]);
+  const [consultationRows, setConsultationRows] = useState<TimeRow[]>(() => loadConsultationRows(facultyId));
   const [saving, setSaving] = useState(false);
   const [summary, setSummary] = useState<{ savedCount: number; failedCount: number } | null>(null);
+
+  useEffect(() => {
+    if (!facultyId) return;
+    localStorage.setItem(`faculty-load-times-${facultyId}`, JSON.stringify({ consultation: consultationRows }));
+  }, [consultationRows, facultyId]);
 
   const updateRow = (
     loadType: LoadType,
@@ -476,6 +505,75 @@ export function FacultyLoadGrid({
     </div>
   );
 
+  const updateTimeRow = (index: number, field: keyof TimeRow, value: string) => {
+    setConsultationRows((rows) => rows.map((row, rowIndex) => (rowIndex === index ? { ...row, [field]: value } : row)));
+  };
+
+  const addConsultationRow = () => {
+    setConsultationRows((rows) => [...rows, { day: 'Monday', startTime: '', endTime: '' }]);
+  };
+
+  const removeConsultationRow = (index: number) => {
+    setConsultationRows((rows) => {
+      const nextRows = rows.filter((_, rowIndex) => rowIndex !== index);
+      return nextRows.length > 0 ? nextRows : blankTimeRows();
+    });
+  };
+
+  const renderTimeTable = (title: string, rows: TimeRow[]) => (
+    <div className="rounded-lg border border-slate-200">
+      <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800">{title}</div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Day</TableHead>
+            <TableHead>Start Time</TableHead>
+            <TableHead>End Time</TableHead>
+            <TableHead className="w-[70px] text-right">&nbsp;</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row, index) => (
+            <TableRow key={row.day}>
+              <TableCell>
+                <Select value={row.day} onValueChange={(value) => updateTimeRow(index, 'day', value || 'Monday')}>
+                  <SelectTrigger className="h-9 min-w-[130px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DAYS.map((day) => (
+                      <SelectItem key={day} value={day}>
+                        {day}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </TableCell>
+              <TableCell>
+                <Input type="time" value={row.startTime} onChange={(event) => updateTimeRow(index, 'startTime', event.target.value)} />
+              </TableCell>
+              <TableCell>
+                <Input type="time" value={row.endTime} onChange={(event) => updateTimeRow(index, 'endTime', event.target.value)} />
+              </TableCell>
+              <TableCell className="text-right">
+                <Button type="button" size="sm" variant="ghost" onClick={() => removeConsultationRow(index)} title="Remove consultation hours row">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <div className="border-t border-slate-200 p-3">
+        <Button type="button" size="sm" variant="outline" onClick={addConsultationRow}>
+          <Plus className="mr-1 h-4 w-4" /> Add row
+        </Button>
+      </div>
+    </div>
+  );
+
+  const overloadTimeRows = overloadRows.filter((row) => row.startTime && row.endTime);
+
   return (
     <Card>
       <CardHeader>
@@ -485,11 +583,40 @@ export function FacultyLoadGrid({
         <div>
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Regular Load</div>
           {renderGridTable('regular', regularRows)}
+          <div className="mt-6">
+            {renderTimeTable('Consultation Hours Schedule', consultationRows)}
+          </div>
         </div>
 
         <div>
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Overload</div>
           {renderGridTable('overload', overloadRows)}
+        </div>
+
+        <div className="rounded-lg border border-slate-200">
+          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800">Overload Schedule</div>
+          {overloadTimeRows.length === 0 ? (
+            <div className="px-4 py-3 text-sm text-slate-500">Add overload rows above to see their schedule here.</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Day</TableHead>
+                  <TableHead>Start Time</TableHead>
+                  <TableHead>End Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {overloadTimeRows.map((row, index) => (
+                  <TableRow key={`${row.day}-${row.startTime}-${index}`}>
+                    <TableCell className="font-medium">{row.day}</TableCell>
+                    <TableCell>{row.startTime}</TableCell>
+                    <TableCell>{row.endTime}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </div>
 
         <div className="flex items-center gap-3">

@@ -34,6 +34,12 @@ const getContactHours = (startTime: string, endTime: string) => {
   return Number.isFinite(hours) && hours > 0 ? hours : null;
 };
 
+const formatTotal = (value: number) => (Number.isInteger(value) ? String(value) : value.toFixed(1));
+
+const getScheduleUnits = (schedule: Schedule) => Number(schedule.units) || 0;
+
+const getScheduleHours = (schedule: Schedule) => getContactHours(schedule.startTime, schedule.endTime) ?? 0;
+
 const getLoadType = (schedule: Schedule) => {
   const candidate = schedule as Schedule & { loadType?: string; isOverload?: boolean };
   return candidate.isOverload || candidate.loadType?.toLowerCase() === 'overload' ? 'overload' : 'regular';
@@ -61,6 +67,12 @@ type FacultyMeta = {
   name: string;
   role: string;
   statusOfAppointment?: AppointmentStatus | null;
+};
+
+type ConsultationRow = {
+  day: string;
+  startTime: string;
+  endTime: string;
 };
 
 interface SchedulingMeta {
@@ -193,6 +205,7 @@ function ScheduleLoadingContent() {
 
   const visibleSchedules = useMemo(() => schedules, [schedules]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [consultationByFaculty, setConsultationByFaculty] = useState<Record<string, ConsultationRow[]>>({});
 
   const toggleFaculty = (facultyId: string) => {
     setExpanded((prev) => ({ ...prev, [facultyId]: !prev[facultyId] }));
@@ -200,6 +213,25 @@ function ScheduleLoadingContent() {
 
   // Build a list of faculties from meta and schedules to display in master schedule
   const facultiesList = useMemo(() => buildFacultiesList(meta.faculties, visibleSchedules), [meta.faculties, visibleSchedules]);
+
+  useEffect(() => {
+    const savedConsultationByFaculty: Record<string, ConsultationRow[]> = {};
+
+    facultiesList.forEach((faculty) => {
+      const stored = localStorage.getItem(`faculty-load-times-${faculty.id}`);
+      if (!stored) return;
+
+      try {
+        const parsed = JSON.parse(stored) as { consultation?: ConsultationRow[] };
+        const rows = parsed.consultation?.filter((row) => row.startTime && row.endTime) ?? [];
+        if (rows.length > 0) savedConsultationByFaculty[faculty.id] = rows;
+      } catch {
+        // Ignore malformed legacy browser data for this faculty.
+      }
+    });
+
+    setConsultationByFaculty(savedConsultationByFaculty);
+  }, [facultiesList]);
 
   // Extract selected faculty availability rendering to avoid nested ternary in JSX
   let selectedFacultyAvailabilityContent: ReactNode = null;
@@ -282,6 +314,67 @@ function ScheduleLoadingContent() {
     </div>
   );
 
+  const renderConsultationMatrix = (rows: ConsultationRow[]) => (
+    <div className="overflow-x-auto px-4 pb-4">
+      <div className="mb-2 border-b border-slate-200 pb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        Consultation Hours Schedule
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Day</TableHead>
+            <TableHead>Time</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={2} className="text-slate-500">No consultation hours scheduled.</TableCell>
+            </TableRow>
+          ) : (
+            rows.map((row, index) => (
+              <TableRow key={`${row.day}-${row.startTime}-${index}`}>
+                <TableCell className="font-medium">{row.day}</TableCell>
+                <TableCell>{formatTimeToTwelveHour(row.startTime)} - {formatTimeToTwelveHour(row.endTime)}</TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  );
+
+  const renderFacultyTotals = (facultySchedules: Schedule[]) => {
+    const overloadSchedules = facultySchedules.filter((schedule) => getLoadType(schedule) === 'overload');
+    const totalUnits = facultySchedules.reduce((total, schedule) => total + getScheduleUnits(schedule), 0);
+    const totalHours = facultySchedules.reduce((total, schedule) => total + getScheduleHours(schedule), 0);
+    const totalOverload = overloadSchedules.reduce((total, schedule) => total + getScheduleUnits(schedule), 0);
+    const overloadHours = overloadSchedules.reduce((total, schedule) => total + getScheduleHours(schedule), 0);
+
+    return (
+      <div className="overflow-x-auto px-4 pb-4">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Total No. of Units</TableHead>
+              <TableHead>Total No. of Hours</TableHead>
+              <TableHead>Total Overload</TableHead>
+              <TableHead>Overload Time</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow className="bg-slate-50 font-semibold">
+              <TableCell>{formatTotal(totalUnits)}</TableCell>
+              <TableCell>{formatTotal(totalHours)}</TableCell>
+              <TableCell>{totalOverload > 0 ? formatTotal(totalOverload) : '-'}</TableCell>
+              <TableCell>{overloadHours > 0 ? `${formatTotal(overloadHours)} hrs` : '-'}</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </div>
+    );
+  };
+
   let masterScheduleContent: ReactNode = null;
   if (loading) {
     masterScheduleContent = (
@@ -333,7 +426,9 @@ function ScheduleLoadingContent() {
                     <div><span className="font-semibold">Designation:</span> {facultyMeta?.role === 'program_chair' ? 'Program Chair' : 'Faculty'}</div>
                   </div>
                   {renderLoadMatrix('Regular Load', regularSchedules)}
+                  {renderConsultationMatrix(consultationByFaculty[faculty.id] ?? [])}
                   {overloadSchedules.length > 0 && renderLoadMatrix('Overload', overloadSchedules)}
+                  {renderFacultyTotals(facultySchedules)}
                 </div>
               )}
             </div>
@@ -509,6 +604,7 @@ function ScheduleLoadingContent() {
 
           <div className="space-y-6">
             <FacultyLoadGrid
+              key={selectedFacultyId}
               facultyId={selectedFacultyId}
               facultyName={selectedFacultyName}
               rooms={meta.rooms}
