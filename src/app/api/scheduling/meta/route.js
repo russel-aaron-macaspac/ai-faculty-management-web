@@ -27,7 +27,7 @@ export async function GET(request) {
         supabase
           .from("users")
           .select("user_id, supabase_id, first_name, middle_name, last_name, role, status_of_appointment, department_id")
-          .in("role", ["faculty", "program_chair"])
+          .in("role", ["faculty", "program_chair", "dean"])
           .eq("status", "active")
           .order("last_name", { ascending: true }),
         supabase.from("subjects").select("id, code, name").order("code", { ascending: true }),

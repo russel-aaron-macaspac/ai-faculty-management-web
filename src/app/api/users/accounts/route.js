@@ -2,18 +2,10 @@ import { createSupabaseAdminClient } from '@/lib/supabase/server-client';
 import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
 
-const ALLOWED_ROLES = ['faculty', 'program_chair'];
+const ALLOWED_ROLES = ['faculty', 'program_chair', 'dean'];
 const ALLOWED_STATUSES = ['active', 'on_leave', 'inactive'];
 const ALLOWED_APPOINTMENT_STATUSES = ['full-time', 'part-time'];
 const PASSWORD_MIN_LENGTH = 12;
-
-function splitName(fullName) {
-  const parts = fullName.trim().split(/\s+/);
-  const first_name = parts.shift() || '';
-  const last_name = parts.length ? parts.pop() : '';
-  const middle_name = parts.length ? parts.join(' ') : null;
-  return { first_name, middle_name, last_name };
-}
 
 export async function POST(request) {
   let authUserId = null;
@@ -21,7 +13,9 @@ export async function POST(request) {
 
   try {
     const body = await request.json();
-    const fullName = typeof body?.fullName === 'string' ? body.fullName.trim() : '';
+    const firstName = typeof body?.firstName === 'string' ? body.firstName.trim() : '';
+    const surname = typeof body?.surname === 'string' ? body.surname.trim() : '';
+    const middleName = typeof body?.middleName === 'string' ? body.middleName.trim() : '';
     const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
     const password = typeof body?.password === 'string' ? body.password : '';
     const department = typeof body?.department === 'string' ? body.department.trim() : '';
@@ -30,8 +24,12 @@ export async function POST(request) {
     const statusOfAppointment = typeof body?.statusOfAppointment === 'string' ? body.statusOfAppointment : '';
     const role = typeof body?.role === 'string' ? body.role : '';
 
-    if (fullName.length < 2) {
-      return NextResponse.json({ error: 'Faculty name must be at least 2 characters.' }, { status: 400 });
+    if (!firstName) {
+      return NextResponse.json({ error: 'First name is required.' }, { status: 400 });
+    }
+
+    if (!surname) {
+      return NextResponse.json({ error: 'Surname is required.' }, { status: 400 });
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -97,7 +95,9 @@ export async function POST(request) {
       return NextResponse.json({ error: 'An account with this email address already exists.' }, { status: 409 });
     }
 
-    const { first_name, middle_name, last_name } = splitName(fullName);
+    const first_name = firstName;
+    const middle_name = middleName || null;
+    const last_name = surname;
     const passwordHash = await bcrypt.hash(password, 12);
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email,

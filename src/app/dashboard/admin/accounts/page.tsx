@@ -32,14 +32,16 @@ const DEPARTMENTS = [
 ] as const;
 
 const accountSchema = z.object({
-  fullName: z.string().trim().min(2, 'Enter the faculty member’s full name.'),
+  firstName: z.string().trim().min(1, 'Enter the first name.'),
+  surname: z.string().trim().min(1, 'Enter the surname.'),
+  middleName: z.string().trim().optional(),
   email: z.string().trim().email('Enter a valid email address.'),
   password: z.string().min(12, 'Use at least 12 characters.').regex(/[A-Za-z]/, 'Include at least one letter.').regex(/\d/, 'Include at least one number.'),
   department: z.enum(DEPARTMENTS, { message: 'Select a department.' }),
   phone: z.string().trim().min(1, 'Enter a contact number.'),
   status: z.enum(['active', 'on_leave', 'inactive'], { message: 'Select an account status.' }),
   statusOfAppointment: z.enum(['full-time', 'part-time'], { message: 'Select a status of appointment.' }),
-  role: z.enum(['faculty', 'program_chair'], { message: 'Select a faculty role.' }),
+  role: z.enum(['faculty', 'program_chair', 'dean'], { message: 'Select a faculty role.' }),
 });
 
 type AccountFormValues = z.infer<typeof accountSchema>;
@@ -58,7 +60,7 @@ function AccountCreationContent() {
   const [createdAccount, setCreatedAccount] = useState<{ name: string; email: string; role: string } | null>(null);
   const form = useForm<AccountFormValues>({
     resolver: zodResolver(accountSchema),
-    defaultValues: { fullName: '', email: '', password: '', department: undefined, phone: '', status: 'active', statusOfAppointment: 'full-time', role: 'faculty' },
+    defaultValues: { firstName: '', surname: '', middleName: '', email: '', password: '', department: undefined, phone: '', status: 'active', statusOfAppointment: 'full-time', role: 'faculty' },
   });
 
   const onSubmit = async (values: AccountFormValues) => {
@@ -75,7 +77,7 @@ function AccountCreationContent() {
       if (!response.ok) throw new Error(payload?.error || 'Unable to create the account.');
 
       setCreatedAccount({ name: payload.data.name, email: payload.data.email, role: payload.data.role });
-      form.reset({ fullName: '', email: '', password: '', department: undefined, phone: '', status: 'active', statusOfAppointment: 'full-time', role: 'faculty' });
+      form.reset({ firstName: '', surname: '', middleName: '', email: '', password: '', department: undefined, phone: '', status: 'active', statusOfAppointment: 'full-time', role: 'faculty' });
       toast({ title: 'Account created', description: `${payload.data.name} can now sign in.`, type: 'success' });
     } catch (error) {
       toast({ title: 'Account creation failed', description: error instanceof Error ? error.message : 'Please try again.', type: 'error' });
@@ -96,15 +98,27 @@ function AccountCreationContent() {
         {createdAccount && (
           <div className="mb-6 flex gap-3 rounded-[10px] border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800" role="status">
             <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
-            <div><p className="font-semibold">Account ready</p><p>{createdAccount.name} ({createdAccount.email}) can sign in with the assigned {createdAccount.role === 'program_chair' ? 'program chair' : 'faculty'} role.</p></div>
+            <div><p className="font-semibold">Account ready</p><p>{createdAccount.name} ({createdAccount.email}) can sign in with the assigned {createdAccount.role === 'program_chair' ? 'program chair' : createdAccount.role} role.</p></div>
           </div>
         )}
 
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5" noValidate>
-          <div className="space-y-2">
-            <Label htmlFor="fullName">Faculty Name</Label>
-            <Input id="fullName" placeholder="e.g. Dr. Maria Santos" {...form.register('fullName')} aria-invalid={!!form.formState.errors.fullName} />
-            {form.formState.errors.fullName && <p className="text-sm text-red-600">{form.formState.errors.fullName.message}</p>}
+          <div className="grid gap-5 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="firstName">First Name</Label>
+              <Input id="firstName" autoComplete="given-name" placeholder="e.g. Maria" {...form.register('firstName')} aria-invalid={!!form.formState.errors.firstName} />
+              {form.formState.errors.firstName && <p className="text-sm text-red-600">{form.formState.errors.firstName.message}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="surname">Surname</Label>
+              <Input id="surname" autoComplete="family-name" placeholder="e.g. Santos" {...form.register('surname')} aria-invalid={!!form.formState.errors.surname} />
+              {form.formState.errors.surname && <p className="text-sm text-red-600">{form.formState.errors.surname.message}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="middleName">Middle Name</Label>
+              <Input id="middleName" autoComplete="additional-name" placeholder="Optional" {...form.register('middleName')} aria-invalid={!!form.formState.errors.middleName} />
+              {form.formState.errors.middleName && <p className="text-sm text-red-600">{form.formState.errors.middleName.message}</p>}
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -164,7 +178,7 @@ function AccountCreationContent() {
             <Label htmlFor="role">Role</Label>
             <Select value={form.watch('role')} onValueChange={(value) => form.setValue('role', value as AccountFormValues['role'], { shouldValidate: true })}>
               <SelectTrigger id="role" aria-invalid={!!form.formState.errors.role}><SelectValue placeholder="Select a role" /></SelectTrigger>
-              <SelectContent><SelectItem value="faculty">Faculty</SelectItem><SelectItem value="program_chair">Program Chair</SelectItem></SelectContent>
+              <SelectContent><SelectItem value="faculty">Faculty</SelectItem><SelectItem value="program_chair">Program Chair</SelectItem><SelectItem value="dean">Dean</SelectItem></SelectContent>
             </Select>
             {form.formState.errors.role && <p className="text-sm text-red-600">{form.formState.errors.role.message}</p>}
           </div>

@@ -88,6 +88,7 @@ export function Sidebar({ user, collapsed = false, onToggle }: Readonly<SidebarP
       links = [
         { href: officerDashboardPath, label: 'Dashboard', icon: LayoutDashboard },
         { href: '/dashboard/profile', label: 'My Profile', icon: UserSquare2 },
+        ...(user?.role === 'dean' ? [{ href: '/schedules', label: 'My Schedule', icon: Calendar }] : []),
         { href: '/attendance', label: 'Attendance', icon: Clock },
         { href: '/clearance', label: officerConfig.label, icon: FileCheck2 },
         { href: '/dashboard/changepassword', label: 'Change Password', icon: LockIcon },

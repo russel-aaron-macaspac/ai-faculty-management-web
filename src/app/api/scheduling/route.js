@@ -228,7 +228,11 @@ export async function GET(request) {
     const supabase = createSupabaseAdminClient();
     const { searchParams } = new URL(request.url);
     const facultyId = searchParams.get("facultyId");
-    const scope = await getDepartmentScope(supabase, searchParams.get("actorId"), searchParams.get("actorRole"));
+    const actorRole = searchParams.get("actorRole");
+    const canViewOwnSchedule = ["faculty", "program_chair", "dean"].includes(actorRole);
+    const scope = canViewOwnSchedule && facultyId
+      ? { isAdmin: true, departmentId: null }
+      : await getDepartmentScope(supabase, searchParams.get("actorId"), actorRole);
 
     let query = supabase
       .from("schedules")
@@ -246,7 +250,7 @@ export async function GET(request) {
         .from("users")
         .select("user_id")
         .eq("department_id", scope.departmentId)
-        .in("role", ["faculty", "program_chair"]);
+        .in("role", ["faculty", "program_chair", "dean"]);
       if (departmentError) throw departmentError;
       const facultyIds = (departmentFaculty || []).map((faculty) => faculty.user_id);
       if (!facultyIds.length) return NextResponse.json({ data: [] });

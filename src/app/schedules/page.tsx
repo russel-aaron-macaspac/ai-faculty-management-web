@@ -30,7 +30,7 @@ type LocalUser = {
 
 export default function SchedulesPage() {
   return (
-    <RouteGuard requiredRoles={['faculty', 'program_chair']} fallbackPath="/login">
+    <RouteGuard requiredRoles={['faculty', 'program_chair', 'dean']} fallbackPath="/login">
       <SchedulesContent />
     </RouteGuard>
   );
@@ -61,7 +61,7 @@ function SchedulesContent() {
         const scheduleData = await scheduleService.getSchedules(parsed?.id, actor);
         setSchedules(scheduleData);
 
-        if (parsed?.id && isFacultyLikeRole(parsed.role)) {
+        if (parsed?.id && (isFacultyLikeRole(parsed.role) || parsed.role === 'dean')) {
           const entries = await scheduleService.getFacultyAvailability(String(parsed.id));
           const mappedEntries = entries.map((entry) => ({ day: entry.day, startTime: entry.startTime, endTime: entry.endTime }));
           setAvailabilityRows(mappedEntries);
@@ -79,7 +79,7 @@ function SchedulesContent() {
   }, []);
 
   const visibleSchedules = useMemo(() => {
-    if (!user || !isFacultyLikeRole(user.role)) {
+    if (!user || (!isFacultyLikeRole(user.role) && user.role !== 'dean')) {
       return schedules;
     }
 
@@ -235,7 +235,7 @@ function SchedulesContent() {
         </CardContent>
       </Card>
 
-      {isFacultyLikeRole(user?.role) && (
+      {(isFacultyLikeRole(user?.role) || user?.role === 'dean') && (
         <Card>
           <CardHeader>
             <CardTitle>Availability</CardTitle>

@@ -121,7 +121,6 @@ function ScheduleLoadingContent() {
   const [editSchedule, setEditSchedule] = useState<EditScheduleFormState | null>(null);
   const [editError, setEditError] = useState('');
 
-  const currentUserName = user?.full_name || user?.name || '';
   const canApprove = APPROVAL_ROLES.has(user?.role || '');
 
   const loadData = async (currentUser?: LocalUser | null) => {
@@ -514,7 +513,7 @@ function ScheduleLoadingContent() {
               facultyName={selectedFacultyName}
               rooms={meta.rooms}
               subjects={meta.subjects}
-              createdBy={currentUserName || user?.role || ''}
+              createdBy={user?.id || ''}
               creatorRole={user?.role || ''}
               onSaved={() => loadData(user)}
             />
