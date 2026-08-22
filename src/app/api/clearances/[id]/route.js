@@ -45,6 +45,10 @@ function formatRow(d) {
   };
 }
 
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ""));
+}
+
 export async function PATCH(request, { params }) {
   try {
     const supabase = createSupabaseAdminClient();
@@ -79,7 +83,7 @@ export async function PATCH(request, { params }) {
       .update({
         status,
         rejection_reason: status === "rejected" ? rejectionReason : null,
-        reviewed_by:      reviewedBy ?? null,
+        reviewed_by:      isUuid(reviewedBy) ? reviewedBy : null,
         reviewed_at:      new Date().toISOString(),
         updated_at:       new Date().toISOString(),
       })

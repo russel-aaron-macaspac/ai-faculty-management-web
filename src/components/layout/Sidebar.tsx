@@ -68,9 +68,18 @@ export function Sidebar({ user, collapsed = false, onToggle }: Readonly<SidebarP
     { href: '/dashboard/changepassword', label: 'Change Password', icon: LockIcon },
   ];
 
-  let links = adminLinks;
+    let links = adminLinks;
   if (isFacultyLikeRole(user?.role)) {
-    links = facultyLinks;
+    links = [...facultyLinks];
+    if (user?.role === 'program_chair') {
+      // Program chairs also review faculty clearance submissions routed
+      // to the Program Chair office, in addition to their own faculty view.
+      links.splice(4, 0, {
+        href: '/dashboard/program-chair-approvals',
+        label: 'Program Chair Clearance Approvals',
+        icon: FileCheck2,
+      });
+    }
   } else if (isApprovalOfficer(user?.role)) {
     // Approval officers: create a tailored menu without the Work Schedule entry
     const officerConfig = getApprovalOfficerConfig(user?.role as string);

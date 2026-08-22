@@ -541,7 +541,7 @@ export default function ClearancePage() {
         <div className="p-4 border-b border-slate-100 flex items-center gap-2">
           <Search className="h-5 w-5 text-slate-400" />
           <Input
-            placeholder="Search by office or requirement..."
+            placeholder="Search by faculty name..."
             className="hidden md:block max-w-sm border-0 focus-visible:ring-0 px-0"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -552,7 +552,7 @@ export default function ClearancePage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-slate-50">
-                <TableHead>Office / Requirement</TableHead>
+                <TableHead>Faculty Name</TableHead>
                 <TableHead>Submission Date</TableHead>
                 <TableHead>Status</TableHead>
                 {showSubmitColumn && <TableHead className="text-right">Action</TableHead>}

@@ -2,245 +2,266 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { RouteGuard } from '@/components/RouteGuard';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Download, TrendingUp, Users, Clock, FileCheck2, Filter } from 'lucide-react';
-import { Progress } from '@/components/ui/progress';
-import { attendanceService } from '@/services/attendanceService';
-import { facultyService } from '@/services/facultyService';
-import { clearanceService } from '@/services/clearanceService';
-import { parseTimeToMinutes } from '@/lib/timeUtils';
-import { Faculty } from '@/types/faculty';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Search, Loader2, ClipboardList, FileCheck2, CalendarCheck2 } from 'lucide-react';
+import { format } from 'date-fns';
+
+type AuditEntry = {
+  id: string;
+  timestamp: string | null;
+  actorName: string | null;
+  actorRole: string | null;
+  category: 'Clearance' | 'Schedule';
+  action: string;
+  target: string;
+  details: string | null;
+};
+
+const ACTION_BADGE_CLASS: Record<string, string> = {
+  approved: 'bg-emerald-100 text-emerald-800',
+  approve: 'bg-emerald-100 text-emerald-800',
+  rejected: 'bg-rose-100 text-rose-800',
+  reject: 'bg-rose-100 text-rose-800',
+  note_added: 'bg-slate-100 text-slate-700',
+  status_changed: 'bg-amber-100 text-amber-800',
+  submitted: 'bg-amber-100 text-amber-800',
+};
+
+const CATEGORY_BADGE_CLASS: Record<AuditEntry['category'], string> = {
+  Clearance: 'bg-[#0F172A]/5 text-[#0F172A]',
+  Schedule: 'bg-[#D4A017]/10 text-[#8A6510]',
+};
+
+function formatTimestamp(value: string | null) {
+  if (!value) return 'Unknown time';
+  try {
+    return format(new Date(value), 'MMM d, yyyy h:mm a');
+  } catch {
+    return value;
+  }
+}
 
 export default function ReportsPage() {
-  const [attendance, setAttendance] = useState<any[]>([]);
-  const [faculties, setFaculties] = useState<Faculty[]>([]);
-  const [clearances, setClearances] = useState<any[]>([]);
+  return (
+    <RouteGuard requiredRoles={['admin']} fallbackPath="/dashboard/faculty">
+      <AuditTrailContent />
+    </RouteGuard>
+  );
+}
+
+function AuditTrailContent() {
+  const [entries, setEntries] = useState<AuditEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | AuditEntry['category']>('all');
 
   useEffect(() => {
     let mounted = true;
 
     async function load() {
+      setLoading(true);
       try {
-        const [f, a, c] = await Promise.all([
-          facultyService.getFaculty(),
-          attendanceService.getAttendance(),
-          clearanceService.getClearances(),
-        ]);
-
+        const res = await fetch('/api/audit-log', { cache: 'no-store' });
+        const json = await res.json();
         if (!mounted) return;
-        setFaculties(f || []);
-        setAttendance(a || []);
-        setClearances(c || []);
+        setEntries(Array.isArray(json.data) ? json.data : []);
       } catch (err) {
-        console.error('[ReportsPage] failed to load data', err);
+        console.error('[ReportsPage] failed to load audit log', err);
+      } finally {
+        if (mounted) setLoading(false);
       }
     }
 
-    load();
+    void load();
     return () => {
       mounted = false;
     };
   }, []);
 
-  const getDepartmentIndicatorClass = (percent: number) => {
-    if (percent > 95) return 'bg-emerald-500';
-    if (percent > 90) return 'bg-amber-500';
-    return 'bg-red-500';
-  };
+  const filtered = useMemo(() => {
+    const term = searchTerm.toLowerCase();
+    return entries.filter((entry) => {
+      const matchesCategory = categoryFilter === 'all' || entry.category === categoryFilter;
+      if (!matchesCategory) return false;
 
-  const metrics = useMemo(() => {
-    const facultyCount = faculties.length;
-
-    const presentStatuses = new Set(['present', 'late']);
-    const presentCount = attendance.filter((r: any) => presentStatuses.has(r.status)).length;
-
-    const avgAttendance = facultyCount ? Math.round((presentCount / facultyCount) * 1000) / 10 : 0;
-
-    // total hours from attendance records with timeIn/timeOut
-    let totalMinutes = 0;
-    attendance.forEach((r: any) => {
-      if (r.timeIn && r.timeOut) {
-        const start = parseTimeToMinutes(r.timeIn);
-        const end = parseTimeToMinutes(r.timeOut);
-        if (start !== null && end !== null && end > start) {
-          totalMinutes += end - start;
-        }
-      }
+      if (!term) return true;
+      return (
+        (entry.actorName ?? '').toLowerCase().includes(term) ||
+        (entry.actorRole ?? '').toLowerCase().includes(term) ||
+        entry.action.toLowerCase().includes(term) ||
+        entry.target.toLowerCase().includes(term) ||
+        (entry.details ?? '').toLowerCase().includes(term)
+      );
     });
-    const totalHours = Math.round((totalMinutes / 60) * 10) / 10; // one decimal
+  }, [entries, searchTerm, categoryFilter]);
 
-    const activePersonnel = new Set(attendance.map((r: any) => r.employeeId)).size;
+  const stats = useMemo(() => {
+    const clearanceCount = entries.filter((e) => e.category === 'Clearance').length;
+    const scheduleCount = entries.filter((e) => e.category === 'Schedule').length;
+    return { total: entries.length, clearanceCount, scheduleCount };
+  }, [entries]);
 
-    const clearanceTotal = Array.isArray(clearances) ? clearances.length : 0;
-    const clearanceApproved = Array.isArray(clearances) ? clearances.filter((c: any) => c.status === 'approved').length : 0;
-    const clearanceCompliance = clearanceTotal ? Math.round((clearanceApproved / clearanceTotal) * 100) : 0;
-    const clearancePending = Array.isArray(clearances) ? clearances.filter((c: any) => c.status !== 'approved').length : 0;
+  const getActionBadgeClass = (action: string) =>
+    ACTION_BADGE_CLASS[action.toLowerCase()] ?? 'bg-slate-100 text-slate-700';
 
-    // departmental attendance
-    const deptMap: Record<string, { total: number; present: number }> = {};
-    const facultyById: Record<string, any> = {};
-    faculties.forEach((f: any) => { facultyById[String(f.id)] = f; });
-
-    faculties.forEach((f: any) => {
-      const dept = f.department || 'Unknown';
-      if (!deptMap[dept]) deptMap[dept] = { total: 0, present: 0 };
-      deptMap[dept].total += 1;
-    });
-
-    attendance.forEach((r: any) => {
-      const fac = facultyById[String(r.employeeId)];
-      const dept = fac?.department || 'Unknown';
-      if (!deptMap[dept]) deptMap[dept] = { total: 0, present: 0 };
-      // Only count if the employee is part of the faculty list
-      if (facultyById[String(r.employeeId)]) {
-        if (presentStatuses.has(r.status)) {
-          deptMap[dept].present += 1;
-        }
-      }
-    });
-
-    const departmental = Object.keys(deptMap).map((k) => ({
-      name: k,
-      percent: deptMap[k].total ? Math.round((deptMap[k].present / deptMap[k].total) * 100) : 0,
-    }));
-
-    // clearance document breakdown by type/title
-    const docMap: Record<string, { pending: number; total: number; label?: string }> = {};
-    (clearances || []).forEach((d: any) => {
-      const key = d.document_type || d.title || d.office_name || 'Other';
-      if (!docMap[key]) docMap[key] = { pending: 0, total: 0, label: key };
-      docMap[key].total += 1;
-      if (d.status && d.status !== 'approved') docMap[key].pending += 1;
-    });
-
-    const docStats = Object.values(docMap).slice(0, 6);
-
-    return { avgAttendance, totalHours, activePersonnel, departmental, clearanceCompliance, clearancePending, docStats };
-  }, [attendance, faculties, clearances]);
+  let tableRows: React.ReactNode;
+  if (loading) {
+    tableRows = (
+      <TableRow>
+        <TableCell colSpan={5} className="text-center py-10 text-slate-500">
+          <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-slate-400" />
+          Loading audit trail...
+        </TableCell>
+      </TableRow>
+    );
+  } else if (filtered.length === 0) {
+    tableRows = (
+      <TableRow>
+        <TableCell colSpan={5} className="text-center py-10 text-slate-500">
+          No audit entries found.
+        </TableCell>
+      </TableRow>
+    );
+  } else {
+    tableRows = filtered.map((entry) => (
+      <TableRow key={entry.id}>
+        <TableCell className="text-sm text-slate-600 whitespace-nowrap">
+          {formatTimestamp(entry.timestamp)}
+        </TableCell>
+        <TableCell>
+          <div className="text-sm font-medium text-slate-900">{entry.actorName ?? 'System'}</div>
+          {entry.actorRole && (
+            <div className="text-xs capitalize text-slate-500">{entry.actorRole.replaceAll('_', ' ')}</div>
+          )}
+        </TableCell>
+        <TableCell>
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${CATEGORY_BADGE_CLASS[entry.category]}`}>
+            {entry.category}
+          </span>
+        </TableCell>
+        <TableCell>
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getActionBadgeClass(entry.action)}`}>
+            {entry.action.replaceAll('_', ' ')}
+          </span>
+        </TableCell>
+        <TableCell>
+          <div className="text-sm text-slate-800">{entry.target}</div>
+          {entry.details && <div className="mt-0.5 text-xs text-slate-500">{entry.details}</div>}
+        </TableCell>
+      </TableRow>
+    ));
+  }
 
   return (
-    <RouteGuard requiredRoles={["admin"]} fallbackPath="/dashboard/faculty">
+    <RouteGuardless>
       <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#D4A017]">Institutional reporting</p>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Analytics & Reports</h1>
-          <p className="text-slate-500">Cross-module insights and system-wide analytics.</p>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#D4A017]">Institutional reporting</p>
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Audit Trail Report</h1>
+            <p className="text-slate-500">A record of clearance and schedule approval actions performed by all users.</p>
+          </div>
         </div>
-        <div className="flex gap-3">
-           <Button variant="outline">
-             <Filter className="mr-2 h-4 w-4" /> This Month
-           </Button>
-           <Button variant="secondary">
-             <Download className="mr-2 h-4 w-4" /> Export All PDF
-           </Button>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <ClipboardList className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm text-slate-500">Total Actions</p>
+                <p className="text-2xl font-semibold text-slate-900">{stats.total}</p>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0F172A]/5 text-[#0F172A]">
+                <FileCheck2 className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm text-slate-500">Clearance Actions</p>
+                <p className="text-2xl font-semibold text-slate-900">{stats.clearanceCount}</p>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#D4A017]/10 text-[#8A6510]">
+                <CalendarCheck2 className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm text-slate-500">Schedule Actions</p>
+                <p className="text-2xl font-semibold text-slate-900">{stats.scheduleCount}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="p-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 flex-1 min-w-50">
+              <Search className="h-5 w-5 text-slate-400" />
+              <Input
+                placeholder="Search by user, action, or target..."
+                className="max-w-sm border-0 focus-visible:ring-0 px-0"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={categoryFilter === 'all' ? 'default' : 'outline'}
+                onClick={() => setCategoryFilter('all')}
+              >
+                All
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={categoryFilter === 'Clearance' ? 'default' : 'outline'}
+                onClick={() => setCategoryFilter('Clearance')}
+              >
+                Clearance
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={categoryFilter === 'Schedule' ? 'default' : 'outline'}
+                onClick={() => setCategoryFilter('Schedule')}
+              >
+                Schedule
+              </Button>
+            </div>
+          </div>
+
+          <div className="max-h-128 overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-50">
+                  <TableHead>Timestamp</TableHead>
+                  <TableHead>Performed By</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Action</TableHead>
+                  <TableHead>Target</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>{tableRows}</TableBody>
+            </Table>
+          </div>
         </div>
       </div>
-
-      {/* High-level metrics */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex justify-between items-start">
-               <div>
-                  <p className="text-sm font-medium text-slate-500">Avg. Attendance Rate</p>
-                  <p className="text-3xl font-bold tracking-[-0.02em] text-slate-900 mt-2">{metrics.avgAttendance}%</p>
-               </div>
-               <div className="p-2 bg-emerald-50 rounded-lg"><TrendingUp className="h-5 w-5 text-emerald-500" /></div>
-            </div>
-            <div className="mt-4 flex items-center text-sm text-emerald-600 font-medium">
-               <span>{metrics.avgAttendance >= 0 ? `Compared to last month N/A` : ''}</span>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex justify-between items-start">
-               <div>
-                  <p className="text-sm font-medium text-slate-500">Total Hours Logged</p>
-                  <p className="text-3xl font-bold tracking-[-0.02em] text-slate-900 mt-2">{metrics.totalHours}</p>
-               </div>
-               <div className="p-2 bg-red-50 rounded-lg"><Clock className="h-5 w-5 text-red-500" /></div>
-            </div>
-            <div className="mt-4 flex items-center text-sm text-red-600 font-medium">
-               <span>Hours calculated from attendance logs</span>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex justify-between items-start">
-               <div>
-                  <p className="text-sm font-medium text-slate-500">Clearance Compliance</p>
-                  <p className="text-3xl font-bold tracking-[-0.02em] text-slate-900 mt-2">{metrics.clearanceCompliance}%</p>
-               </div>
-               <div className="p-2 bg-amber-50 rounded-lg"><FileCheck2 className="h-5 w-5 text-amber-500" /></div>
-            </div>
-            <div className="mt-4 flex items-center text-sm text-amber-600 font-medium">
-               <span>Action required for {Math.max(0, metrics.clearancePending)} employees</span>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex justify-between items-start">
-               <div>
-                  <p className="text-sm font-medium text-slate-500">Active Personnel</p>
-                  <p className="text-3xl font-bold tracking-[-0.02em] text-slate-900 mt-2">{metrics.activePersonnel}</p>
-               </div>
-               <div className="p-2 bg-red-50 rounded-lg"><Users className="h-5 w-5 text-red-500" /></div>
-            </div>
-            <div className="mt-4 flex items-center text-sm text-slate-500 font-medium">
-               <span>{faculties.length} Faculty / {Math.max(0, metrics.activePersonnel - faculties.length)} Others</span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Detailed Reports Grids */}
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card className="col-span-1 shadow-sm border-slate-200">
-          <CardHeader>
-            <CardTitle>Departmental Attendance</CardTitle>
-            <CardDescription>Monthly attendance rates by department.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {metrics.departmental.map((d: any) => (
-             <div className="space-y-2" key={d.name}>
-               <div className="flex justify-between text-sm"><span>{d.name}</span><span className="font-bold">{d.percent}%</span></div>
-               <Progress value={d.percent} className="h-2" indicatorClassName={getDepartmentIndicatorClass(d.percent)} />
-             </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card className="col-span-1 shadow-sm border-slate-200">
-          <CardHeader>
-            <CardTitle>Clearance Document Status</CardTitle>
-            <CardDescription>Breakdown of pending administrative documents</CardDescription>
-          </CardHeader>
-          <CardContent>
-             <div className="space-y-4">
-                {metrics.docStats.length === 0 && <div className="text-sm text-slate-500">No clearance documents available</div>}
-                {metrics.docStats.map((d: any) => (
-                  <div key={d.label} className="flex justify-between items-center p-3 bg-slate-50 rounded-lg border border-slate-100">
-                    <div>
-                      <p className="font-medium text-slate-900">{d.label}</p>
-                      <p className="text-xs text-slate-500">Administrative document</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-slate-900">{d.pending}/{d.total}</p>
-                      <p className="text-xs text-rose-500 font-medium">Pending</p>
-                    </div>
-                  </div>
-                ))}
-             </div>
-          </CardContent>
-        </Card>
-      </div>
-
-    </div>
-    </RouteGuard>
+    </RouteGuardless>
   );
+}
+
+// no-op wrapper kept for structural symmetry with RouteGuard usage patterns elsewhere;
+// RouteGuard is already applied one level up in ReportsPage.
+function RouteGuardless({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
 }
