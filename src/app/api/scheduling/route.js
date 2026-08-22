@@ -3,6 +3,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { NextResponse } from "next/server";
 import { detectScheduleConflicts, generateConflictSuggestions } from "@/lib/scheduling/conflictDetection";
 import { getInitialStatusForCreator } from "@/lib/scheduling/approvalWorkflow";
+import { getDepartmentScope, hasDepartmentAccess } from "@/lib/scheduling/departmentAccess";
 
 /* SELECT fragments for GET */
 const BASE_SCHEDULE_SELECT = `
@@ -227,6 +228,7 @@ export async function GET(request) {
     const supabase = createSupabaseAdminClient();
     const { searchParams } = new URL(request.url);
     const facultyId = searchParams.get("facultyId");
+    const scope = await getDepartmentScope(supabase, searchParams.get("actorId"), searchParams.get("actorRole"));
 
     let query = supabase
       .from("schedules")
@@ -236,6 +238,19 @@ export async function GET(request) {
 
     if (facultyId) {
       query = query.eq("faculty_id", facultyId);
+    }
+
+    if (!scope.isAdmin) {
+      if (scope.departmentId == null) return NextResponse.json({ data: [] });
+      const { data: departmentFaculty, error: departmentError } = await supabase
+        .from("users")
+        .select("user_id")
+        .eq("department_id", scope.departmentId)
+        .in("role", ["faculty", "program_chair"]);
+      if (departmentError) throw departmentError;
+      const facultyIds = (departmentFaculty || []).map((faculty) => faculty.user_id);
+      if (!facultyIds.length) return NextResponse.json({ data: [] });
+      query = query.in("faculty_id", facultyIds);
     }
 
     let { data, error } = await query;
@@ -438,6 +453,23 @@ export async function POST(request) {
         },
         { status: 400 }
       );
+    }
+
+    const scope = await getDepartmentScope(supabase, createdBy, creatorRole);
+    if (!scope.isAdmin && !scope.actor) {
+      return NextResponse.json({ error: "Program chair account not found" }, { status: 403 });
+    }
+
+    const { data: targetFaculty, error: targetFacultyError } = await supabase
+      .from("users")
+      .select("user_id, department_id, role")
+      .eq("user_id", resolvedFaculty.userId)
+      .maybeSingle();
+    if (targetFacultyError || !targetFaculty) {
+      return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
+    }
+    if (!hasDepartmentAccess(scope, targetFaculty.department_id)) {
+      return NextResponse.json({ error: "You can only load schedules for your department" }, { status: 403 });
     }
     console.info("[SCHEDULING POST] resolvedFaculty:", resolvedFaculty);
     console.info("[SCHEDULING POST] resolvedCreator:", resolvedCreator);

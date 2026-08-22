@@ -52,7 +52,10 @@ function FacultyDashboardContent() {
 
   useEffect(() => {
     const loadSchedules = async () => {
-      const data = await scheduleService.getSchedules();
+      const stored = localStorage.getItem('user');
+      const currentUser = stored ? (JSON.parse(stored) as User) : null;
+      const actor = currentUser ? { id: String(currentUser.id), role: currentUser.role } : undefined;
+      const data = await scheduleService.getSchedules(undefined, actor);
       setSchedules(data);
     };
 

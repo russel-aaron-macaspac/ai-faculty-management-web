@@ -1,6 +1,7 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { NextResponse } from "next/server";
 import { getInitialStatusForCreator } from "@/lib/scheduling/approvalWorkflow";
+import { getDepartmentScope, hasDepartmentAccess } from "@/lib/scheduling/departmentAccess";
 
 function isMissingSectionColumnError(error) {
   const message = `${error?.message || ""} ${error?.details || ""}`.toLowerCase();
@@ -80,6 +81,23 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
     }
 
+    const scope = await getDepartmentScope(supabase, actorId, actorRole);
+    if (!scope.isAdmin && !scope.actor) {
+      return NextResponse.json({ error: "Program chair account not found" }, { status: 403 });
+    }
+
+    const { data: targetFaculty, error: targetFacultyError } = await supabase
+      .from("users")
+      .select("department_id")
+      .eq("user_id", facultyId)
+      .maybeSingle();
+    if (targetFacultyError || !targetFaculty) {
+      return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
+    }
+    if (!hasDepartmentAccess(scope, targetFaculty.department_id)) {
+      return NextResponse.json({ error: "You can only manage schedules for your department" }, { status: 403 });
+    }
+
     if (actorRole !== "admin" && String(schedule.created_by) !== String(actorId)) {
       return NextResponse.json({ error: "You can only edit schedules you created" }, { status: 403 });
     }
@@ -157,6 +175,23 @@ export async function DELETE(request, { params }) {
 
     if (fetchError || !schedule) {
       return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
+    }
+
+    const scope = await getDepartmentScope(supabase, actorId, actorRole);
+    if (!scope.isAdmin && !scope.actor) {
+      return NextResponse.json({ error: "Program chair account not found" }, { status: 403 });
+    }
+
+    const { data: targetFaculty, error: targetFacultyError } = await supabase
+      .from("users")
+      .select("department_id")
+      .eq("user_id", schedule.faculty_id)
+      .maybeSingle();
+    if (targetFacultyError || !targetFaculty) {
+      return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
+    }
+    if (!hasDepartmentAccess(scope, targetFaculty.department_id)) {
+      return NextResponse.json({ error: "You can only manage schedules for your department" }, { status: 403 });
     }
 
     if (actorRole !== "admin" && String(schedule.created_by) !== String(actorId)) {

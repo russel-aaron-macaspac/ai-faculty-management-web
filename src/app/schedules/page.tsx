@@ -57,7 +57,8 @@ function SchedulesContent() {
 
     const loadData = async () => {
       try {
-        const scheduleData = await scheduleService.getSchedules(parsed?.id);
+        const actor = parsed ? { id: String(parsed.id), role: parsed.role } : undefined;
+        const scheduleData = await scheduleService.getSchedules(parsed?.id, actor);
         setSchedules(scheduleData);
 
         if (parsed?.id && isFacultyLikeRole(parsed.role)) {

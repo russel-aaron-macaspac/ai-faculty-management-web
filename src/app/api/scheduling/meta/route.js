@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { NextResponse } from "next/server";
+import { getDepartmentScope } from "@/lib/scheduling/departmentAccess";
 
 function isMissingSectionsTableError(error) {
   const message = `${error?.message || ""} ${error?.details || ""}`.toLowerCase();
@@ -10,9 +11,11 @@ function isMissingSectionsTableError(error) {
   );
 }
 
-export async function GET() {
+export async function GET(request) {
   try {
     const supabase = createSupabaseAdminClient();
+    const { searchParams } = new URL(request.url);
+    const scope = await getDepartmentScope(supabase, searchParams.get("actorId"), searchParams.get("actorRole"));
 
     const [
       { data: faculties, error: facultyError },
@@ -23,7 +26,7 @@ export async function GET() {
       await Promise.all([
         supabase
           .from("users")
-          .select("user_id, supabase_id, first_name, middle_name, last_name, role, status_of_appointment")
+          .select("user_id, supabase_id, first_name, middle_name, last_name, role, status_of_appointment, department_id")
           .in("role", ["faculty", "program_chair"])
           .eq("status", "active")
           .order("last_name", { ascending: true }),
@@ -36,6 +39,10 @@ export async function GET() {
       console.error("[SCHEDULING META ERROR]", { facultyError, subjectError, roomError, sectionError });
       return NextResponse.json({ error: "Failed to fetch metadata" }, { status: 500 });
     }
+
+    const scopedFaculties = scope.isAdmin
+      ? faculties || []
+      : (scope.departmentId == null ? [] : (faculties || []).filter((faculty) => String(faculty.department_id) === String(scope.departmentId)));
 
     let normalizedSections = sections || [];
     if (sectionError && isMissingSectionsTableError(sectionError)) {
@@ -52,7 +59,7 @@ export async function GET() {
     }
 
     return NextResponse.json({
-      faculties: (faculties || [])
+      faculties: scopedFaculties
         .map((f) => ({
         // Keep IDs aligned with schedule rows, which store users.user_id in schedules.faculty_id.
         id: String(f.user_id ?? f.supabase_id),

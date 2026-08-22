@@ -18,7 +18,7 @@ export async function POST(request) {
 
     const { data: user, error: userError } = await supabase
       .from("users")
-      .select("user_id, supabase_id, email, role, first_name, middle_name, last_name, password_hash, status, phone_number, address, status_of_appointment")
+      .select("user_id, supabase_id, email, role, first_name, middle_name, last_name, password_hash, status, phone_number, address, status_of_appointment, department_id")
       .eq("email", email)
       .eq("status", "active")
       .single();
@@ -67,6 +67,7 @@ export async function POST(request) {
         phone: user.phone_number || null,
         address: user.address || null,
         statusOfAppointment: user.status_of_appointment || null,
+        department_id: user.department_id ?? null,
       },
     });
   } catch (err) {

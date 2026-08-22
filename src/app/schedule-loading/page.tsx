@@ -10,7 +10,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { CheckCircle2, Loader2, XCircle, ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
-import { useRouter } from 'next/navigation';
 import { Schedule } from '@/types/schedule';
 import { formatTimeToTwelveHour } from '@/lib/timeUtils';
 import { isFacultyLikeRole } from '@/lib/roleConfig';
@@ -128,7 +127,8 @@ function ScheduleLoadingContent() {
   const loadData = async (currentUser?: LocalUser | null) => {
     setLoading(true);
     try {
-      const [metaData, scheduleData] = await Promise.all([scheduleService.getMetadata(), scheduleService.getSchedules()]);
+      const actor = currentUser ? { id: String(currentUser.id), role: currentUser.role } : undefined;
+      const [metaData, scheduleData] = await Promise.all([scheduleService.getMetadata(actor), scheduleService.getSchedules(undefined, actor)]);
       setMeta(metaData);
       setSchedules(scheduleData);
 
@@ -152,26 +152,12 @@ function ScheduleLoadingContent() {
     }
   };
 
-  const router = useRouter();
-
   useEffect(() => {
     const raw = localStorage.getItem('user');
     const parsed = raw ? (JSON.parse(raw) as LocalUser) : null;
     setUser(parsed);
     void loadData(parsed);
   }, []);
-
-  // Restrict this feature to the program chair Imelda Tolentino only
-  useEffect(() => {
-    if (!user) return;
-    const name = (user.full_name || user.name || '').trim().toLowerCase();
-    const role = (user.role || '').toString().toLowerCase();
-    const isImelda = name === 'imelda tolentino' && role === 'program_chair';
-    if (!isImelda) {
-      // Redirect other users away from this page
-      router.push('/dashboard/faculty');
-    }
-  }, [user, router]);
 
   useEffect(() => {
     if (!meta.faculties.length) return;

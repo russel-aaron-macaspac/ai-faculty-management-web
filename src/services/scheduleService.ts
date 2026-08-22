@@ -59,8 +59,14 @@ interface SchedulingConflictResponse {
 }
 
 export const scheduleService = {
-  async getSchedules(facultyId?: string): Promise<Schedule[]> {
-    const query = facultyId ? `?facultyId=${encodeURIComponent(facultyId)}` : '';
+  async getSchedules(facultyId?: string, actor?: { id: string; role: string }): Promise<Schedule[]> {
+    const params = new URLSearchParams();
+    if (facultyId) params.set('facultyId', facultyId);
+    if (actor?.id) {
+      params.set('actorId', actor.id);
+      params.set('actorRole', actor.role);
+    }
+    const query = params.toString() ? `?${params.toString()}` : '';
     const res = await fetch(`/api/scheduling${query}`);
 
     if (!res.ok) {
@@ -72,13 +78,18 @@ export const scheduleService = {
     return data;
   },
 
-  async getMetadata(): Promise<{
+  async getMetadata(actor?: { id: string; role: string }): Promise<{
     faculties: Array<{ id: string; name: string; role: string }>;
     subjects: Array<{ id: string; code: string; name: string }>;
     rooms: Array<{ id: string; name: string; capacity: number }>;
     sections: Array<{ id: string; name: string }>;
   }> {
-    const res = await fetch('/api/scheduling/meta');
+    const params = new URLSearchParams();
+    if (actor?.id) {
+      params.set('actorId', actor.id);
+      params.set('actorRole', actor.role);
+    }
+    const res = await fetch(`/api/scheduling/meta${params.toString() ? `?${params.toString()}` : ''}`);
 
     if (!res.ok) {
       const text = await res.text();

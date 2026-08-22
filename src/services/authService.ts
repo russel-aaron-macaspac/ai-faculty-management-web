@@ -10,6 +10,7 @@ export interface AuthUser {
   role: UserRole;
   full_name: string;
   statusOfAppointment?: "full-time" | "part-time" | null;
+  department_id?: number | null;
 }
 
 export interface LoginResponse {
