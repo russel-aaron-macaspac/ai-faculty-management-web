@@ -110,7 +110,7 @@ function AccountCreationContent() {
               {form.formState.errors.firstName && <p className="text-sm text-red-600">{form.formState.errors.firstName.message}</p>}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="surname">Surname</Label>
+              <Label htmlFor="surname">Last Name</Label>
               <Input id="surname" autoComplete="family-name" placeholder="e.g. Santos" {...form.register('surname')} aria-invalid={!!form.formState.errors.surname} />
               {form.formState.errors.surname && <p className="text-sm text-red-600">{form.formState.errors.surname.message}</p>}
             </div>
