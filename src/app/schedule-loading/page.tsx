@@ -616,7 +616,7 @@ function ScheduleLoadingContent() {
 
             <Card>
               <CardHeader>
-                <CardTitle>{selectedFacultyName} Availability</CardTitle>
+                <CardTitle>Official Time — {selectedFacultyName}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {selectedFacultyAvailabilityContent}

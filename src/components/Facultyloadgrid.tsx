@@ -1,28 +1,5 @@
 'use client';
 
-/**
- * FacultyLoadGrid
- * ----------------
- * An Excel-like editable grid for building out a faculty member's full
- * Regular Load / Overload schedule in one sitting, then saving it all at
- * once — mirroring the paper "FACULTY LOAD & SCHEDULE" form, but backed by
- * your existing scheduleService.createSchedule (so conflict detection still
- * runs per class, exactly like the single-row form on the page already
- * does).
- *
- * Drop this into ScheduleLoadingContent, e.g. as another Card next to
- * "Program Chair Scheduling", passing the selected faculty and metadata:
- *
- *   <FacultyLoadGrid
- *     facultyId={selectedFacultyId}
- *     facultyName={selectedFacultyName}
- *     rooms={meta.rooms}
- *     subjects={meta.subjects}
- *     createdBy={currentUserName || user?.role || ''}
- *     creatorRole={user?.role || ''}
- *     onSaved={() => loadData(user)}
- *   />
- */
 
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
