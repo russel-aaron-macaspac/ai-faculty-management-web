@@ -493,7 +493,7 @@ function ScheduleLoadingContent() {
                   <div className="grid gap-1 border-y border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 sm:grid-cols-3">
                     <div><span className="font-semibold">Name of Faculty:</span> {faculty.name}</div>
                     <div><span className="font-semibold">Status of Appointment:</span> {(facultyMeta?.statusOfAppointment || faculty.statusOfAppointment || 'Not set').replace(/^\w/, (letter) => letter.toUpperCase())}</div>
-                    <div><span className="font-semibold">Designation:</span> {facultyMeta?.role === 'program_chair' ? 'Program Chair' : 'Faculty'}</div>
+                    <div><span className="font-semibold">Designation:</span> {facultyMeta?.role === 'program_chair' ? 'Program Chair' : facultyMeta?.role === 'dean' ? 'Dean' : 'Faculty'}</div>
                   </div>
                   {renderLoadMatrix('Regular Load', regularSchedules)}
                   {renderConsultationMatrix(faculty.id, consultationByFaculty[faculty.id] ?? [])}
