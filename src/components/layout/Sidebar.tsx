@@ -103,15 +103,7 @@ export function Sidebar({ user, collapsed = false, onToggle }: Readonly<SidebarP
   // Determine a display name that supports both `name` and legacy `full_name` fields
   const displayName = user?.name ?? (user as unknown as { full_name?: string })?.full_name ?? '';
 
-  const isImelda = (u?: User | null) => {
-    if (!u) return false;
-    const nameLike = (u.name ?? (u as unknown as { full_name?: string })?.full_name ?? '').trim().toLowerCase();
-    const role = (u.role || '').toString().toLowerCase();
-    return nameLike === 'imelda tolentino' && role === 'program_chair';
-  };
-
-  // Only expose schedule-loading to the program chair Imelda Tolentino
-  if (isImelda(user)) {
+  if (user?.role === 'program_chair') {
     links.push({ href: '/schedule-loading', label: 'Schedule Loading', icon: Calendar });
   }
 
