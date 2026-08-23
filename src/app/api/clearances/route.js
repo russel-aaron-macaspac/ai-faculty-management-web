@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
+import { getDepartmentScope } from "@/lib/scheduling/departmentAccess";
 import { NextResponse } from "next/server";
 
 const SELECT_FIELDS = `
@@ -51,11 +52,52 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
     const officeId = searchParams.get("officeId");
+    const actorId = searchParams.get("actorId");
+    const actorRole = searchParams.get("actorRole");
+    let scopedSupabaseIds = [];
+    let scopedNumericIds = [];
 
     let query = supabase
       .from("clearances")
       .select(SELECT_FIELDS)
       .order("document_id", { ascending: false });
+
+    if (actorRole === "program_chair") {
+      const scope = await getDepartmentScope(supabase, actorId, actorRole);
+      if (scope.departmentId == null) {
+        return NextResponse.json({ data: [] });
+      }
+
+      const { data: departmentUsers, error: departmentUsersError } = await supabase
+        .from("users")
+        .select("user_id, supabase_id")
+        .eq("department_id", scope.departmentId);
+
+      if (departmentUsersError) {
+        console.error("[CLEARANCES GET SCOPE ERROR]", departmentUsersError);
+        return NextResponse.json(
+          { error: "Failed to scope clearances", details: departmentUsersError },
+          { status: 500 }
+        );
+      }
+
+      scopedSupabaseIds = (departmentUsers || [])
+        .map((entry) => entry?.supabase_id)
+        .filter((value) => typeof value === "string" && value.trim() !== "");
+
+      scopedNumericIds = (departmentUsers || [])
+        .map((entry) => entry?.user_id)
+        .filter((value) => value != null)
+        .map((value) => String(value));
+
+      const scopedUserIds = scopedSupabaseIds.length > 0 ? scopedSupabaseIds : scopedNumericIds;
+
+      if (scopedUserIds.length === 0) {
+        return NextResponse.json({ data: [] });
+      }
+
+      query = query.in("user_id", scopedUserIds);
+    }
 
     if (userId) {
       query = query.eq("user_id", userId);
@@ -75,8 +117,33 @@ export async function GET(request) {
       );
     }
 
-    console.log("[CLEARANCES GET SUCCESS] Fetched", data?.length ?? 0, "clearances");
-    const formatted = (data || []).map(formatRow);
+    let scopedData = data || [];
+
+    if (
+      actorRole === "program_chair" &&
+      scopedData.length === 0 &&
+      !userId &&
+      scopedSupabaseIds.length > 0 &&
+      scopedNumericIds.length > 0
+    ) {
+      let fallbackQuery = supabase
+        .from("clearances")
+        .select(SELECT_FIELDS)
+        .order("document_id", { ascending: false })
+        .in("user_id", scopedNumericIds);
+
+      if (officeId) {
+        fallbackQuery = fallbackQuery.eq("office_id", officeId);
+      }
+
+      const { data: fallbackData, error: fallbackError } = await fallbackQuery;
+      if (!fallbackError && Array.isArray(fallbackData)) {
+        scopedData = fallbackData;
+      }
+    }
+
+    console.log("[CLEARANCES GET SUCCESS] Fetched", scopedData.length, "clearances");
+    const formatted = scopedData.map(formatRow);
 
     return NextResponse.json({ data: formatted });
   } catch (err) {

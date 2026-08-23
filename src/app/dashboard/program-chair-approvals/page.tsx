@@ -28,7 +28,7 @@ function ProgramChairApprovalsContent() {
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<StoredUser | null>(null);
 
-  const loadData = async () => {
+  const loadData = async (actor?: StoredUser | null) => {
     setLoading(true);
     try {
       const offices = await clearanceService.getOffices();
@@ -37,7 +37,11 @@ function ProgramChairApprovalsContent() {
       );
 
       if (matched?.id) {
-        const data = await clearanceService.getClearances(undefined, matched.id);
+        const scopedActor = actor ?? currentUser;
+        const data = await clearanceService.getClearances(undefined, matched.id, {
+          actorId: scopedActor?.supabase_id || String(scopedActor?.id || ''),
+          actorRole: scopedActor?.role,
+        });
         setRecords((data || []) as Clearance[]);
       } else {
         setRecords([]);
@@ -49,13 +53,19 @@ function ProgramChairApprovalsContent() {
 
   useEffect(() => {
     const raw = localStorage.getItem('user');
-    if (!raw) return;
+    if (!raw) {
+      void loadData();
+      return;
+    }
     try {
-      setCurrentUser(JSON.parse(raw) as StoredUser);
+      const parsed = JSON.parse(raw) as StoredUser;
+      setCurrentUser(parsed);
+      void loadData(parsed);
     } catch {
+      void loadData();
       // ignore
     }
-    void loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filtered = useMemo(() => {
