@@ -190,7 +190,7 @@ export function Sidebar({ user, collapsed = false, onToggle }: Readonly<SidebarP
           <div className={cn('flex min-w-0 flex-col', collapsed && 'hidden')}>
             <span className="truncate font-sans text-sm font-medium text-white">{displayName || user?.role}</span>
             <Badge variant="outline" className="mt-0.5 w-fit border-white/10 bg-transparent px-1.5 py-0 font-sans text-[10px] capitalize text-slate-400">
-              {user?.role}
+              {user?.role === 'program_chair' ? 'Program chair' : user?.role}
             </Badge>
           </div>
         </div>
