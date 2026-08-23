@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { CheckCircle2, Loader2, XCircle, ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react';
+import { CheckCircle2, Loader2, XCircle, ChevronDown, ChevronUp, Pencil, Trash2, Plus } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
 import { Schedule } from '@/types/schedule';
 import { formatTimeToTwelveHour } from '@/lib/timeUtils';
@@ -207,6 +207,11 @@ function ScheduleLoadingContent() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [consultationByFaculty, setConsultationByFaculty] = useState<Record<string, ConsultationRow[]>>({});
 
+  // Consultation hours edit dialog state
+  const [isConsultationDialogOpen, setIsConsultationDialogOpen] = useState(false);
+  const [consultationEditFacultyId, setConsultationEditFacultyId] = useState<string | null>(null);
+  const [consultationEditRows, setConsultationEditRows] = useState<ConsultationRow[]>([]);
+
   const toggleFaculty = (facultyId: string) => {
     setExpanded((prev) => ({ ...prev, [facultyId]: !prev[facultyId] }));
   };
@@ -232,6 +237,66 @@ function ScheduleLoadingContent() {
 
     setConsultationByFaculty(savedConsultationByFaculty);
   }, [facultiesList]);
+
+  // --- Consultation hours edit handlers ---
+
+  const openConsultationDialog = (facultyId: string) => {
+    const existing = consultationByFaculty[facultyId] ?? [];
+    setConsultationEditFacultyId(facultyId);
+    setConsultationEditRows(
+      existing.length > 0 ? existing.map((row) => ({ ...row })) : [{ day: 'Monday', startTime: '', endTime: '' }]
+    );
+    setIsConsultationDialogOpen(true);
+  };
+
+  const addConsultationRow = () => {
+    setConsultationEditRows((rows) => [...rows, { day: 'Monday', startTime: '', endTime: '' }]);
+  };
+
+  const updateConsultationRow = (index: number, next: Partial<ConsultationRow>) => {
+    setConsultationEditRows((rows) => rows.map((row, rowIndex) => (rowIndex === index ? { ...row, ...next } : row)));
+  };
+
+  const removeConsultationRow = (index: number) => {
+    setConsultationEditRows((rows) => rows.filter((_, rowIndex) => rowIndex !== index));
+  };
+
+  const handleSaveConsultationHours = () => {
+    if (!consultationEditFacultyId) return;
+
+    const invalidRow = consultationEditRows.find(
+      (row) => row.day && row.startTime && row.endTime && row.startTime >= row.endTime
+    );
+    if (invalidRow) {
+      toast({
+        title: 'Invalid time range',
+        description: 'End time must be after start time for each consultation row.',
+        type: 'warning',
+      });
+      return;
+    }
+
+    const validRows = consultationEditRows.filter((row) => row.day && row.startTime && row.endTime);
+
+    const storageKey = `faculty-load-times-${consultationEditFacultyId}`;
+    let existingStored: Record<string, unknown> = {};
+    const rawStored = localStorage.getItem(storageKey);
+    if (rawStored) {
+      try {
+        existingStored = JSON.parse(rawStored) as Record<string, unknown>;
+      } catch {
+        existingStored = {};
+      }
+    }
+
+    const nextStored = { ...existingStored, consultation: validRows };
+    localStorage.setItem(storageKey, JSON.stringify(nextStored));
+
+    setConsultationByFaculty((prev) => ({ ...prev, [consultationEditFacultyId]: validRows }));
+    setIsConsultationDialogOpen(false);
+    setConsultationEditFacultyId(null);
+    toast({ title: 'Saved', description: 'Consultation hours updated.', type: 'success' });
+  };
 
   // Extract selected faculty availability rendering to avoid nested ternary in JSX
   let selectedFacultyAvailabilityContent: ReactNode = null;
@@ -314,10 +379,15 @@ function ScheduleLoadingContent() {
     </div>
   );
 
-  const renderConsultationMatrix = (rows: ConsultationRow[]) => (
+  const renderConsultationMatrix = (facultyId: string, rows: ConsultationRow[]) => (
     <div className="overflow-x-auto px-4 pb-4">
-      <div className="mb-2 border-b border-slate-200 pb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-        Consultation Hours Schedule
+      <div className="mb-2 flex items-center justify-between gap-3 border-b border-slate-200 pb-2">
+        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Consultation Hours Schedule
+        </div>
+        <Button type="button" size="sm" variant="outline" onClick={() => openConsultationDialog(facultyId)}>
+          <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
+        </Button>
       </div>
       <Table>
         <TableHeader>
@@ -426,7 +496,7 @@ function ScheduleLoadingContent() {
                     <div><span className="font-semibold">Designation:</span> {facultyMeta?.role === 'program_chair' ? 'Program Chair' : 'Faculty'}</div>
                   </div>
                   {renderLoadMatrix('Regular Load', regularSchedules)}
-                  {renderConsultationMatrix(consultationByFaculty[faculty.id] ?? [])}
+                  {renderConsultationMatrix(faculty.id, consultationByFaculty[faculty.id] ?? [])}
                   {overloadSchedules.length > 0 && renderLoadMatrix('Overload', overloadSchedules)}
                   {renderFacultyTotals(facultySchedules)}
                 </div>
@@ -438,6 +508,11 @@ function ScheduleLoadingContent() {
     );
   }
   const selectedFacultyName = meta.faculties.find((faculty) => faculty.id === selectedFacultyId)?.name ?? 'Select a faculty member';
+
+  const consultationEditFacultyName =
+    meta.faculties.find((faculty) => faculty.id === consultationEditFacultyId)?.name ??
+    facultiesList.find((faculty) => faculty.id === consultationEditFacultyId)?.name ??
+    '';
 
   const handleApprovalDecision = async (scheduleId: string, action: 'approve' | 'reject') => {
     if (!user) return;
@@ -791,6 +866,99 @@ function ScheduleLoadingContent() {
             </Button>
             <Button type="button" onClick={handleUpdateSchedule} disabled={saving || !editSchedule}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isConsultationDialogOpen}
+        onOpenChange={(open) => {
+          setIsConsultationDialogOpen(open);
+          if (!open) {
+            setConsultationEditFacultyId(null);
+            setConsultationEditRows([]);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>
+              Edit Consultation Hours
+              {consultationEditFacultyName && (
+                <span className="mt-1 block text-sm font-normal text-slate-500">{consultationEditFacultyName}</span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {consultationEditRows.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                No consultation hours added yet.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {consultationEditRows.map((row, index) => (
+                  <div key={`consultation-row-${index}`} className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 p-3">
+                    <div className="min-w-[140px]">
+                      <div className="mb-1 text-xs font-medium text-slate-600">Day</div>
+                      <Select value={row.day} onValueChange={(value) => updateConsultationRow(index, { day: value || 'Monday' })}>
+                        <SelectTrigger className="h-10">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DAYS.map((day) => (
+                            <SelectItem key={day} value={day}>
+                              {day}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <div className="mb-1 text-xs font-medium text-slate-600">Start Time</div>
+                      <Input
+                        type="time"
+                        className="h-10"
+                        value={row.startTime}
+                        onChange={(event) => updateConsultationRow(index, { startTime: event.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <div className="mb-1 text-xs font-medium text-slate-600">End Time</div>
+                      <Input
+                        type="time"
+                        className="h-10"
+                        value={row.endTime}
+                        onChange={(event) => updateConsultationRow(index, { endTime: event.target.value })}
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="ml-auto text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                      onClick={() => removeConsultationRow(index)}
+                      aria-label="Remove consultation row"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <Button type="button" variant="outline" size="sm" onClick={addConsultationRow}>
+              <Plus className="mr-1 h-4 w-4" /> Add Row
+            </Button>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsConsultationDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleSaveConsultationHours}>
+              Save Consultation Hours
             </Button>
           </DialogFooter>
         </DialogContent>
