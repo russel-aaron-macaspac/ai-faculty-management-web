@@ -52,7 +52,6 @@ export function Sidebar({ user, collapsed = false, onToggle }: Readonly<SidebarP
     { href: '/dashboard/admin/accounts', label: 'Account Creation', icon: UserPlus },
     { href: '/faculty', label: 'Faculty Management', icon: Users },
     { href: '/attendance', label: 'Attendance Monitoring', icon: Clock },
-    { href: '/clearance', label: 'Clearance Compliance', icon: FileCheck2 },
     { href: '/reports', label: 'Reports', icon: BarChart3 },
     { href: '/dashboard/profile', label: 'My Profile', icon: UserSquare2 },
     { href: '/dashboard/changepassword', label: 'Change Password', icon: LockIcon },
