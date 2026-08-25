@@ -37,11 +37,15 @@ function ProgramChairApprovalsContent() {
       );
 
       if (matched?.id) {
-     const data = await clearanceService.getClearances(undefined, matched.id);
-      setRecords((data || []) as Clearance[]);
-}  else {
-  setRecords([]);
-}
+        const scopedActor = actor ?? currentUser;
+        const data = await clearanceService.getClearances(undefined, matched.id, {
+          actorId: scopedActor?.supabase_id || String(scopedActor?.id || ''),
+          actorRole: scopedActor?.role,
+        });
+        setRecords((data || []) as Clearance[]);
+      } else {
+        setRecords([]);
+      }
     } finally {
       setLoading(false);
     }
