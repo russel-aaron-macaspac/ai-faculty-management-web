@@ -55,7 +55,7 @@ export async function PATCH(request, { params }) {
     const supabase = createSupabaseAdminClient();
     const { id } = await params;
     const body = await request.json();
-    const { status, rejectionReason, reviewedBy } = body;
+    const { status, rejectionReason, reviewedBy, reviewedByName, reviewedByRole } = body;
 
     if (!status) {
       return NextResponse.json(
@@ -101,6 +101,23 @@ export async function PATCH(request, { params }) {
         },
         { status: 500 }
       );
+    }
+
+    if (status === "approved" || status === "rejected") {
+      const { error: auditError } = await supabase
+        .from("clearance_audit_log")
+        .insert({
+          clearance_id: id,
+          action: status,
+          performed_by: reviewedByName ?? reviewedBy ?? null,
+          performer_role: reviewedByRole ?? null,
+          details: JSON.stringify(rejectionReason || `${status === "approved" ? "Clearance approved" : "Clearance rejected"}${reviewedByName ? ` by ${reviewedByName}` : ""}`),
+          created_at: new Date().toISOString(),
+        });
+
+      if (auditError) {
+        console.error("[CLEARANCES PATCH AUDIT ERROR]", auditError);
+      }
     }
 
     const { data: row, error: selectError } = await supabase

@@ -134,7 +134,7 @@ export default function ClearancePage() {
 
     setUploading(true);
     try {
-      await clearanceService.uploadDocument(employeeId, 0, docName.trim());
+      await clearanceService.uploadDocument(employeeId, 0, docName.trim(), undefined, { name: currentUser.name ?? currentUser.full_name, role: currentUser.role });
       setIsUploadOpen(false);
       setDocName('Safety Training Certificate');
       void loadData(currentUser ?? undefined);
@@ -165,7 +165,7 @@ export default function ClearancePage() {
 
     setSubmittingOfficeId(officeId);
     try {
-      await clearanceService.uploadDocument(employeeId, Number(officeId), officeName);
+      await clearanceService.uploadDocument(employeeId, Number(officeId), officeName, undefined, { name: currentUser.name ?? currentUser.full_name, role: currentUser.role });
       await loadData(currentUser);
       toast({ title: 'Clearance Submitted', description: `${officeName} has been submitted for review.`, type: 'success' });
     } catch (error) {
@@ -308,7 +308,7 @@ export default function ClearancePage() {
 
     setActionLoadingId(record.id);
     try {
-      await clearanceService.updateStatus(record.id, decision, reason, reviewerId);
+      await clearanceService.updateStatus(record.id, decision, reason, reviewerId, currentUser.full_name, currentUser.role);
       await loadData(currentUser);
       let toastType: 'success' | 'error' | 'info' = 'info';
       if (decision === 'approved') {

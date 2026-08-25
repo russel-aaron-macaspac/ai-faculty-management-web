@@ -40,7 +40,8 @@ export const clearanceService = {
     userId: string,
     officeId: number,
     originalFilename?: string,
-    filePath?: string
+    filePath?: string,
+    actor?: { name?: string; role?: string }
   ) {
     const res = await fetch('/api/clearances', {
       method: 'POST',
@@ -50,6 +51,8 @@ export const clearanceService = {
         office_id: officeId,
         original_filename: originalFilename ?? null,
         file_path: filePath ?? null,
+        actor_name: actor?.name,
+        actor_role: actor?.role,
       }),
     });
 

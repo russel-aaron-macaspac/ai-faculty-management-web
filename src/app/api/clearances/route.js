@@ -1,6 +1,7 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { getDepartmentScope } from "@/lib/scheduling/departmentAccess";
 import { NextResponse } from "next/server";
+import { recordClearanceAuditEvent } from "@/lib/auditLog";
 
 const SELECT_FIELDS = `
   document_id,
@@ -193,7 +194,9 @@ async function handleClearanceInsertError(
   user_id,
   office_id,
   original_filename,
-  file_path
+  file_path,
+  actorName,
+  actorRole
 ) {
   console.error("[POST /api/clearances]", error);
 
@@ -232,6 +235,16 @@ async function handleClearanceInsertError(
       );
     }
 
+    await recordClearanceAuditEvent(supabase, {
+      clearanceId: existing.document_id,
+      actorName,
+      actorRole,
+      category: "Clearance",
+      action: "resubmitted",
+      target: `Clearance #${existing.document_id}`,
+      details: `Document resubmitted by user #${user_id}`,
+    });
+
     return NextResponse.json({ data: formatRow(updated) });
   }
   // If the existing record has no file (file_path missing) or the stored file cannot be found,
@@ -266,6 +279,16 @@ async function handleClearanceInsertError(
         );
       }
 
+      await recordClearanceAuditEvent(supabase, {
+        clearanceId: existing.document_id,
+        actorName,
+        actorRole,
+        category: "Clearance",
+        action: "resubmitted",
+        target: `Clearance #${existing.document_id}`,
+        details: `Document resubmitted by user #${user_id}`,
+      });
+
       return NextResponse.json({ data: formatRow(updated) });
     }
   } catch (checkErr) {
@@ -289,6 +312,8 @@ export async function POST(req) {
       const form = await req.formData();
       const user_id = form.get('user_id');
       const office_id = form.get('office_id');
+      const actorName = form.get('actor_name');
+      const actorRole = form.get('actor_role');
 
       if (!user_id || !office_id) {
         return NextResponse.json({ error: 'Missing user_id or office_id' }, { status: 400 });
@@ -342,13 +367,25 @@ export async function POST(req) {
               String(user_id),
               Number(office_id),
               f.name,
-              destPath
+              destPath,
+              actorName,
+              actorRole
             );
 
             // If the error handler returned a response, push that as result
             results.push({ success: resp?.data ? true : false, data: resp?.data ?? null, error: resp?.error ?? null });
             continue;
           }
+
+          await recordClearanceAuditEvent(supabase, {
+            clearanceId: data.document_id,
+            actorName,
+            actorRole,
+            category: "Clearance",
+            action: "submitted",
+            target: `Clearance #${data.document_id}`,
+            details: `Document submitted by user #${user_id}`,
+          });
 
           results.push({ success: true, data });
         } catch (err) {
@@ -362,7 +399,7 @@ export async function POST(req) {
 
     // Otherwise parse JSON body for single-record submissions
     const body = await req.json();
-    const { user_id, office_id, original_filename, file_path } = body || {};
+    const { user_id, office_id, original_filename, file_path, actor_name: actorName, actor_role: actorRole } = body || {};
 
     if (!user_id || !office_id) {
       return NextResponse.json(
@@ -393,11 +430,23 @@ export async function POST(req) {
         user_id,
         office_id,
         original_filename,
-        file_path
+        file_path,
+        actorName,
+        actorRole
       );
     }
 
     const formatted = formatRow(data);
+
+    await recordClearanceAuditEvent(supabase, {
+      clearanceId: data.document_id,
+      actorName,
+      actorRole,
+      category: "Clearance",
+      action: "submitted",
+      target: `Clearance #${data.document_id}`,
+      details: `Document submitted by user #${user_id}`,
+    });
 
     return NextResponse.json({ data: formatted });
   } catch (err) {

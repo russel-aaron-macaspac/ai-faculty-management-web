@@ -51,7 +51,7 @@ export async function POST(request, { params }) {
             action: 'approved',
             performed_by: isInteger(reviewedBy) ? Number(reviewedBy) : null,
             performer_role: reviewedByRole,
-            details: remarks || 'Clearance approved',
+            details: JSON.stringify(remarks || 'Clearance approved'),
             created_at: new Date().toISOString(),
           },
         ]);

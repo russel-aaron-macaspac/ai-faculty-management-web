@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { detectScheduleConflicts, generateConflictSuggestions } from "@/lib/scheduling/conflictDetection";
 import { getInitialStatusForCreator } from "@/lib/scheduling/approvalWorkflow";
 import { getDepartmentScope, hasDepartmentAccess } from "@/lib/scheduling/departmentAccess";
+import { recordAuditEvent } from "@/lib/auditLog";
 
 /* SELECT fragments for GET */
 const BASE_SCHEDULE_SELECT = `
@@ -598,6 +599,15 @@ export async function POST(request) {
       console.error("[SCHEDULING POST ERROR] No row returned after insert");
       return NextResponse.json({ error: "Schedule insert returned no data" }, { status: 500 });
     }
+
+    await recordAuditEvent(supabase, {
+      actorName: body.createdByName,
+      actorRole: creatorRole,
+      category: "Schedule",
+      action: "generated",
+      target: `Schedule #${inserted.id}`,
+      details: `${day} ${normalizedStart}-${normalizedEnd}`,
+    });
 
     return NextResponse.json({ message: "Schedule created", id: inserted.id }, { status: 201 });
   } catch (err) {

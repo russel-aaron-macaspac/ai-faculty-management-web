@@ -165,11 +165,11 @@ export const scheduleService = {
     return data;
   },
 
-  async saveFacultyAvailability(facultyId: string, entries: Array<{ day: string; startTime: string; endTime: string }>) {
+  async saveFacultyAvailability(facultyId: string, entries: Array<{ day: string; startTime: string; endTime: string }>, actor?: { name?: string; role?: string }) {
     const res = await fetch('/api/scheduling/availability', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ facultyId, entries }),
+      body: JSON.stringify({ facultyId, entries, actorName: actor?.name, actorRole: actor?.role }),
     });
 
     if (!res.ok) {

@@ -52,7 +52,7 @@ export async function POST(request, { params }) {
             action: 'rejected',
             performed_by: isInteger(reviewedBy) ? Number(reviewedBy) : null,
             performer_role: reviewedByRole,
-            details: rejectionReason,
+            details: JSON.stringify(rejectionReason),
             created_at: new Date().toISOString(),
           },
         ]);

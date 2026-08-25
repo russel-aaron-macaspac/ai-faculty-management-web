@@ -88,7 +88,7 @@ function ProgramChairApprovalsContent() {
     setActionLoadingId(record.id);
     try {
       const reviewerId = currentUser.supabase_id || String(currentUser.id || '');
-      await clearanceService.updateStatus(record.id, decision, reason, reviewerId);
+      await clearanceService.updateStatus(record.id, decision, reason, reviewerId, currentUser.full_name, currentUser.role);
       await loadData();
 
       let toastType: 'success' | 'error' | 'info' = 'info';

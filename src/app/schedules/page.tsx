@@ -206,7 +206,7 @@ function SchedulesContent() {
     setSaving(true);
     setAvailabilityError('');
     try {
-      await scheduleService.saveFacultyAvailability(String(user.id), rowsToSave);
+      await scheduleService.saveFacultyAvailability(String(user.id), rowsToSave, { name: user.name ?? user.full_name, role: user.role });
       setAvailabilityRows(rowsToSave);
       toast({ title: 'Availability Saved', description: 'Availability saved.', type: 'success' });
     } catch (error) {

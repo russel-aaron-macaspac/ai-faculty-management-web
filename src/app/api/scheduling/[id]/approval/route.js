@@ -62,6 +62,7 @@ export async function POST(request, { params }) {
       role,
       action,
       remarks: remarks || null,
+      created_by: Number.isInteger(Number(actorId)) ? Number(actorId) : null,
     });
 
     if (logError) {

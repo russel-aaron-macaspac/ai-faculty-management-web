@@ -5,7 +5,7 @@ import { RouteGuard } from '@/components/RouteGuard';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Search, Loader2, ClipboardList, FileCheck2, CalendarCheck2 } from 'lucide-react';
+import { Search, Loader2, ClipboardList, FileCheck2, CalendarCheck2, Download, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 
 type AuditEntry = {
@@ -54,6 +54,9 @@ export default function ReportsPage() {
 function AuditTrailContent() {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshTick, setRefreshTick] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<'all' | AuditEntry['category']>('all');
 
@@ -61,16 +64,23 @@ function AuditTrailContent() {
     let mounted = true;
 
     async function load() {
-      setLoading(true);
+      if (refreshTick > 0) setRefreshing(true);
+      else setLoading(true);
+      setError(null);
       try {
         const res = await fetch('/api/audit-log', { cache: 'no-store' });
         const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'Failed to load audit trail.');
         if (!mounted) return;
         setEntries(Array.isArray(json.data) ? json.data : []);
       } catch (err) {
         console.error('[ReportsPage] failed to load audit log', err);
+        if (mounted) setError(err instanceof Error ? err.message : 'Failed to load audit trail.');
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     }
 
@@ -78,7 +88,7 @@ function AuditTrailContent() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [refreshTick]);
 
   const filtered = useMemo(() => {
     const term = searchTerm.toLowerCase();
@@ -106,6 +116,27 @@ function AuditTrailContent() {
   const getActionBadgeClass = (action: string) =>
     ACTION_BADGE_CLASS[action.toLowerCase()] ?? 'bg-slate-100 text-slate-700';
 
+  function exportCsv() {
+    const headers = ['Timestamp', 'Performed By', 'Role', 'Category', 'Action', 'Target', 'Details'];
+    const escape = (value: string) => `"${value.replaceAll('"', '""')}"`;
+    const rows = filtered.map((entry) => [
+      formatTimestamp(entry.timestamp),
+      entry.actorName ?? 'System',
+      entry.actorRole ?? '',
+      entry.category,
+      entry.action.replaceAll('_', ' '),
+      entry.target,
+      entry.details ?? '',
+    ]);
+    const csv = [headers, ...rows].map((row) => row.map(escape).join(',')).join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `audit-trail-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   let tableRows: React.ReactNode;
   if (loading) {
     tableRows = (
@@ -113,6 +144,14 @@ function AuditTrailContent() {
         <TableCell colSpan={5} className="text-center py-10 text-slate-500">
           <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-slate-400" />
           Loading audit trail...
+        </TableCell>
+      </TableRow>
+    );
+  } else if (error) {
+    tableRows = (
+      <TableRow>
+        <TableCell colSpan={5} className="py-10 text-center text-rose-600">
+          {error}
         </TableCell>
       </TableRow>
     );
@@ -162,6 +201,16 @@ function AuditTrailContent() {
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#D4A017]">Institutional reporting</p>
             <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Audit Trail Report</h1>
             <p className="text-slate-500">A record of clearance and schedule approval actions performed by all users.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => setRefreshTick((tick) => tick + 1)} disabled={loading || refreshing}>
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            <Button type="button" size="sm" onClick={exportCsv} disabled={loading || filtered.length === 0}>
+              <Download className="h-4 w-4" />
+              Export CSV
+            </Button>
           </div>
         </div>
 

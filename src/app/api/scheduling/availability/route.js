@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { NextResponse } from "next/server";
+import { recordAuditEvent } from "@/lib/auditLog";
 
 function isValidUUID(uuid) {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -61,7 +62,7 @@ export async function GET(request) {
 export async function PUT(request) {
   try {
     const body = await request.json();
-    const { facultyId, entries } = body;
+    const { facultyId, entries, actorName, actorRole } = body;
 
     if (!facultyId) {
       return NextResponse.json({ error: "facultyId is required" }, { status: 400 });
@@ -109,6 +110,14 @@ export async function PUT(request) {
     }
 
     if (entries.length === 0) {
+      await recordAuditEvent(supabase, {
+        actorName,
+        actorRole,
+        category: "Schedule",
+        action: "availability_updated",
+        target: `Faculty #${facultyId}`,
+        details: "Availability cleared",
+      });
       return NextResponse.json({ message: "Availability updated", data: [] });
     }
 
@@ -128,6 +137,15 @@ export async function PUT(request) {
       console.error("[AVAILABILITY PUT INSERT ERROR]", insertError);
       return NextResponse.json({ error: "Failed to save availability" }, { status: 500 });
     }
+
+    await recordAuditEvent(supabase, {
+      actorName,
+      actorRole,
+      category: "Schedule",
+      action: "availability_updated",
+      target: `Faculty #${facultyId}`,
+      details: `${entries.length} availability window${entries.length === 1 ? "" : "s"} saved`,
+    });
 
     return NextResponse.json({
       message: "Availability updated",
