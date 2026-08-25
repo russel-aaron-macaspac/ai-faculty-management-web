@@ -302,9 +302,13 @@ export default function ClearancePage() {
       reason = prompt('Enter rejection reason:') || undefined;
     }
 
+    // reviewed_by is an integer column (matches users.user_id), not a uuid,
+    // so always send the numeric id here — never supabase_id.
+    const reviewerId = currentUser.id != null ? String(currentUser.id) : undefined;
+
     setActionLoadingId(record.id);
     try {
-      await clearanceService.updateStatus(record.id, decision, reason);
+      await clearanceService.updateStatus(record.id, decision, reason, reviewerId);
       await loadData(currentUser);
       let toastType: 'success' | 'error' | 'info' = 'info';
       if (decision === 'approved') {

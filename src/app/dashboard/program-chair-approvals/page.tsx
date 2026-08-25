@@ -221,6 +221,7 @@ function ProgramChairApprovalsContent() {
                 <TableHead>Submission Date</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Decision</TableHead>
+ 
               </TableRow>
             </TableHeader>
             <TableBody>

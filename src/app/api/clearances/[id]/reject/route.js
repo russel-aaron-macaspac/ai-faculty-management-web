@@ -1,7 +1,7 @@
 import { createSupabaseAdminClient } from '@/lib/supabase/server-client';
 
-const isUuid = (value) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
+// reviewed_by is an integer column (matches users.user_id), not a uuid.
+const isInteger = (value) => /^-?\d+$/.test(String(value ?? '').trim());
 
 /**
  * POST /api/clearances/[id]/reject
@@ -26,7 +26,7 @@ export async function POST(request, { params }) {
       .from('clearances')
       .update({
         status: 'rejected',
-        reviewed_by: isUuid(reviewedBy) ? reviewedBy : null,
+        reviewed_by: isInteger(reviewedBy) ? Number(reviewedBy) : null,
         reviewed_at: new Date().toISOString(),
         rejection_reason: rejectionReason,
         additional_notes: rejectionReason,
@@ -35,39 +35,51 @@ export async function POST(request, { params }) {
       .select();
 
     if (updateError) {
-      return Response.json({ error: updateError.message }, { status: 500 });
+      console.error('[CLEARANCES REJECT ERROR]', updateError);
+      return Response.json(
+        { error: updateError.message, code: updateError.code, hint: updateError.hint ?? null },
+        { status: 500 }
+      );
     }
 
     // Log rejection as audit entry
-    await supabase
-      .from('clearance_audit_log')
-      .insert([
-        {
-          clearance_id: id,
-          action: 'rejected',
-          performed_by: reviewedByName,
-          performer_role: reviewedByRole,
-          details: rejectionReason,
-          created_at: new Date().toISOString(),
-        },
-      ]);
-
-    // Create notification for user
-    const clearance = updateData?.[0];
-    if (clearance) {
+    try {
       await supabase
-        .from('notifications')
+        .from('clearance_audit_log')
         .insert([
           {
-            user_id: clearance.user_id,
-            title: 'Clearance Rejected',
-            message: `Your ${clearance.document_type || 'clearance'} was rejected. Reason: ${rejectionReason.substring(0, 100)}...`,
-            type: 'clearance_rejected',
-            related_id: id,
-            is_read: false,
+            clearance_id: id,
+            action: 'rejected',
+            performed_by: isInteger(reviewedBy) ? Number(reviewedBy) : null,
+            performer_role: reviewedByRole,
+            details: rejectionReason,
             created_at: new Date().toISOString(),
           },
         ]);
+    } catch (auditErr) {
+      console.error('[CLEARANCES REJECT] audit log failed:', auditErr);
+    }
+
+    // Create notification for user
+    try {
+      const clearance = updateData?.[0];
+      if (clearance?.user_id) {
+        await supabase
+          .from('notifications')
+          .insert([
+            {
+              user_id: clearance.user_id,
+              title: 'Clearance Rejected',
+              message: `Your ${clearance.document_type || 'clearance'} was rejected. Reason: ${rejectionReason.substring(0, 100)}...`,
+              type: 'clearance_rejected',
+              related_id: id,
+              is_read: false,
+              created_at: new Date().toISOString(),
+            },
+          ]);
+      }
+    } catch (notifErr) {
+      console.error('[CLEARANCES REJECT] notification failed:', notifErr);
     }
 
     return Response.json(

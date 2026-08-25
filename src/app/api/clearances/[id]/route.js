@@ -45,8 +45,9 @@ function formatRow(d) {
   };
 }
 
-function isUuid(value) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ""));
+// reviewed_by is an integer column (matches users.user_id), not a uuid.
+function isInteger(value) {
+  return /^-?\d+$/.test(String(value ?? "").trim());
 }
 
 export async function PATCH(request, { params }) {
@@ -83,7 +84,7 @@ export async function PATCH(request, { params }) {
       .update({
         status,
         rejection_reason: status === "rejected" ? rejectionReason : null,
-        reviewed_by:      isUuid(reviewedBy) ? reviewedBy : null,
+        reviewed_by:      isInteger(reviewedBy) ? Number(reviewedBy) : null,
         reviewed_at:      new Date().toISOString(),
         updated_at:       new Date().toISOString(),
       })
@@ -92,7 +93,12 @@ export async function PATCH(request, { params }) {
     if (updateError) {
       console.error("[CLEARANCES PATCH ERROR]", updateError);
       return NextResponse.json(
-        { error: "Failed to update clearance status" },
+        {
+          error: "Failed to update clearance status",
+          details: updateError.message,
+          code: updateError.code,
+          hint: updateError.hint ?? null,
+        },
         { status: 500 }
       );
     }
@@ -116,7 +122,7 @@ export async function PATCH(request, { params }) {
   } catch (err) {
     console.error("[CLEARANCES PATCH ERROR]", err);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Internal server error", details: err instanceof Error ? err.message : String(err) },
       { status: 500 }
     );
   }
