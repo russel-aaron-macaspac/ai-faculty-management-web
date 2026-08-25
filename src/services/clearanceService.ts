@@ -98,12 +98,14 @@ export const clearanceService = {
     id: string,
     status: string,
     rejectionReason?: string,
-    reviewedBy?: string
+    reviewedBy?: string,
+    reviewedByName?: string,
+    reviewedByRole?: string
   ) {
     const res = await fetch(`/api/clearances/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status, rejectionReason, reviewedBy }),
+      body: JSON.stringify({ status, rejectionReason, reviewedBy, reviewedByName, reviewedByRole }),
     });
     if (!res.ok) {
       const { error } = await res.json();
