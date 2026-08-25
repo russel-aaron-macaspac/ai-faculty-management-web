@@ -121,12 +121,17 @@ export default function ClearancePage() {
     event.preventDefault();
     setUploadError('');
 
+    if (!currentUser) {
+      setUploadError('Please sign in again.');
+      return;
+    }
+
     if (!docName.trim()) {
       setUploadError('Document name is required.');
       return;
     }
 
-    const employeeId = currentUser?.supabase_id ?? '';
+    const employeeId = currentUser.supabase_id ?? '';
     if (!employeeId) {
       setUploadError('Please sign in again.');
       return;
