@@ -3,16 +3,10 @@ export const clearanceService = {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
   },
 
-  async getClearances(
-    userId?: string,
-    officeId?: string,
-    options?: { actorId?: string; actorRole?: string }
-  ) {
+  async getClearances(userId?: string, officeId?: string) {
     const params = new URLSearchParams();
     if (userId) params.set('userId', userId);
     if (officeId) params.set('officeId', officeId);
-    if (options?.actorId) params.set('actorId', options.actorId);
-    if (options?.actorRole) params.set('actorRole', options.actorRole);
 
     const url = params.toString()
       ? `/api/clearances?${params.toString()}`
@@ -95,12 +89,14 @@ export const clearanceService = {
     id: string,
     status: string,
     rejectionReason?: string,
-    reviewedBy?: string
+    reviewedBy?: string,
+    reviewedByName?: string,
+    reviewedByRole?: string
   ) {
     const res = await fetch(`/api/clearances/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status, rejectionReason, reviewedBy }),
+      body: JSON.stringify({ status, rejectionReason, reviewedBy, reviewedByName, reviewedByRole }),
     });
     if (!res.ok) {
       const { error } = await res.json();
