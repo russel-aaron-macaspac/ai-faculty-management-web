@@ -15,6 +15,7 @@ import { formatTimeToTwelveHour } from '@/lib/timeUtils';
 import { isFacultyLikeRole } from '@/lib/roleConfig';
 import { toast } from '@/lib/toast';
 import { FacultyLoadGrid } from '@/components/Facultyloadgrid';
+import { AIScheduleGenerator } from '@/components/AIScheduleGenerator';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const APPROVAL_ROLES = new Set(['dean', 'ovpaa', 'registrar', 'hro']);
@@ -127,6 +128,8 @@ function ScheduleLoadingContent() {
   const [pendingApprovals, setPendingApprovals] = useState<Schedule[]>([]);
   const [meta, setMeta] = useState<SchedulingMeta>({ faculties: [], subjects: [], rooms: [], sections: [] });
   const [selectedFacultyId, setSelectedFacultyId] = useState('');
+  const [facultySearch, setFacultySearch] = useState('');
+  const [isFacultyListMinimized, setIsFacultyListMinimized] = useState(true);
   const [selectedFacultyLoading, setSelectedFacultyLoading] = useState(false);
   const [selectedFacultyAvailability, setSelectedFacultyAvailability] = useState<Array<{ day: string; startTime: string; endTime: string }>>([]);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -204,6 +207,12 @@ function ScheduleLoadingContent() {
   }, [selectedFacultyId]);
 
   const visibleSchedules = useMemo(() => schedules, [schedules]);
+  const filteredFaculties = useMemo(() => {
+    const query = facultySearch.trim().toLowerCase();
+    if (!query) return meta.faculties;
+
+    return meta.faculties.filter((faculty) => faculty.name.toLowerCase().includes(query));
+  }, [facultySearch, meta.faculties]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [consultationByFaculty, setConsultationByFaculty] = useState<Record<string, ConsultationRow[]>>({});
 
@@ -648,36 +657,82 @@ function ScheduleLoadingContent() {
       </div>
 
       {isFacultyLikeRole(user?.role) && (
-        <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+        <div className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Faculty List</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between gap-3">
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle>Faculty List</CardTitle>
+                <span className="text-xs font-medium text-slate-500">
+                  {meta.faculties.length} {meta.faculties.length === 1 ? 'faculty' : 'faculties'}
+                </span>
+              </div>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                onClick={() => setIsFacultyListMinimized((current) => !current)}
+                aria-label={isFacultyListMinimized ? 'Restore faculty list' : 'Minimize faculty list'}
+                title={isFacultyListMinimized ? 'Restore faculty list' : 'Minimize faculty list'}
+              >
+                {isFacultyListMinimized ? <ChevronDown /> : <ChevronUp />}
+              </Button>
             </CardHeader>
-            <CardContent className="space-y-3">
+            {!isFacultyListMinimized && <CardContent className="space-y-3">
               {meta.faculties.length === 0 ? (
                 <div className="text-sm text-slate-500">No faculty records available.</div>
               ) : (
-                meta.faculties.map((faculty) => {
-                  const isSelected = faculty.id === selectedFacultyId;
-                  return (
-                    <button
-                      key={faculty.id}
-                      type="button"
-                      onClick={() => setSelectedFacultyId(faculty.id)}
-                      className={`w-full rounded-lg border px-3 py-3 text-left transition-colors ${
-                        isSelected ? 'border-red-300 bg-red-50 text-red-900' : 'border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50'
-                      }`}
-                    >
-                      <div className="font-medium">{faculty.name}</div>
-                      <div className="text-xs text-slate-500">Click to view saved availability</div>
-                    </button>
-                  );
-                })
+                <>
+                  <Input
+                    value={facultySearch}
+                    onChange={(event) => setFacultySearch(event.target.value)}
+                    placeholder="Search faculty..."
+                    aria-label="Search faculty"
+                  />
+                  <div className="flex items-center justify-between text-xs text-slate-500">
+                    <span>{filteredFaculties.length} matching</span>
+                    {facultySearch && <button type="button" className="font-medium text-red-700 hover:text-red-900" onClick={() => setFacultySearch('')}>Clear</button>}
+                  </div>
+                  <div className="max-h-[min(60vh,30rem)] space-y-2 overflow-y-auto pr-1">
+                    {filteredFaculties.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-slate-300 px-3 py-6 text-center text-sm text-slate-500">
+                        No faculty matches your search.
+                      </div>
+                    ) : (
+                      filteredFaculties.map((faculty) => {
+                        const isSelected = faculty.id === selectedFacultyId;
+                        return (
+                          <button
+                            key={faculty.id}
+                            type="button"
+                            onClick={() => setSelectedFacultyId(faculty.id)}
+                            className={`w-full rounded-lg border px-3 py-3 text-left transition-colors ${
+                              isSelected ? 'border-red-300 bg-red-50 text-red-900' : 'border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className="font-medium">{faculty.name}</div>
+                            <div className="text-xs text-slate-500">Click to view saved availability</div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </>
               )}
-            </CardContent>
+            </CardContent>}
           </Card>
 
           <div className="space-y-6">
+            <AIScheduleGenerator
+              key={`ai-${selectedFacultyId}`}
+              facultyId={selectedFacultyId}
+              facultyName={selectedFacultyName}
+              subjects={meta.subjects}
+              rooms={meta.rooms}
+              createdBy={user?.id || ''}
+              creatorRole={user?.role || ''}
+              onSaved={() => loadData(user)}
+            />
+
             <FacultyLoadGrid
               key={selectedFacultyId}
               facultyId={selectedFacultyId}

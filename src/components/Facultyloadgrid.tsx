@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Plus, Trash2, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Loader2, Plus, Trash2, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
 import { toast } from '@/lib/toast';
 
@@ -142,6 +142,7 @@ export function FacultyLoadGrid({
   const [consultationRows, setConsultationRows] = useState<TimeRow[]>(() => loadConsultationRows(facultyId));
   const [saving, setSaving] = useState(false);
   const [summary, setSummary] = useState<{ savedCount: number; failedCount: number } | null>(null);
+  const [isMinimized, setIsMinimized] = useState(true);
 
   useEffect(() => {
     if (!facultyId) return;
@@ -553,10 +554,20 @@ export function FacultyLoadGrid({
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between gap-3">
         <CardTitle>Build Load — {facultyName || 'Select a faculty member'}</CardTitle>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          onClick={() => setIsMinimized((current) => !current)}
+          aria-label={isMinimized ? 'Restore build load card' : 'Minimize build load card'}
+          title={isMinimized ? 'Restore build load card' : 'Minimize build load card'}
+        >
+          {isMinimized ? <ChevronDown /> : <ChevronUp />}
+        </Button>
       </CardHeader>
-      <CardContent className="space-y-6">
+      {!isMinimized && <CardContent className="space-y-6">
         <div>
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Regular Load</div>
           {renderGridTable('regular', regularRows)}
@@ -608,7 +619,7 @@ export function FacultyLoadGrid({
             </span>
           )}
         </div>
-      </CardContent>
+      </CardContent>}
     </Card>
   );
 }
