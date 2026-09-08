@@ -210,14 +210,11 @@ export function FacultyLoadGrid({
           subject.code.toLowerCase() === row.code.trim().toLowerCase() &&
           subject.name.toLowerCase() === row.description.trim().toLowerCase()
       );
-      const subjectId =
-        existingSubject?.id ??
-        (
-          await scheduleService.createSubject({
-            code: row.code.trim(),
-            name: row.description.trim(),
-          })
-        ).data?.id;
+      if (!existingSubject) {
+        setRowStatus(loadType, row.localId, 'error', 'Choose a saved subject from the subject code results.');
+        return false;
+      }
+      const subjectId = existingSubject.id;
 
       if (!subjectId) {
         setRowStatus(loadType, row.localId, 'error', 'Could not resolve subject.');
@@ -351,21 +348,44 @@ export function FacultyLoadGrid({
           {rows.map((row) => (
             <TableRow key={row.localId}>
               <TableCell>
-                <Input
-                  className={TEXT_INPUT_CLASS}
-                  value={row.code}
-                  placeholder="e.g. IT201"
-                  title={row.code}
-                  onChange={(e) => updateRow(loadType, row.localId, 'code', e.target.value)}
-                />
+                <div className="space-y-1">
+                  <Input
+                    className={TEXT_INPUT_CLASS}
+                    value={row.code}
+                    placeholder="Filter code"
+                    title={row.code}
+                    onChange={(e) => {
+                      updateRow(loadType, row.localId, 'code', e.target.value);
+                      updateRow(loadType, row.localId, 'description', '');
+                    }}
+                  />
+                  {row.code.trim() && !row.description && (
+                    <div className="max-h-40 min-w-[220px] overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+                      {subjects.filter((subject) => subject.code.toLowerCase().includes(row.code.trim().toLowerCase())).slice(0, 8).map((subject) => (
+                        <button
+                          key={subject.id}
+                          type="button"
+                          className="block w-full rounded-md px-2 py-1.5 text-left text-xs text-slate-800 hover:bg-slate-50"
+                          onClick={() => {
+                            updateRow(loadType, row.localId, 'code', subject.code);
+                            updateRow(loadType, row.localId, 'description', subject.name);
+                          }}
+                        >
+                          <span className="font-medium">{subject.code}</span>
+                          <span className="ml-2 text-slate-500">{subject.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </TableCell>
               <TableCell>
                 <Input
                   className={TEXT_INPUT_CLASS}
                   value={row.description}
-                  placeholder="Course title"
+                  placeholder="Select a subject code"
                   title={row.description}
-                  onChange={(e) => updateRow(loadType, row.localId, 'description', e.target.value)}
+                  readOnly
                 />
               </TableCell>
               <TableCell>

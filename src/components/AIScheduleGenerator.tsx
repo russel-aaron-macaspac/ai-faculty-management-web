@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Loader2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -115,29 +115,30 @@ export function AIScheduleGenerator({ facultyId, facultyName, subjects, rooms, c
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [subjectCode, setSubjectCode] = useState('');
-  const [subjectDescription, setSubjectDescription] = useState('');
+  const [selectedSubjects, setSelectedSubjects] = useState<Subject[]>([]);
   const [isMinimized, setIsMinimized] = useState(true);
+
+  const filteredSubjects = useMemo(() => {
+    const query = subjectCode.trim().toLowerCase();
+    if (!query) return [];
+    return subjects.filter((subject) => subject.code.toLowerCase().includes(query)).slice(0, 8);
+  }, [subjectCode, subjects]);
 
   const updateRow = (localId: string, field: keyof GeneratedRow, value: string) => setRows((current) => current.map((row) => row.localId === localId ? { ...row, [field]: value, status: 'idle', statusMessage: undefined } : row));
 
   const generate = async () => {
-    const code = subjectCode.trim();
-    const description = subjectDescription.trim();
-    if (!facultyId || !code || !description) {
-      toast({ title: 'Missing subject details', description: 'Enter a subject code and description before generating.', type: 'warning' });
+    if (!facultyId || selectedSubjects.length === 0) {
+      toast({ title: 'Select a subject', description: 'Choose at least one saved subject before generating.', type: 'warning' });
       return;
     }
     setGenerating(true);
     try {
-      const existingSubject = subjects.find(
-        (subject) => subject.code.trim().toLowerCase() === code.toLowerCase() && subject.name.trim().toLowerCase() === description.toLowerCase()
-      );
       const response = await fetch('/api/scheduling/ai-generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           facultyId,
-          subjects: [{ subjectId: existingSubject?.id ?? null, code, name: description }],
+          subjects: selectedSubjects.map((subject) => ({ subjectId: subject.id, code: subject.code, name: subject.name })),
         }),
       });
       const data = await response.json();
@@ -190,18 +191,52 @@ export function AIScheduleGenerator({ facultyId, facultyName, subjects, rooms, c
   };
 
   return <Card><CardHeader className="flex flex-row items-center justify-between gap-3"><CardTitle>Automatic Schedule Generator - {facultyName || 'Select a faculty member'}</CardTitle><Button type="button" size="icon-sm" variant="ghost" onClick={() => setIsMinimized((current) => !current)} aria-label={isMinimized ? 'Restore automatic schedule generator' : 'Minimize automatic schedule generator'} title={isMinimized ? 'Restore automatic schedule generator' : 'Minimize automatic schedule generator'}>{isMinimized ? <ChevronDown /> : <ChevronUp />}</Button></CardHeader>{!isMinimized && <CardContent className="space-y-5">
-    <p className="text-sm text-slate-500">Enter a subject, then generate an available schedule using this faculty member&apos;s saved availability.</p>
+    <p className="text-sm text-slate-500">Filter by subject code, select one or more saved subjects, then generate schedules using this faculty member&apos;s saved availability.</p>
     <div className="grid gap-4 md:grid-cols-2">
       <div className="space-y-2">
         <label htmlFor="ai-subject-code" className="text-sm font-medium text-slate-700">Subject Code</label>
-        <Input id="ai-subject-code" value={subjectCode} onChange={(event) => setSubjectCode(event.target.value)} placeholder="e.g. IT201" />
+        <Input
+          id="ai-subject-code"
+          value={subjectCode}
+          onChange={(event) => {
+            setSubjectCode(event.target.value);
+          }}
+          placeholder="Filter by subject code"
+          autoComplete="off"
+        />
+        {subjectCode.trim() && (
+          <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+            {filteredSubjects.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-slate-500">No saved subjects match this code.</div>
+            ) : (
+              filteredSubjects.map((subject) => (
+                <button
+                  key={subject.id}
+                  type="button"
+                  className={`block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-slate-50 ${selectedSubjects.some((selected) => selected.id === subject.id) ? 'bg-red-50 text-red-900' : 'text-slate-800'}`}
+                  onClick={() => {
+                    setSelectedSubjects((current) => current.some((selected) => selected.id === subject.id)
+                      ? current.filter((selected) => selected.id !== subject.id)
+                      : [...current, subject]);
+                  }}
+                >
+                  <span className="font-medium">{subject.code}</span>
+                  <span className="ml-2 text-slate-500">{subject.name}</span>
+                </button>
+              ))
+            )}
+          </div>
+        )}
       </div>
       <div className="space-y-2">
         <label htmlFor="ai-subject-description" className="text-sm font-medium text-slate-700">Description</label>
-        <Input id="ai-subject-description" value={subjectDescription} onChange={(event) => setSubjectDescription(event.target.value)} placeholder="e.g. Database Management" />
+        <Input id="ai-subject-description" value={selectedSubjects.map((subject) => subject.name).join(', ')} placeholder="Selected subject descriptions" readOnly />
       </div>
     </div>
-    <Button type="button" onClick={generate} disabled={generating || saving || !facultyId}>{generating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Generate Schedule</Button>
+    {selectedSubjects.length > 0 && <div className="flex flex-wrap gap-2">
+      {selectedSubjects.map((subject) => <button key={subject.id} type="button" className="rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-900 hover:bg-red-100" onClick={() => setSelectedSubjects((current) => current.filter((selected) => selected.id !== subject.id))}>{subject.code} <span aria-hidden="true">x</span></button>)}
+    </div>}
+    <Button type="button" onClick={generate} disabled={generating || saving || !facultyId || selectedSubjects.length === 0}>{generating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Generate Schedule</Button>
     {unplaced.length > 0 && <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-4">{unplaced.map((item) => <div key={`${item.code}-${item.name}`} className="flex gap-2 text-sm text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span><strong>{item.code} - {item.name}:</strong> {item.reason}</span></div>)}</div>}
     {unavailable.length > 0 && <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-700">Already assigned and excluded</div>{unavailable.map((item) => <div key={`${item.code}-${item.name}`} className="text-sm text-slate-600"><strong>{item.code} - {item.name}</strong> is already assigned to another faculty member.</div>)}</div>}
     <div className="space-y-2"><div className="text-sm font-semibold uppercase tracking-wide text-slate-500">Schedule Matrix</div><ScheduleBoard rows={rows} onUpdate={updateRow} onDelete={(localId) => setRows((current) => current.filter((item) => item.localId !== localId))} />{rows.length > 0 && <div className="flex items-center gap-3"><Button type="button" onClick={saveAll} disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save All to Master Schedule</Button><div className="flex items-center gap-3 text-xs text-slate-500">{rows.map((row) => <RowStatusBadge key={row.localId} status={row.status} message={row.statusMessage} />)}</div></div>}</div>
