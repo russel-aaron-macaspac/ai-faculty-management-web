@@ -11,6 +11,7 @@ import {
   UserSquare2, 
   Calendar, 
   Clock, 
+  BookOpen,
   FileCheck2, 
   BarChart3,
   LogOut,
@@ -50,6 +51,7 @@ export function Sidebar({ user, collapsed = false, onToggle }: Readonly<SidebarP
   const adminLinks = [
     { href: '/dashboard/admin', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/dashboard/admin/accounts', label: 'Account Creation', icon: UserPlus },
+    { href: '/dashboard/admin/subjects', label: 'Subject Management', icon: BookOpen },
     { href: '/faculty', label: 'Faculty Management', icon: Users },
     { href: '/attendance', label: 'Attendance Monitoring', icon: Clock },
     { href: '/reports', label: 'Reports', icon: BarChart3 },
