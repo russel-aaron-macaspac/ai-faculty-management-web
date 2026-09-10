@@ -130,6 +130,9 @@ function ScheduleLoadingContent() {
   const [selectedFacultyId, setSelectedFacultyId] = useState('');
   const [facultySearch, setFacultySearch] = useState('');
   const [isFacultyListMinimized, setIsFacultyListMinimized] = useState(true);
+  const [isOfficialTimeMinimized, setIsOfficialTimeMinimized] = useState(false);
+  const [isApprovalDashboardMinimized, setIsApprovalDashboardMinimized] = useState(false);
+  const [isMasterScheduleMinimized, setIsMasterScheduleMinimized] = useState(false);
   const [selectedFacultyLoading, setSelectedFacultyLoading] = useState(false);
   const [selectedFacultyAvailability, setSelectedFacultyAvailability] = useState<Array<{ day: string; startTime: string; endTime: string }>>([]);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -658,8 +661,18 @@ function ScheduleLoadingContent() {
 
       {isFacultyLikeRole(user?.role) && (
         <div className="space-y-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-3">
+          <AIScheduleGenerator
+            key="ai-batch-generator"
+            faculties={meta.faculties}
+            subjects={meta.subjects}
+            rooms={meta.rooms}
+            createdBy={user?.id || ''}
+            creatorRole={user?.role || ''}
+            onSaved={() => loadData(user)}
+          />
+
+          <Card className={isFacultyListMinimized ? 'cursor-pointer' : undefined} onClick={isFacultyListMinimized ? () => setIsFacultyListMinimized(false) : undefined}>
+            <CardHeader className="flex cursor-pointer flex-row items-center justify-between gap-3" onClick={() => setIsFacultyListMinimized((current) => !current)}>
               <div className="flex items-center justify-between gap-3">
                 <CardTitle>Faculty List</CardTitle>
                 <span className="text-xs font-medium text-slate-500">
@@ -670,7 +683,6 @@ function ScheduleLoadingContent() {
                 type="button"
                 size="icon-sm"
                 variant="ghost"
-                onClick={() => setIsFacultyListMinimized((current) => !current)}
                 aria-label={isFacultyListMinimized ? 'Restore faculty list' : 'Minimize faculty list'}
                 title={isFacultyListMinimized ? 'Restore faculty list' : 'Minimize faculty list'}
               >
@@ -722,17 +734,6 @@ function ScheduleLoadingContent() {
           </Card>
 
           <div className="space-y-6">
-            <AIScheduleGenerator
-              key={`ai-${selectedFacultyId}`}
-              facultyId={selectedFacultyId}
-              facultyName={selectedFacultyName}
-              subjects={meta.subjects}
-              rooms={meta.rooms}
-              createdBy={user?.id || ''}
-              creatorRole={user?.role || ''}
-              onSaved={() => loadData(user)}
-            />
-
             <FacultyLoadGrid
               key={selectedFacultyId}
               facultyId={selectedFacultyId}
@@ -744,13 +745,13 @@ function ScheduleLoadingContent() {
               onSaved={() => loadData(user)}
             />
 
-            <Card>
-              <CardHeader>
+            <Card className={isOfficialTimeMinimized ? 'cursor-pointer' : undefined} onClick={isOfficialTimeMinimized ? () => setIsOfficialTimeMinimized(false) : undefined}>
+              <CardHeader className="cursor-pointer" onClick={() => setIsOfficialTimeMinimized((current) => !current)}>
                 <CardTitle>Official Time — {selectedFacultyName}</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              {!isOfficialTimeMinimized && <CardContent className="space-y-4">
                 {selectedFacultyAvailabilityContent}
-              </CardContent>
+              </CardContent>}
             </Card>
 
           </div>
@@ -758,11 +759,11 @@ function ScheduleLoadingContent() {
       )}
 
       {canApprove && (
-        <Card>
-          <CardHeader>
+        <Card className={isApprovalDashboardMinimized ? 'cursor-pointer' : undefined} onClick={isApprovalDashboardMinimized ? () => setIsApprovalDashboardMinimized(false) : undefined}>
+          <CardHeader className="cursor-pointer" onClick={() => setIsApprovalDashboardMinimized((current) => !current)}>
             <CardTitle>Approval Dashboard</CardTitle>
           </CardHeader>
-          <CardContent>
+          {!isApprovalDashboardMinimized && <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -805,15 +806,15 @@ function ScheduleLoadingContent() {
                 )}
               </TableBody>
             </Table>
-          </CardContent>
+          </CardContent>}
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
+      <Card className={isMasterScheduleMinimized ? 'cursor-pointer' : undefined} onClick={isMasterScheduleMinimized ? () => setIsMasterScheduleMinimized(false) : undefined}>
+        <CardHeader className="cursor-pointer" onClick={() => setIsMasterScheduleMinimized((current) => !current)}>
           <CardTitle>Master Schedule</CardTitle>
         </CardHeader>
-        <CardContent>{masterScheduleContent}</CardContent>
+        {!isMasterScheduleMinimized && <CardContent>{masterScheduleContent}</CardContent>}
       </Card>
 
       <Dialog

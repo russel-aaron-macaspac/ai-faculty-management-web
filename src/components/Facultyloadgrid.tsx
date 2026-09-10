@@ -573,14 +573,13 @@ export function FacultyLoadGrid({
   const overloadTimeRows = overloadRows.filter((row) => row.startTime && row.endTime);
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-3">
+    <Card className={isMinimized ? 'cursor-pointer' : undefined} onClick={isMinimized ? () => setIsMinimized(false) : undefined}>
+      <CardHeader className="flex cursor-pointer flex-row items-center justify-between gap-3" onClick={() => setIsMinimized((current) => !current)}>
         <CardTitle>Build Load — {facultyName || 'Select a faculty member'}</CardTitle>
         <Button
           type="button"
           size="icon-sm"
           variant="ghost"
-          onClick={() => setIsMinimized((current) => !current)}
           aria-label={isMinimized ? 'Restore build load card' : 'Minimize build load card'}
           title={isMinimized ? 'Restore build load card' : 'Minimize build load card'}
         >
