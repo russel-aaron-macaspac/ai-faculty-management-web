@@ -12,7 +12,7 @@ import { toast } from '@/lib/toast';
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 type LoadType = 'regular' | 'overload';
 type RowStatus = 'idle' | 'saving' | 'saved' | 'conflict' | 'error';
-type Subject = { id: string; code: string; name: string };
+type Subject = { id: string; code: string; name: string; lecture_units?: number | null; lab_units?: number | null };
 type Room = { id: string; name: string; capacity: number };
 type Faculty = { id: string; name: string; role: string };
 type GeneratedRow = { localId: string; subjectId: string | null; facultyId: string; facultyName: string; code: string; name: string; day: string; startTime: string; endTime: string; section: string; roomId: string; roomName: string; units: string; lectureContactHours: string; labContactHours: string; classSize: string; loadType: LoadType; status: RowStatus; statusMessage?: string; isSaved?: boolean };
@@ -44,6 +44,14 @@ function conflictMessage(conflictType: string) {
 
 function isValidTimeRange(row: GeneratedRow) {
   return Boolean(row.startTime && row.endTime && row.startTime < row.endTime);
+}
+
+function formatSubjectName(subject: Subject): string {
+  const components = [
+    (subject.lecture_units ?? 0) > 0 ? 'Lecture' : null,
+    (subject.lab_units ?? 0) > 0 ? 'Lab' : null,
+  ].filter(Boolean);
+  return components.length > 0 ? `${subject.name} (${components.join(' / ')})` : subject.name;
 }
 
 const BOARD_START = 7 * 60;
@@ -284,7 +292,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, createdBy, cre
     {selectedFacultyIds.length > 0 && <div className="space-y-3">
       <div className="text-sm font-medium text-slate-700">3. Assign subjects by faculty</div>
       <div className="flex flex-wrap gap-2">{selectedFacultyIds.map((facultyId) => { const faculty = faculties.find((item) => item.id === facultyId); return <Button key={facultyId} type="button" size="sm" variant={activeFacultyId === facultyId ? 'default' : 'outline'} onClick={() => { setActiveFacultyId(facultyId); setSubjectCode(''); }}>{faculty?.name || facultyId}</Button>; })}</div>
-      {activeFacultyId && <div className="grid gap-3 md:grid-cols-2"><div className="space-y-2"><label htmlFor="ai-subject-code" className="text-sm font-medium text-slate-700">Subject code</label><Input id="ai-subject-code" value={subjectCode} onChange={(event) => setSubjectCode(event.target.value)} placeholder="Search saved subjects" autoComplete="off" />{subjectCode.trim() && <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm">{filteredSubjects.length === 0 ? <div className="px-3 py-2 text-sm text-slate-500">No saved subjects match this code.</div> : filteredSubjects.map((subject) => <button key={subject.id} type="button" className={`block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-slate-50 ${(subjectsByFaculty[activeFacultyId] || []).some((selected) => selected.id === subject.id) ? 'bg-red-50 text-red-900' : 'text-slate-800'}`} onClick={() => toggleSubject(activeFacultyId, subject)}><span className="font-medium">{subject.code}</span><span className="ml-2 text-slate-500">{subject.name}</span></button>)}</div>}</div><div className="space-y-2"><div className="text-sm font-medium text-slate-700">Assigned to {faculties.find((item) => item.id === activeFacultyId)?.name}</div><div className="flex min-h-10 flex-wrap gap-2 rounded-lg border border-slate-200 p-2">{(subjectsByFaculty[activeFacultyId] || []).length === 0 ? <span className="text-sm text-slate-400">No subjects assigned yet.</span> : (subjectsByFaculty[activeFacultyId] || []).map((subject) => <button key={subject.id} type="button" className="rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-900 hover:bg-red-100" onClick={() => toggleSubject(activeFacultyId, subject)}>{subject.code} <span aria-hidden="true">x</span></button>)}</div></div></div>}
+      {activeFacultyId && <div className="grid gap-3 md:grid-cols-2"><div className="space-y-2"><label htmlFor="ai-subject-code" className="text-sm font-medium text-slate-700">Subject code</label><Input id="ai-subject-code" value={subjectCode} onChange={(event) => setSubjectCode(event.target.value)} placeholder="Search saved subjects" autoComplete="off" />{subjectCode.trim() && <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm">{filteredSubjects.length === 0 ? <div className="px-3 py-2 text-sm text-slate-500">No saved subjects match this code.</div> : filteredSubjects.map((subject) => <button key={subject.id} type="button" className={`block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-slate-50 ${(subjectsByFaculty[activeFacultyId] || []).some((selected) => selected.id === subject.id) ? 'bg-red-50 text-red-900' : 'text-slate-800'}`} onClick={() => toggleSubject(activeFacultyId, subject)}><span className="font-medium">{subject.code}</span><span className="ml-2 text-slate-500">{formatSubjectName(subject)}</span></button>)}</div>}</div><div className="space-y-2"><div className="text-sm font-medium text-slate-700">Assigned to {faculties.find((item) => item.id === activeFacultyId)?.name}</div><div className="flex min-h-10 flex-wrap gap-2 rounded-lg border border-slate-200 p-2">{(subjectsByFaculty[activeFacultyId] || []).length === 0 ? <span className="text-sm text-slate-400">No subjects assigned yet.</span> : (subjectsByFaculty[activeFacultyId] || []).map((subject) => <button key={subject.id} type="button" className="rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-900 hover:bg-red-100" onClick={() => toggleSubject(activeFacultyId, subject)}>{subject.code} <span aria-hidden="true">x</span></button>)}</div></div></div>}
     </div>}
     <Button type="button" onClick={generate} disabled={generating || saving || !selectedRoomId || selectedFacultyIds.length === 0}>{generating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Generate Schedule Matrix</Button>
     {unplaced.length > 0 && <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-4"><div className="text-sm font-semibold text-amber-900">Could not place</div>{unplaced.map((item) => <div key={`${item.code}-${item.name}`} className="flex gap-2 text-sm text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span><strong>{item.code} - {item.name}:</strong> {item.reason}</span></div>)}</div>}

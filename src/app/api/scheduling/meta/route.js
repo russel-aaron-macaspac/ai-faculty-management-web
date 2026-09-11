@@ -30,7 +30,7 @@ export async function GET(request) {
           .in("role", ["faculty", "program_chair", "dean"])
           .eq("status", "active")
           .order("last_name", { ascending: true }),
-        supabase.from("subjects").select("id, code, name").order("code", { ascending: true }),
+        supabase.from("subjects").select("id, code, name, lecture_units, lab_units").order("code", { ascending: true }),
         supabase.from("rooms").select("id, name, capacity").order("name", { ascending: true }),
         supabase.from("sections").select("id, name").order("name", { ascending: true }),
       ]);

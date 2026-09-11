@@ -49,6 +49,16 @@ interface SubjectOption {
   id: string;
   code: string;
   name: string;
+  lecture_units?: number | null;
+  lab_units?: number | null;
+}
+
+function formatSubjectName(subject: SubjectOption): string {
+  const components = [
+    (subject.lecture_units ?? 0) > 0 ? 'Lecture' : null,
+    (subject.lab_units ?? 0) > 0 ? 'Lab' : null,
+  ].filter(Boolean);
+  return components.length > 0 ? `${subject.name} (${components.join(' / ')})` : subject.name;
 }
 
 interface FacultyLoadGridProps {
@@ -208,7 +218,7 @@ export function FacultyLoadGrid({
       const existingSubject = subjects.find(
         (subject) =>
           subject.code.toLowerCase() === row.code.trim().toLowerCase() &&
-          subject.name.toLowerCase() === row.description.trim().toLowerCase()
+          formatSubjectName(subject).toLowerCase() === row.description.trim().toLowerCase()
       );
       if (!existingSubject) {
         setRowStatus(loadType, row.localId, 'error', 'Choose a saved subject from the subject code results.');
@@ -368,11 +378,11 @@ export function FacultyLoadGrid({
                           className="block w-full rounded-md px-2 py-1.5 text-left text-xs text-slate-800 hover:bg-slate-50"
                           onClick={() => {
                             updateRow(loadType, row.localId, 'code', subject.code);
-                            updateRow(loadType, row.localId, 'description', subject.name);
+                            updateRow(loadType, row.localId, 'description', formatSubjectName(subject));
                           }}
                         >
                           <span className="font-medium">{subject.code}</span>
-                          <span className="ml-2 text-slate-500">{subject.name}</span>
+                          <span className="ml-2 text-slate-500">{formatSubjectName(subject)}</span>
                         </button>
                       ))}
                     </div>
