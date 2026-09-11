@@ -1,7 +1,7 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { NextResponse } from "next/server";
 
-const DEFAULT_SECTIONS = ["1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B"].map((name) => ({ id: name, name }));
+const DEFAULT_SECTIONS = ["BSIT1A", "BSIT1B", "BSIT2A", "BSIT2B", "BSIT3A", "BSIT3B", "BSIT4A", "BSIT4B"].map((name) => ({ id: name, name }));
 
 function isMissingSectionsTableError(error) {
   const message = `${error?.message || ""} ${error?.details || ""}`.toLowerCase();
@@ -10,6 +10,11 @@ function isMissingSectionsTableError(error) {
     (message.includes("table") && message.includes("sections") && message.includes("schema cache")) ||
     (message.includes("table") && message.includes("public.sections"))
   );
+}
+
+function formatSectionName(name) {
+  const value = String(name || "").trim();
+  return /^\d[AB]$/i.test(value) ? `BSIT${value.toUpperCase()}` : value;
 }
 
 export async function GET() {
@@ -29,7 +34,7 @@ export async function GET() {
       return NextResponse.json({ error: "Failed to fetch sections" }, { status: 500 });
     }
 
-    return NextResponse.json({ data: data || [] });
+    return NextResponse.json({ data: (data || []).map((section) => ({ ...section, name: formatSectionName(section.name) })) });
   } catch (err) {
     console.error("[SECTIONS GET ERROR]", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

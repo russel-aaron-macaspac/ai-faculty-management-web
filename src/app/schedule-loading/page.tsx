@@ -666,6 +666,7 @@ function ScheduleLoadingContent() {
             faculties={meta.faculties}
             subjects={meta.subjects}
             rooms={meta.rooms}
+            sections={meta.sections}
             createdBy={user?.id || ''}
             creatorRole={user?.role || ''}
             onSaved={() => loadData(user)}

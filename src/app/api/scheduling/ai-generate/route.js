@@ -128,7 +128,7 @@ export async function POST(request) {
       facultyBookings.get(assignment.facultyId).push({ day: placement.day, start: placement.start, end: placement.end });
       roomBookings.push({ roomId: String(placement.room.id), day: placement.day, start: placement.start, end: placement.end });
       const units = Number((subjectDuration / 60).toFixed(2));
-      generated.push({ subjectId: subject.subjectId ?? null, facultyId: assignment.facultyId, facultyName, code: String(subject.code).trim(), name: String(subject.name).trim(), day: placement.day, startTime: toTime(placement.start), endTime: toTime(placement.end), section: String(section).trim(), roomId: placement.room.id, roomName: placement.room.name, units, lectureContactHours: units, labContactHours: 0, classSize: requestedClassSize, loadType });
+      generated.push({ subjectId: subject.subjectId ?? null, facultyId: assignment.facultyId, facultyName, code: String(subject.code).trim(), name: String(subject.name).trim(), day: placement.day, startTime: toTime(placement.start), endTime: toTime(placement.end), section: String(subject.section || section).trim(), roomId: placement.room.id, roomName: placement.room.name, units, lectureContactHours: units, labContactHours: 0, classSize: requestedClassSize, loadType });
       }
     }
 

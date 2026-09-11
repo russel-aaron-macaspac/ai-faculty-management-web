@@ -11,6 +11,13 @@ function isMissingSectionsTableError(error) {
   );
 }
 
+function formatSectionName(name) {
+  const value = String(name || "").trim();
+  return /^\d[AB]$/i.test(value) ? `BSIT${value.toUpperCase()}` : value;
+}
+
+const DEFAULT_BSIT_SECTIONS = ["BSIT1A", "BSIT1B", "BSIT2A", "BSIT2B", "BSIT3A", "BSIT3B", "BSIT4A", "BSIT4B"];
+
 export async function GET(request) {
   try {
     const supabase = createSupabaseAdminClient();
@@ -47,15 +54,20 @@ export async function GET(request) {
     let normalizedSections = sections || [];
     if (sectionError && isMissingSectionsTableError(sectionError)) {
       normalizedSections = [
-        { id: "1A", name: "1A" },
-        { id: "1B", name: "1B" },
-        { id: "2A", name: "2A" },
-        { id: "2B", name: "2B" },
-        { id: "3A", name: "3A" },
-        { id: "3B", name: "3B" },
-        { id: "4A", name: "4A" },
-        { id: "4B", name: "4B" },
+        { id: "1A", name: "BSIT1A" },
+        { id: "1B", name: "BSIT1B" },
+        { id: "2A", name: "BSIT2A" },
+        { id: "2B", name: "BSIT2B" },
+        { id: "3A", name: "BSIT3A" },
+        { id: "3B", name: "BSIT3B" },
+        { id: "4A", name: "BSIT4A" },
+        { id: "4B", name: "BSIT4B" },
       ];
+    }
+    normalizedSections = normalizedSections.map((section) => ({ ...section, name: formatSectionName(section.name) }));
+    const existingSectionNames = new Set(normalizedSections.map((section) => section.name.toUpperCase()));
+    for (const name of DEFAULT_BSIT_SECTIONS) {
+      if (!existingSectionNames.has(name)) normalizedSections.push({ id: name, name });
     }
 
     return NextResponse.json({

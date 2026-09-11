@@ -14,15 +14,17 @@ type LoadType = 'regular' | 'overload';
 type RowStatus = 'idle' | 'saving' | 'saved' | 'conflict' | 'error';
 type Subject = { id: string; code: string; name: string; hours?: number | null; lecture_units?: number | null; lab_units?: number | null };
 type DeliveryMode = 'on-campus' | 'online';
-type SubjectAssignment = Subject & { deliveryMode: DeliveryMode };
+type SubjectAssignment = Subject & { deliveryMode: DeliveryMode; sectionIds: string[] };
 type Room = { id: string; name: string; capacity: number };
 type Faculty = { id: string; name: string; role: string };
+type Section = { id: string; name: string };
 type GeneratedRow = { localId: string; subjectId: string | null; facultyId: string; facultyName: string; code: string; name: string; day: string; startTime: string; endTime: string; section: string; roomId: string; roomName: string; units: string; lectureContactHours: string; labContactHours: string; classSize: string; loadType: LoadType; status: RowStatus; statusMessage?: string; isSaved?: boolean };
 
 interface AIScheduleGeneratorProps {
   faculties: Faculty[];
   subjects: Subject[];
   rooms: Room[];
+  sections: Section[];
   createdBy: string;
   creatorRole: string;
   onSaved?: () => void | Promise<void>;
@@ -75,7 +77,7 @@ function boardMinutes(value: string) {
 function ScheduleBoard({ rows, onUpdate, onDelete }: Readonly<{ rows: GeneratedRow[]; onUpdate: (localId: string, field: keyof GeneratedRow, value: string) => void; onDelete: (localId: string) => void }>) {
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-300 bg-white shadow-sm">
-      <table className="w-full min-w-245 table-fixed border-collapse text-xs">
+      <table className="w-full min-w-260 table-fixed border-collapse text-xs">
         <thead>
           <tr className="bg-slate-100 text-slate-800">
             <th className="w-32 border border-slate-300 px-2 py-3 text-center font-bold uppercase">Time</th>
@@ -84,7 +86,7 @@ function ScheduleBoard({ rows, onUpdate, onDelete }: Readonly<{ rows: GeneratedR
         </thead>
         <tbody>
           {BOARD_SLOTS.map((slot) => (
-            <tr key={slot} className="h-9">
+            <tr key={slot} className="h-10">
               <th className="border border-slate-300 bg-slate-50 px-2 text-center font-semibold text-slate-600">{formatBoardTime(slot)}</th>
               {DAYS.slice(0, 6).map((day) => {
                 const row = rows.find((candidate) => candidate.day === day && boardMinutes(candidate.startTime) === slot);
@@ -92,10 +94,11 @@ function ScheduleBoard({ rows, onUpdate, onDelete }: Readonly<{ rows: GeneratedR
                 if (active) return null;
                 if (!row) return <td key={`${day}-${slot}`} className="border border-slate-300 bg-white" />;
                 const span = Math.max(1, Math.ceil((boardMinutes(row.endTime) - boardMinutes(row.startTime)) / 30));
-                return <td key={`${day}-${slot}`} rowSpan={span} className="border border-slate-500 bg-[#ffc000] p-1 align-middle text-slate-900">
-                  <div className="flex h-full min-h-24 flex-col gap-1 text-left">
+                const slotHeight = 40;
+                return <td key={`${day}-${slot}`} rowSpan={span} style={{ height: `${span * slotHeight}px` }} className="border border-slate-300 bg-slate-50 px-2 py-0 align-top text-slate-900">
+                  <div style={{ minHeight: `${span * slotHeight}px` }} className="flex h-full flex-col gap-2 rounded-lg border border-amber-500 bg-[#ffc000] p-2.5 text-left shadow-sm">
                     <div className="flex items-start justify-between gap-1">
-                      <div className="min-w-0 font-semibold leading-tight"><div className="text-[10px] font-medium uppercase tracking-wide">{row.facultyName}</div>{row.name}<div className="font-normal">{row.code}</div></div>
+                      <div className="min-w-0 font-semibold leading-tight"><div className="text-[10px] font-medium uppercase tracking-wide">{row.facultyName}</div>{row.name}<div className="font-normal">{row.code}{row.section ? ` · ${row.section}` : ''}</div></div>
                       {!row.isSaved && <button type="button" onClick={() => onDelete(row.localId)} className="shrink-0 p-1 text-slate-700 hover:text-rose-700" title="Delete generated row"><Trash2 className="h-3.5 w-3.5" /></button>}
                     </div>
                     <Select value={row.day} onValueChange={(value) => onUpdate(row.localId, 'day', value || 'Monday')} disabled={row.isSaved}>
@@ -122,7 +125,7 @@ function ExpandableGeneratorCard({ isMinimized, onExpand, children }: Readonly<{
   return <Card className={isMinimized ? 'cursor-pointer' : undefined} onClick={isMinimized ? onExpand : undefined}>{children}</Card>;
 }
 
-export function AIScheduleGenerator({ faculties, subjects, rooms, createdBy, creatorRole, onSaved }: Readonly<AIScheduleGeneratorProps>) {
+export function AIScheduleGenerator({ faculties, subjects, rooms, sections, createdBy, creatorRole, onSaved }: Readonly<AIScheduleGeneratorProps>) {
   const [rows, setRows] = useState<GeneratedRow[]>([]);
   const [savedRows, setSavedRows] = useState<GeneratedRow[]>([]);
   const [unplaced, setUnplaced] = useState<Array<{ code: string; name: string; reason: string }>>([]);
@@ -216,7 +219,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, createdBy, cre
 
   const toggleSubject = (facultyId: string, subject: Subject) => setSubjectsByFaculty((current) => {
     const selected = current[facultyId] || [];
-    return { ...current, [facultyId]: selected.some((item) => item.id === subject.id) ? selected.filter((item) => item.id !== subject.id) : [...selected, { ...subject, deliveryMode: 'on-campus' }] };
+    return { ...current, [facultyId]: selected.some((item) => item.id === subject.id) ? selected.filter((item) => item.id !== subject.id) : [...selected, { ...subject, deliveryMode: 'on-campus', sectionIds: [] }] };
   });
 
   const changeSubjectDeliveryMode = (facultyId: string, subjectId: string, deliveryMode: DeliveryMode | null) => {
@@ -227,11 +230,25 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, createdBy, cre
     }));
   };
 
+  const toggleSubjectSection = (facultyId: string, subjectId: string, sectionId: string) => {
+    setSubjectsByFaculty((current) => ({
+      ...current,
+      [facultyId]: (current[facultyId] || []).map((assignment) => {
+        if (assignment.id !== subjectId) return assignment;
+        const sectionIds = assignment.sectionIds.includes(sectionId)
+          ? assignment.sectionIds.filter((id) => id !== sectionId)
+          : [...assignment.sectionIds, sectionId];
+        return { ...assignment, sectionIds };
+      }),
+    }));
+  };
+
   const generate = async () => {
     const selectedAssignments = selectedFacultyIds.map((facultyId) => ({ facultyId, subjects: subjectsByFaculty[facultyId] || [] }));
-    const assignments = selectedAssignments.map(({ facultyId, subjects: facultySubjects }) => ({ facultyId, subjects: facultySubjects.filter((subject) => subject.deliveryMode === 'on-campus').map((subject) => ({ subjectId: subject.id, code: subject.code, name: subject.name, durationMinutes: Number(subject.hours) > 0 ? Number(subject.hours) * 60 : undefined })) })).filter((assignment) => assignment.subjects.length > 0);
-    if (!selectedRoomId || selectedAssignments.some((assignment) => assignment.subjects.length === 0)) {
-      toast({ title: 'Complete the generator setup', description: 'Select a room, multiple faculties, and at least one subject for each selected faculty.', type: 'warning' });
+    const hasMissingSections = selectedAssignments.some((assignment) => assignment.subjects.some((subject) => subject.sectionIds.length === 0));
+    const assignments = selectedAssignments.map(({ facultyId, subjects: facultySubjects }) => ({ facultyId, subjects: facultySubjects.filter((subject) => subject.deliveryMode === 'on-campus').flatMap((subject) => subject.sectionIds.map((sectionId) => ({ subjectId: subject.id, code: subject.code, name: subject.name, section: sections.find((section) => section.id === sectionId)?.name || sectionId, durationMinutes: Number(subject.hours) > 0 ? Number(subject.hours) * 60 : undefined }))) })).filter((assignment) => assignment.subjects.length > 0);
+    if (!selectedRoomId || hasMissingSections || selectedAssignments.some((assignment) => assignment.subjects.length === 0)) {
+      toast({ title: 'Complete the generator setup', description: 'Select a room, at least one section for every subject, multiple faculties, and at least one subject for each selected faculty.', type: 'warning' });
       return;
     }
     if (assignments.length === 0) {
@@ -317,7 +334,26 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, createdBy, cre
     {selectedFacultyIds.length > 0 && <div className="space-y-3">
       <div className="text-sm font-medium text-slate-700">3. Assign subjects by faculty</div>
       <div className="flex flex-wrap gap-2">{selectedFacultyIds.map((facultyId) => { const faculty = faculties.find((item) => item.id === facultyId); return <Button key={facultyId} type="button" size="sm" variant={activeFacultyId === facultyId ? 'default' : 'outline'} onClick={() => { setActiveFacultyId(facultyId); setSubjectCode(''); }}>{faculty?.name || facultyId}</Button>; })}</div>
-      {activeFacultyId && <div className="grid gap-3 md:grid-cols-2"><div className="space-y-2"><label htmlFor="ai-subject-code" className="text-sm font-medium text-slate-700">Subject code</label><Input id="ai-subject-code" value={subjectCode} onChange={(event) => setSubjectCode(event.target.value)} placeholder="Search saved subjects" autoComplete="off" />{subjectCode.trim() && <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm">{filteredSubjects.length === 0 ? <div className="px-3 py-2 text-sm text-slate-500">No saved subjects match this code.</div> : filteredSubjects.map((subject) => <button key={subject.id} type="button" className={`block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-slate-50 ${(subjectsByFaculty[activeFacultyId] || []).some((selected) => selected.id === subject.id) ? 'bg-red-50 text-red-900' : 'text-slate-800'}`} onClick={() => toggleSubject(activeFacultyId, subject)}><span className="font-medium">{subject.code}</span><span className="ml-2 text-slate-500">{subject.name}</span></button>)}</div>}</div><div className="space-y-2"><div className="text-sm font-medium text-slate-700">Assigned to {faculties.find((item) => item.id === activeFacultyId)?.name}</div><div className="space-y-2 rounded-lg border border-slate-200 p-2">{(subjectsByFaculty[activeFacultyId] || []).length === 0 ? <span className="text-sm text-slate-400">No subjects assigned yet.</span> : (subjectsByFaculty[activeFacultyId] || []).map((assignment) => <div key={assignment.id} className="flex items-center gap-2 rounded-md bg-slate-50 p-2"><div className="min-w-0 flex-1 text-xs"><span className="font-medium text-slate-900">{assignment.code}</span><span className="ml-2 text-slate-500">{assignment.name}</span></div><Select value={assignment.deliveryMode} onValueChange={(value) => changeSubjectDeliveryMode(activeFacultyId, assignment.id, value as DeliveryMode)}><SelectTrigger className="h-8 w-32 rounded-md px-2 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="on-campus">On campus</SelectItem><SelectItem value="online">Online</SelectItem></SelectContent></Select><button type="button" className="px-1 text-xs font-medium text-slate-500 hover:text-rose-700" onClick={() => toggleSubject(activeFacultyId, assignment)} aria-label={`Remove ${assignment.code}`}>x</button></div>)}</div></div></div>}
+      {activeFacultyId && <div className="grid gap-3 md:grid-cols-2">
+        <div className="space-y-2">
+          <label htmlFor="ai-subject-code" className="text-sm font-medium text-slate-700">Subject code</label>
+          <Input id="ai-subject-code" value={subjectCode} onChange={(event) => setSubjectCode(event.target.value)} placeholder="Search saved subjects" autoComplete="off" />
+          {subjectCode.trim() && <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm">{filteredSubjects.length === 0 ? <div className="px-3 py-2 text-sm text-slate-500">No saved subjects match this code.</div> : filteredSubjects.map((subject) => <button key={subject.id} type="button" className={`block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-slate-50 ${(subjectsByFaculty[activeFacultyId] || []).some((selected) => selected.id === subject.id) ? 'bg-red-50 text-red-900' : 'text-slate-800'}`} onClick={() => toggleSubject(activeFacultyId, subject)}><span className="font-medium">{subject.code}</span><span className="ml-2 text-slate-500">{subject.name}</span></button>)}</div>}
+        </div>
+        <div className="space-y-2">
+          <div className="text-sm font-medium text-slate-700">Assigned to {faculties.find((item) => item.id === activeFacultyId)?.name}</div>
+          <div className="space-y-2 rounded-lg border border-slate-200 p-2">
+            {(subjectsByFaculty[activeFacultyId] || []).length === 0 ? <span className="text-sm text-slate-400">No subjects assigned yet.</span> : (subjectsByFaculty[activeFacultyId] || []).map((assignment) => <div key={assignment.id} className="rounded-md bg-slate-50 p-2">
+              <div className="flex items-center gap-2">
+                <div className="min-w-0 flex-1 text-xs"><span className="font-medium text-slate-900">{assignment.code}</span><span className="ml-2 text-slate-500">{assignment.name}</span></div>
+                <Select value={assignment.deliveryMode} onValueChange={(value) => changeSubjectDeliveryMode(activeFacultyId, assignment.id, value as DeliveryMode)}><SelectTrigger className="h-8 w-32 rounded-md px-2 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="on-campus">On campus</SelectItem><SelectItem value="online">Online</SelectItem></SelectContent></Select>
+                <button type="button" className="px-1 text-xs font-medium text-slate-500 hover:text-rose-700" onClick={() => toggleSubject(activeFacultyId, assignment)} aria-label={`Remove ${assignment.code}`}>x</button>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-1"><span className="mr-1 text-[10px] font-medium uppercase text-slate-500">Sections</span>{sections.map((section) => <button key={section.id} type="button" onClick={() => toggleSubjectSection(activeFacultyId, assignment.id, section.id)} className={`rounded border px-1.5 py-0.5 text-[10px] ${assignment.sectionIds.includes(section.id) ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300 bg-white text-slate-600'}`}>{section.name}</button>)}</div>
+            </div>)}
+          </div>
+        </div>
+      </div>}
     </div>}
     {onlineAssignments.length > 0 && <div className="space-y-1 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900"><div className="font-semibold">Online subjects excluded from the matrix</div>{onlineAssignments.map((assignment) => <div key={`${assignment.facultyName}-${assignment.id}`}>{assignment.code} - {assignment.name} ({assignment.facultyName}) is online and will not use the selected room.</div>)}</div>}
     <Button type="button" onClick={generate} disabled={generating || saving || !selectedRoomId || selectedFacultyIds.length === 0}>{generating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Generate Schedule Matrix</Button>
