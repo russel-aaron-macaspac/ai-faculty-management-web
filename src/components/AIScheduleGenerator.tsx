@@ -182,8 +182,8 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, createdBy, cre
     setIsMinimized((current) => !current);
   };
 
-  const handleRoomChange = (roomId: string) => {
-    setSelectedRoomId(roomId);
+  const handleRoomChange = (roomId: string | null) => {
+    setSelectedRoomId(roomId || '');
     setRows([]);
     setUnplaced([]);
     setUnavailable([]);
