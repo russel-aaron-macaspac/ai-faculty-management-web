@@ -6,7 +6,7 @@ export async function GET() {
     const supabase = createSupabaseAdminClient();
     const { data, error } = await supabase
       .from("subjects")
-      .select("id, code, name")
+      .select("id, code, name, units")
       .order("code", { ascending: true });
 
     if (error) {
@@ -26,9 +26,14 @@ export async function POST(request) {
     const body = await request.json();
     const code = String(body?.code || "").trim();
     const name = String(body?.name || "").trim();
+    const units = body?.units === undefined || body?.units === null || body?.units === "" ? null : Number(body.units);
 
     if (!code || !name) {
       return NextResponse.json({ error: "code and name are required" }, { status: 400 });
+    }
+
+    if (units !== null && (!Number.isFinite(units) || units <= 0)) {
+      return NextResponse.json({ error: "units must be a positive number" }, { status: 400 });
     }
 
     const supabase = createSupabaseAdminClient();
@@ -38,7 +43,7 @@ export async function POST(request) {
     // multiple subjects (e.g. IT301 -> "Networking 2", IT301 -> "Networking 3").
     const { data: existingSubject, error: existingSubjectError } = await supabase
       .from("subjects")
-      .select("id, code, name")
+      .select("id, code, name, units")
       .ilike("code", code)
       .ilike("name", name)
       .maybeSingle();
@@ -54,8 +59,8 @@ export async function POST(request) {
 
     const { data, error } = await supabase
       .from("subjects")
-      .insert({ code, name })
-      .select("id, code, name")
+      .insert({ code, name, units })
+      .select("id, code, name, units")
       .single();
 
     if (error) {

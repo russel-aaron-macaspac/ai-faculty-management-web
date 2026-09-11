@@ -14,10 +14,11 @@ import * as z from 'zod';
 const subjectSchema = z.object({
   code: z.string().trim().min(1, 'Enter the subject code.'),
   name: z.string().trim().min(1, 'Enter the subject description.'),
+  units: z.coerce.number({ message: 'Enter the number of units.' }).positive('Units must be greater than zero.'),
 });
 
 type SubjectFormValues = z.infer<typeof subjectSchema>;
-type Subject = { id: string; code: string; name: string };
+type Subject = { id: string; code: string; name: string; units?: number | null };
 
 export default function SubjectManagementPage() {
   return (
@@ -34,7 +35,7 @@ function SubjectManagementContent() {
   const [createdSubject, setCreatedSubject] = useState<Subject | null>(null);
   const form = useForm<SubjectFormValues>({
     resolver: zodResolver(subjectSchema),
-    defaultValues: { code: '', name: '' },
+    defaultValues: { code: '', name: '', units: undefined },
   });
 
   const loadSubjects = async () => {
@@ -95,7 +96,7 @@ function SubjectManagementContent() {
         )}
 
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5" noValidate>
-          <div className="grid gap-5 md:grid-cols-[minmax(0,0.8fr)_minmax(0,2fr)]">
+          <div className="grid gap-5 md:grid-cols-[minmax(0,0.8fr)_minmax(0,2fr)_minmax(0,0.6fr)]">
             <div className="space-y-2">
               <Label htmlFor="subjectCode">Subject Code</Label>
               <Input id="subjectCode" placeholder="e.g. IT301" {...form.register('code')} aria-invalid={!!form.formState.errors.code} />
@@ -105,6 +106,11 @@ function SubjectManagementContent() {
               <Label htmlFor="subjectDescription">Subject Description</Label>
               <Input id="subjectDescription" placeholder="e.g. Database Management Systems" {...form.register('name')} aria-invalid={!!form.formState.errors.name} />
               {form.formState.errors.name && <p className="text-sm text-red-600">{form.formState.errors.name.message}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="subjectUnits">Units</Label>
+              <Input id="subjectUnits" type="number" min="0.5" step="0.5" placeholder="e.g. 3" {...form.register('units', { valueAsNumber: true })} aria-invalid={!!form.formState.errors.units} />
+              {form.formState.errors.units && <p className="text-sm text-red-600">{form.formState.errors.units.message}</p>}
             </div>
           </div>
 
@@ -125,7 +131,7 @@ function SubjectManagementContent() {
         </div>
         {isLoading ? <p className="text-sm text-slate-500">Loading subjects...</p> : subjects.length === 0 ? <p className="text-sm text-slate-500">No subjects have been added yet.</p> : (
           <div className="divide-y divide-slate-200 border-y border-slate-200">
-            {subjects.map((subject) => <div key={subject.id} className="grid gap-1 py-3 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,2fr)]"><span className="font-medium text-slate-900">{subject.code}</span><span className="text-slate-600">{subject.name}</span></div>)}
+            {subjects.map((subject) => <div key={subject.id} className="grid gap-1 py-3 sm:grid-cols-[minmax(0,0.7fr)_minmax(0,2fr)_minmax(0,0.5fr)]"><span className="font-medium text-slate-900">{subject.code}</span><span className="text-slate-600">{subject.name}</span><span className="text-slate-500">{subject.units ?? '-'} units</span></div>)}
           </div>
         )}
       </section>

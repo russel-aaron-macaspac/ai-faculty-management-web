@@ -23,6 +23,14 @@ export async function PUT(request, { params }) {
       payload.name = name;
     }
 
+    if (body?.units !== undefined) {
+      const units = Number(body.units);
+      if (!Number.isFinite(units) || units <= 0) {
+        return NextResponse.json({ error: "units must be a positive number" }, { status: 400 });
+      }
+      payload.units = units;
+    }
+
     if (Object.keys(payload).length === 0) {
       return NextResponse.json({ error: "No fields provided to update" }, { status: 400 });
     }
@@ -32,7 +40,7 @@ export async function PUT(request, { params }) {
       .from("subjects")
       .update(payload)
       .eq("id", id)
-      .select("id, code, name")
+      .select("id, code, name, units")
       .single();
 
     if (error) {

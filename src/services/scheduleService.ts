@@ -37,6 +37,7 @@ interface UpdateSchedulePayload {
 interface SubjectPayload {
   code: string;
   name: string;
+  units?: number;
 }
 
 interface RoomPayload {
@@ -80,7 +81,7 @@ export const scheduleService = {
 
   async getMetadata(actor?: { id: string; role: string }): Promise<{
     faculties: Array<{ id: string; name: string; role: string }>;
-    subjects: Array<{ id: string; code: string; name: string }>;
+    subjects: Array<{ id: string; code: string; name: string; units?: number | null }>;
     rooms: Array<{ id: string; name: string; capacity: number }>;
     sections: Array<{ id: string; name: string }>;
   }> {
