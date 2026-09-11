@@ -78,7 +78,7 @@ type ConsultationRow = {
 
 interface SchedulingMeta {
   faculties: FacultyMeta[];
-  subjects: Array<{ id: string; code: string; name: string }>;
+  subjects: Array<{ id: string; code: string; name: string; hours?: number | null; lecture_units?: number | null; lab_units?: number | null }>;
   rooms: Array<{ id: string; name: string; capacity: number }>;
   sections: Array<{ id: string; name: string }>;
 }

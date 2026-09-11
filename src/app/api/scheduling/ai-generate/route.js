@@ -103,7 +103,8 @@ export async function POST(request) {
       const faculty = facultyById.get(assignment.facultyId);
       const facultyName = [faculty?.first_name, faculty?.middle_name, faculty?.last_name].filter(Boolean).join(" ") || assignment.facultyId;
       for (const subject of assignment.subjects) {
-      const subjectDuration = Number(subject.durationMinutes) || durationMinutes;
+      const requestedSubjectDuration = Number(subject.durationMinutes);
+      const subjectDuration = Number.isFinite(requestedSubjectDuration) && requestedSubjectDuration > 0 ? requestedSubjectDuration : durationMinutes;
       let placement = null;
       for (const window of windowsByFaculty.get(assignment.facultyId) || []) {
         for (let start = window.start; start + subjectDuration <= window.end; start += 30) {
