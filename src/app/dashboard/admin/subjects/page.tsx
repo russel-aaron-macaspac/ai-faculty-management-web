@@ -15,10 +15,16 @@ const subjectSchema = z.object({
   code: z.string().trim().min(1, 'Enter the subject code.'),
   name: z.string().trim().min(1, 'Enter the subject description.'),
   units: z.coerce.number({ message: 'Enter the number of units.' }).positive('Units must be greater than zero.'),
+  lectureUnits: z.coerce.number({ message: 'Enter lecture units.' }).min(0, 'Lecture units cannot be negative.'),
+  labUnits: z.coerce.number({ message: 'Enter lab units.' }).min(0, 'Lab units cannot be negative.'),
+  hours: z.coerce.number({ message: 'Enter the number of hours.' }).positive('Hours must be greater than zero.'),
+}).refine((values) => values.lectureUnits + values.labUnits <= values.units, {
+  message: 'Lecture and lab units cannot exceed total units.',
+  path: ['labUnits'],
 });
 
 type SubjectFormValues = z.infer<typeof subjectSchema>;
-type Subject = { id: string; code: string; name: string; units?: number | null };
+type Subject = { id: string; code: string; name: string; units?: number | null; lecture_units?: number | null; lab_units?: number | null; hours?: number | null };
 
 export default function SubjectManagementPage() {
   return (
@@ -35,7 +41,7 @@ function SubjectManagementContent() {
   const [createdSubject, setCreatedSubject] = useState<Subject | null>(null);
   const form = useForm<SubjectFormValues>({
     resolver: zodResolver(subjectSchema),
-    defaultValues: { code: '', name: '', units: undefined },
+    defaultValues: { code: '', name: '', units: undefined, lectureUnits: 0, labUnits: 0, hours: undefined },
   });
 
   const loadSubjects = async () => {
@@ -96,7 +102,7 @@ function SubjectManagementContent() {
         )}
 
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5" noValidate>
-          <div className="grid gap-5 md:grid-cols-[minmax(0,0.8fr)_minmax(0,2fr)_minmax(0,0.6fr)]">
+          <div className="grid gap-5 md:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="subjectCode">Subject Code</Label>
               <Input id="subjectCode" placeholder="e.g. IT301" {...form.register('code')} aria-invalid={!!form.formState.errors.code} />
@@ -111,6 +117,21 @@ function SubjectManagementContent() {
               <Label htmlFor="subjectUnits">Units</Label>
               <Input id="subjectUnits" type="number" min="0.5" step="0.5" placeholder="e.g. 3" {...form.register('units', { valueAsNumber: true })} aria-invalid={!!form.formState.errors.units} />
               {form.formState.errors.units && <p className="text-sm text-red-600">{form.formState.errors.units.message}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="lectureUnits">Lecture Units</Label>
+              <Input id="lectureUnits" type="number" min="0" step="0.5" placeholder="e.g. 2" {...form.register('lectureUnits', { valueAsNumber: true })} aria-invalid={!!form.formState.errors.lectureUnits} />
+              {form.formState.errors.lectureUnits && <p className="text-sm text-red-600">{form.formState.errors.lectureUnits.message}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="labUnits">Lab Units</Label>
+              <Input id="labUnits" type="number" min="0" step="0.5" placeholder="e.g. 1" {...form.register('labUnits', { valueAsNumber: true })} aria-invalid={!!form.formState.errors.labUnits} />
+              {form.formState.errors.labUnits && <p className="text-sm text-red-600">{form.formState.errors.labUnits.message}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="subjectHours">Hours</Label>
+              <Input id="subjectHours" type="number" min="0.5" step="0.5" placeholder="e.g. 3" {...form.register('hours', { valueAsNumber: true })} aria-invalid={!!form.formState.errors.hours} />
+              {form.formState.errors.hours && <p className="text-sm text-red-600">{form.formState.errors.hours.message}</p>}
             </div>
           </div>
 
@@ -131,7 +152,7 @@ function SubjectManagementContent() {
         </div>
         {isLoading ? <p className="text-sm text-slate-500">Loading subjects...</p> : subjects.length === 0 ? <p className="text-sm text-slate-500">No subjects have been added yet.</p> : (
           <div className="divide-y divide-slate-200 border-y border-slate-200">
-            {subjects.map((subject) => <div key={subject.id} className="grid gap-1 py-3 sm:grid-cols-[minmax(0,0.7fr)_minmax(0,2fr)_minmax(0,0.5fr)]"><span className="font-medium text-slate-900">{subject.code}</span><span className="text-slate-600">{subject.name}</span><span className="text-slate-500">{subject.units ?? '-'} units</span></div>)}
+            {subjects.map((subject) => <div key={subject.id} className="grid gap-1 py-3 sm:grid-cols-[minmax(0,0.7fr)_minmax(0,1.5fr)_minmax(0,1.8fr)]"><span className="font-medium text-slate-900">{subject.code}</span><span className="text-slate-600">{subject.name}</span><span className="text-slate-500">{subject.units ?? '-'} units · Lec {subject.lecture_units ?? 0}u · Lab {subject.lab_units ?? 0}u · {subject.hours ?? '-'} hours</span></div>)}
           </div>
         )}
       </section>

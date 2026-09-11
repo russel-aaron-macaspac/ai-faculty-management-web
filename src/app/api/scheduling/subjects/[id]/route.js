@@ -23,6 +23,24 @@ export async function PUT(request, { params }) {
       payload.name = name;
     }
 
+    if (body?.hours !== undefined) {
+      const hours = Number(body.hours);
+      if (!Number.isFinite(hours) || hours <= 0) {
+        return NextResponse.json({ error: "hours must be a positive number" }, { status: 400 });
+      }
+      payload.hours = hours;
+    }
+
+    for (const [inputName, columnName] of [["lectureUnits", "lecture_units"], ["labUnits", "lab_units"]]) {
+      if (body?.[inputName] !== undefined) {
+        const value = Number(body[inputName]);
+        if (!Number.isFinite(value) || value < 0) {
+          return NextResponse.json({ error: `${inputName} must be zero or a positive number` }, { status: 400 });
+        }
+        payload[columnName] = value;
+      }
+    }
+
     if (body?.units !== undefined) {
       const units = Number(body.units);
       if (!Number.isFinite(units) || units <= 0) {
@@ -40,7 +58,7 @@ export async function PUT(request, { params }) {
       .from("subjects")
       .update(payload)
       .eq("id", id)
-      .select("id, code, name, units")
+      .select("id, code, name, units, lecture_units, lab_units, hours")
       .single();
 
     if (error) {
