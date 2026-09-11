@@ -60,7 +60,7 @@ export async function POST(request) {
 
     const facultyById = new Map(faculties.map((faculty) => [String(faculty.user_id), faculty]));
     const facultyUuidById = new Map(faculties.map((faculty) => [String(faculty.user_id), faculty.supabase_id]));
-    const { data: availability, error: availabilityError } = await supabase.from("faculty_availability").select("faculty_id, day, start_time, end_time").in("faculty_id", faculties.map((faculty) => faculty.supabase_id));
+    const { data: availability, error: availabilityError } = await supabase.from("faculty_availability").select("faculty_id, day, start_time, end_time, delivery_mode").in("faculty_id", faculties.map((faculty) => faculty.supabase_id));
     if (availabilityError) throw availabilityError;
 
     const { data: assignedSchedules, error: assignedSchedulesError } = await supabase
@@ -80,7 +80,8 @@ export async function POST(request) {
       }),
     }));
 
-    const availableDays = [...new Set((availability || []).map((row) => row.day))];
+    const campusAvailability = (availability || []).filter((row) => row.delivery_mode !== "online");
+    const availableDays = [...new Set(campusAvailability.map((row) => row.day))];
     let existingSchedules = [];
     if (availableDays.length > 0) {
       const { data, error } = await supabase.from("schedules").select("faculty_id, room_id, day, start_time, end_time, status").in("day", availableDays).neq("status", "rejected");
@@ -94,7 +95,7 @@ export async function POST(request) {
 
     const facultyBookings = new Map(facultyIds.map((id) => [id, existingSchedules.filter((schedule) => String(schedule.faculty_id) === id).map((schedule) => ({ day: schedule.day, start: toMinutes(schedule.start_time), end: toMinutes(schedule.end_time) }))]));
     const roomBookings = existingSchedules.map((schedule) => ({ roomId: String(schedule.room_id), day: schedule.day, start: toMinutes(schedule.start_time), end: toMinutes(schedule.end_time) }));
-    const windowsByFaculty = new Map(facultyIds.map((id) => [id, (availability || []).filter((row) => String(row.faculty_id) === String(facultyUuidById.get(id))).map((row) => ({ day: row.day, start: toMinutes(row.start_time), end: toMinutes(row.end_time) })).filter((window) => DAYS.includes(window.day) && Number.isFinite(window.start) && Number.isFinite(window.end) && window.start < window.end).sort((left, right) => DAYS.indexOf(left.day) - DAYS.indexOf(right.day) || left.start - right.start)]));
+    const windowsByFaculty = new Map(facultyIds.map((id) => [id, campusAvailability.filter((row) => String(row.faculty_id) === String(facultyUuidById.get(id))).map((row) => ({ day: row.day, start: toMinutes(row.start_time), end: toMinutes(row.end_time) })).filter((window) => DAYS.includes(window.day) && Number.isFinite(window.start) && Number.isFinite(window.end) && window.start < window.end).sort((left, right) => DAYS.indexOf(left.day) - DAYS.indexOf(right.day) || left.start - right.start)]));
     const generated = [];
     const unplaced = [];
 

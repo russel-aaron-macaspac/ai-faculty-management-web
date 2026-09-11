@@ -13,6 +13,8 @@ const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 type LoadType = 'regular' | 'overload';
 type RowStatus = 'idle' | 'saving' | 'saved' | 'conflict' | 'error';
 type Subject = { id: string; code: string; name: string };
+type DeliveryMode = 'on-campus' | 'online';
+type SubjectAssignment = Subject & { deliveryMode: DeliveryMode };
 type Room = { id: string; name: string; capacity: number };
 type Faculty = { id: string; name: string; role: string };
 type GeneratedRow = { localId: string; subjectId: string | null; facultyId: string; facultyName: string; code: string; name: string; day: string; startTime: string; endTime: string; section: string; roomId: string; roomName: string; units: string; lectureContactHours: string; labContactHours: string; classSize: string; loadType: LoadType; status: RowStatus; statusMessage?: string; isSaved?: boolean };
@@ -123,7 +125,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, createdBy, cre
   const [selectedRoomId, setSelectedRoomId] = useState('');
   const [roomScheduleRefresh, setRoomScheduleRefresh] = useState(0);
   const [selectedFacultyIds, setSelectedFacultyIds] = useState<string[]>([]);
-  const [subjectsByFaculty, setSubjectsByFaculty] = useState<Record<string, Subject[]>>({});
+  const [subjectsByFaculty, setSubjectsByFaculty] = useState<Record<string, SubjectAssignment[]>>({});
   const [activeFacultyId, setActiveFacultyId] = useState('');
   const [subjectCode, setSubjectCode] = useState('');
   const [isMinimized, setIsMinimized] = useState(true);
@@ -135,6 +137,12 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, createdBy, cre
   }, [subjectCode, subjects]);
 
   const selectedRoom = rooms.find((room) => room.id === selectedRoomId);
+  const onlineAssignments = selectedFacultyIds.flatMap((facultyId) => {
+    const faculty = faculties.find((item) => item.id === facultyId);
+    return (subjectsByFaculty[facultyId] || [])
+      .filter((assignment) => assignment.deliveryMode === 'online')
+      .map((assignment) => ({ ...assignment, facultyName: faculty?.name || facultyId }));
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -200,13 +208,30 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, createdBy, cre
 
   const toggleSubject = (facultyId: string, subject: Subject) => setSubjectsByFaculty((current) => {
     const selected = current[facultyId] || [];
-    return { ...current, [facultyId]: selected.some((item) => item.id === subject.id) ? selected.filter((item) => item.id !== subject.id) : [...selected, subject] };
+    return { ...current, [facultyId]: selected.some((item) => item.id === subject.id) ? selected.filter((item) => item.id !== subject.id) : [...selected, { ...subject, deliveryMode: 'on-campus' }] };
   });
 
+  const changeSubjectDeliveryMode = (facultyId: string, subjectId: string, deliveryMode: DeliveryMode | null) => {
+    if (!deliveryMode) return;
+    setSubjectsByFaculty((current) => ({
+      ...current,
+      [facultyId]: (current[facultyId] || []).map((assignment) => assignment.id === subjectId ? { ...assignment, deliveryMode } : assignment),
+    }));
+  };
+
   const generate = async () => {
-    const assignments = selectedFacultyIds.map((facultyId) => ({ facultyId, subjects: (subjectsByFaculty[facultyId] || []).map((subject) => ({ subjectId: subject.id, code: subject.code, name: subject.name })) })).filter((assignment) => assignment.subjects.length > 0);
-    if (!selectedRoomId || assignments.length !== selectedFacultyIds.length) {
+    const selectedAssignments = selectedFacultyIds.map((facultyId) => ({ facultyId, subjects: subjectsByFaculty[facultyId] || [] }));
+    const assignments = selectedAssignments.map(({ facultyId, subjects: facultySubjects }) => ({ facultyId, subjects: facultySubjects.filter((subject) => subject.deliveryMode === 'on-campus').map((subject) => ({ subjectId: subject.id, code: subject.code, name: subject.name })) })).filter((assignment) => assignment.subjects.length > 0);
+    if (!selectedRoomId || selectedAssignments.some((assignment) => assignment.subjects.length === 0)) {
       toast({ title: 'Complete the generator setup', description: 'Select a room, multiple faculties, and at least one subject for each selected faculty.', type: 'warning' });
+      return;
+    }
+    if (assignments.length === 0) {
+      setRows([]);
+      setUnplaced([]);
+      setUnavailable([]);
+      setSuggestions([]);
+      toast({ title: 'Online subjects noted', description: 'All selected subjects are online and were excluded from the room matrix.', type: 'success' });
       return;
     }
     setGenerating(true);
@@ -225,7 +250,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, createdBy, cre
       setRows((data.generated || []).map((row: Omit<GeneratedRow, 'localId' | 'status'>) => ({ ...row, localId: makeId(), units: String(row.units ?? ''), lectureContactHours: String(row.lectureContactHours ?? ''), labContactHours: String(row.labContactHours ?? ''), classSize: String(row.classSize ?? ''), status: 'idle' })));
       setUnplaced(data.unplaced || []);
       setUnavailable(data.unavailable || []);
-      toast({ title: 'Schedule generated', description: `${data.generated?.length || 0} subject(s) placed.`, type: 'success' });
+      toast({ title: 'Schedule generated', description: `${data.generated?.length || 0} on-campus subject(s) placed${onlineAssignments.length > 0 ? `; ${onlineAssignments.length} online subject(s) excluded from the matrix` : ''}.`, type: 'success' });
     } catch (error) {
       toast({ title: 'Generation failed', description: error instanceof Error ? error.message : 'Could not generate schedule.', type: 'error' });
     } finally {
@@ -284,8 +309,9 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, createdBy, cre
     {selectedFacultyIds.length > 0 && <div className="space-y-3">
       <div className="text-sm font-medium text-slate-700">3. Assign subjects by faculty</div>
       <div className="flex flex-wrap gap-2">{selectedFacultyIds.map((facultyId) => { const faculty = faculties.find((item) => item.id === facultyId); return <Button key={facultyId} type="button" size="sm" variant={activeFacultyId === facultyId ? 'default' : 'outline'} onClick={() => { setActiveFacultyId(facultyId); setSubjectCode(''); }}>{faculty?.name || facultyId}</Button>; })}</div>
-      {activeFacultyId && <div className="grid gap-3 md:grid-cols-2"><div className="space-y-2"><label htmlFor="ai-subject-code" className="text-sm font-medium text-slate-700">Subject code</label><Input id="ai-subject-code" value={subjectCode} onChange={(event) => setSubjectCode(event.target.value)} placeholder="Search saved subjects" autoComplete="off" />{subjectCode.trim() && <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm">{filteredSubjects.length === 0 ? <div className="px-3 py-2 text-sm text-slate-500">No saved subjects match this code.</div> : filteredSubjects.map((subject) => <button key={subject.id} type="button" className={`block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-slate-50 ${(subjectsByFaculty[activeFacultyId] || []).some((selected) => selected.id === subject.id) ? 'bg-red-50 text-red-900' : 'text-slate-800'}`} onClick={() => toggleSubject(activeFacultyId, subject)}><span className="font-medium">{subject.code}</span><span className="ml-2 text-slate-500">{subject.name}</span></button>)}</div>}</div><div className="space-y-2"><div className="text-sm font-medium text-slate-700">Assigned to {faculties.find((item) => item.id === activeFacultyId)?.name}</div><div className="flex min-h-10 flex-wrap gap-2 rounded-lg border border-slate-200 p-2">{(subjectsByFaculty[activeFacultyId] || []).length === 0 ? <span className="text-sm text-slate-400">No subjects assigned yet.</span> : (subjectsByFaculty[activeFacultyId] || []).map((subject) => <button key={subject.id} type="button" className="rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-900 hover:bg-red-100" onClick={() => toggleSubject(activeFacultyId, subject)}>{subject.code} <span aria-hidden="true">x</span></button>)}</div></div></div>}
+      {activeFacultyId && <div className="grid gap-3 md:grid-cols-2"><div className="space-y-2"><label htmlFor="ai-subject-code" className="text-sm font-medium text-slate-700">Subject code</label><Input id="ai-subject-code" value={subjectCode} onChange={(event) => setSubjectCode(event.target.value)} placeholder="Search saved subjects" autoComplete="off" />{subjectCode.trim() && <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm">{filteredSubjects.length === 0 ? <div className="px-3 py-2 text-sm text-slate-500">No saved subjects match this code.</div> : filteredSubjects.map((subject) => <button key={subject.id} type="button" className={`block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-slate-50 ${(subjectsByFaculty[activeFacultyId] || []).some((selected) => selected.id === subject.id) ? 'bg-red-50 text-red-900' : 'text-slate-800'}`} onClick={() => toggleSubject(activeFacultyId, subject)}><span className="font-medium">{subject.code}</span><span className="ml-2 text-slate-500">{subject.name}</span></button>)}</div>}</div><div className="space-y-2"><div className="text-sm font-medium text-slate-700">Assigned to {faculties.find((item) => item.id === activeFacultyId)?.name}</div><div className="space-y-2 rounded-lg border border-slate-200 p-2">{(subjectsByFaculty[activeFacultyId] || []).length === 0 ? <span className="text-sm text-slate-400">No subjects assigned yet.</span> : (subjectsByFaculty[activeFacultyId] || []).map((assignment) => <div key={assignment.id} className="flex items-center gap-2 rounded-md bg-slate-50 p-2"><div className="min-w-0 flex-1 text-xs"><span className="font-medium text-slate-900">{assignment.code}</span><span className="ml-2 text-slate-500">{assignment.name}</span></div><Select value={assignment.deliveryMode} onValueChange={(value) => changeSubjectDeliveryMode(activeFacultyId, assignment.id, value as DeliveryMode)}><SelectTrigger className="h-8 w-32 rounded-md px-2 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="on-campus">On campus</SelectItem><SelectItem value="online">Online</SelectItem></SelectContent></Select><button type="button" className="px-1 text-xs font-medium text-slate-500 hover:text-rose-700" onClick={() => toggleSubject(activeFacultyId, assignment)} aria-label={`Remove ${assignment.code}`}>x</button></div>)}</div></div></div>}
     </div>}
+    {onlineAssignments.length > 0 && <div className="space-y-1 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900"><div className="font-semibold">Online subjects excluded from the matrix</div>{onlineAssignments.map((assignment) => <div key={`${assignment.facultyName}-${assignment.id}`}>{assignment.code} - {assignment.name} ({assignment.facultyName}) is online and will not use the selected room.</div>)}</div>}
     <Button type="button" onClick={generate} disabled={generating || saving || !selectedRoomId || selectedFacultyIds.length === 0}>{generating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Generate Schedule Matrix</Button>
     {unplaced.length > 0 && <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-4"><div className="text-sm font-semibold text-amber-900">Could not place</div>{unplaced.map((item) => <div key={`${item.code}-${item.name}`} className="flex gap-2 text-sm text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span><strong>{item.code} - {item.name}:</strong> {item.reason}</span></div>)}</div>}
     {unavailable.length > 0 && <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-700">Already assigned and excluded</div>{unavailable.map((item) => <div key={`${item.code}-${item.name}`} className="text-sm text-slate-600"><strong>{item.code} - {item.name}</strong> is already assigned to another faculty member.</div>)}</div>}

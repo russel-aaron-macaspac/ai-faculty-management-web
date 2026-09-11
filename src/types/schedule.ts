@@ -50,6 +50,7 @@ export interface FacultyAvailability {
   day: string;
   startTime: string;
   endTime: string;
+  deliveryMode: 'on-campus' | 'online';
 }
 
 export interface SchedulingConflict {

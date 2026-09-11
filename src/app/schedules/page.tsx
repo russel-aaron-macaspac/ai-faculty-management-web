@@ -27,6 +27,8 @@ type LocalUser = {
   full_name?: string;
   name?: string;
 };
+type DeliveryMode = 'on-campus' | 'online';
+type AvailabilityRow = { day: string; startTime: string; endTime: string; deliveryMode: DeliveryMode };
 
 export default function SchedulesPage() {
   return (
@@ -41,8 +43,8 @@ function SchedulesContent() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [availabilityRows, setAvailabilityRows] = useState<Array<{ day: string; startTime: string; endTime: string }>>([]);
-  const [generatedAvailabilityRows, setGeneratedAvailabilityRows] = useState<Array<{ day: string; startTime: string; endTime: string }>>([]);
+  const [availabilityRows, setAvailabilityRows] = useState<AvailabilityRow[]>([]);
+  const [generatedAvailabilityRows, setGeneratedAvailabilityRows] = useState<AvailabilityRow[]>([]);
   const [availabilityError, setAvailabilityError] = useState('');
   const [matrixInput, setMatrixInput] = useState({
     selectedDays: DAYS,
@@ -63,7 +65,7 @@ function SchedulesContent() {
 
         if (parsed?.id && (isFacultyLikeRole(parsed.role) || parsed.role === 'dean')) {
           const entries = await scheduleService.getFacultyAvailability(String(parsed.id));
-          const mappedEntries = entries.map((entry) => ({ day: entry.day, startTime: entry.startTime, endTime: entry.endTime }));
+          const mappedEntries = entries.map((entry) => ({ day: entry.day, startTime: entry.startTime, endTime: entry.endTime, deliveryMode: entry.deliveryMode || 'on-campus' }));
           setAvailabilityRows(mappedEntries);
           setGeneratedAvailabilityRows(mappedEntries);
         } else {
@@ -172,6 +174,7 @@ function SchedulesContent() {
       day,
       startTime: matrixInput.startTime,
       endTime: matrixInput.endTime,
+      deliveryMode: 'on-campus' as DeliveryMode,
     }));
 
     setGeneratedAvailabilityRows(rows);
@@ -179,7 +182,7 @@ function SchedulesContent() {
     setAvailabilityError('');
   };
 
-  const updateGeneratedRow = (index: number, next: Partial<{ day: string; startTime: string; endTime: string }>) => {
+  const updateGeneratedRow = (index: number, next: Partial<AvailabilityRow>) => {
     setGeneratedAvailabilityRows((rows) => rows.map((row, rowIndex) => (rowIndex === index ? { ...row, ...next } : row)));
     setAvailabilityRows((rows) => rows.map((row, rowIndex) => (rowIndex === index ? { ...row, ...next } : row)));
   };
@@ -314,6 +317,7 @@ function SchedulesContent() {
                     <TableRow>
                       <TableHead>Day</TableHead>
                       <TableHead>Time</TableHead>
+                      <TableHead>Mode</TableHead>
                       <TableHead className="w-[120px]">Action</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -348,6 +352,17 @@ function SchedulesContent() {
                               onChange={(event) => updateGeneratedRow(index, { endTime: event.target.value })}
                             />
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          <Select value={row.deliveryMode} onValueChange={(value) => updateGeneratedRow(index, { deliveryMode: (value || 'on-campus') as DeliveryMode })}>
+                            <SelectTrigger className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="on-campus">On campus</SelectItem>
+                              <SelectItem value="online">Online</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </TableCell>
                         <TableCell>
                           <Button type="button" variant="outline" onClick={() => removeGeneratedRow(index)}>
