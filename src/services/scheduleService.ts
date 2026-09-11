@@ -169,7 +169,7 @@ export const scheduleService = {
     return data;
   },
 
-  async saveFacultyAvailability(facultyId: string, entries: Array<{ day: string; startTime: string; endTime: string }>, actor?: { name?: string; role?: string }) {
+  async saveFacultyAvailability(facultyId: string, entries: Array<{ day: string; startTime: string; endTime: string; deliveryMode: 'on-campus' | 'online' }>, actor?: { name?: string; role?: string }) {
     const res = await fetch('/api/scheduling/availability', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },

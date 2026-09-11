@@ -34,7 +34,7 @@ export async function GET(request) {
 
     const { data, error } = await supabase
       .from("faculty_availability")
-      .select("id, faculty_id, day, start_time, end_time")
+      .select("id, faculty_id, day, start_time, end_time, delivery_mode")
       .eq("faculty_id", actualFacultyId)
       .order("day", { ascending: true })
       .order("start_time", { ascending: true });
@@ -50,6 +50,7 @@ export async function GET(request) {
       day: row.day,
       startTime: String(row.start_time).slice(0, 5),
       endTime: String(row.end_time).slice(0, 5),
+      deliveryMode: row.delivery_mode === "online" ? "online" : "on-campus",
     }));
 
     return NextResponse.json({ data: formatted });
@@ -79,6 +80,9 @@ export async function PUT(request) {
 
       if (entry.startTime >= entry.endTime) {
         return NextResponse.json({ error: "Availability startTime must be before endTime" }, { status: 400 });
+      }
+      if (!["on-campus", "online"].includes(entry.deliveryMode)) {
+        return NextResponse.json({ error: "Availability deliveryMode must be on-campus or online" }, { status: 400 });
       }
     }
 
@@ -126,12 +130,13 @@ export async function PUT(request) {
       day: entry.day,
       start_time: entry.startTime,
       end_time: entry.endTime,
+      delivery_mode: entry.deliveryMode,
     }));
 
     const { data, error: insertError } = await supabase
       .from("faculty_availability")
       .insert(payload)
-      .select("id, faculty_id, day, start_time, end_time");
+      .select("id, faculty_id, day, start_time, end_time, delivery_mode");
 
     if (insertError) {
       console.error("[AVAILABILITY PUT INSERT ERROR]", insertError);
@@ -155,6 +160,7 @@ export async function PUT(request) {
         day: row.day,
         startTime: String(row.start_time).slice(0, 5),
         endTime: String(row.end_time).slice(0, 5),
+        deliveryMode: row.delivery_mode === "online" ? "online" : "on-campus",
       })),
     });
   } catch (err) {
