@@ -24,6 +24,7 @@ const subjectSchema = z.object({
 });
 
 type SubjectFormValues = z.infer<typeof subjectSchema>;
+type SubjectFormInput = z.input<typeof subjectSchema>;
 type Subject = { id: string; code: string; name: string; units?: number | null; lecture_units?: number | null; lab_units?: number | null; hours?: number | null };
 
 export default function SubjectManagementPage() {
@@ -39,7 +40,7 @@ function SubjectManagementContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createdSubject, setCreatedSubject] = useState<Subject | null>(null);
-  const form = useForm<SubjectFormValues>({
+  const form = useForm<SubjectFormInput, unknown, SubjectFormValues>({
     resolver: zodResolver(subjectSchema),
     defaultValues: { code: '', name: '', units: undefined, lectureUnits: 0, labUnits: 0, hours: undefined },
   });
