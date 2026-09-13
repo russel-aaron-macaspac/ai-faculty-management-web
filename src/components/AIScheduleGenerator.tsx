@@ -50,14 +50,6 @@ function isValidTimeRange(row: GeneratedRow) {
   return Boolean(row.startTime && row.endTime && row.startTime < row.endTime);
 }
 
-function formatSubjectName(subject: Subject): string {
-  const components = [
-    (subject.lecture_units ?? 0) > 0 ? 'Lecture' : null,
-    (subject.lab_units ?? 0) > 0 ? 'Lab' : null,
-  ].filter(Boolean);
-  return components.length > 0 ? `${subject.name} (${components.join(' / ')})` : subject.name;
-}
-
 const BOARD_START = 7 * 60;
 const BOARD_END = 20 * 60;
 const BOARD_SLOTS = Array.from({ length: (BOARD_END - BOARD_START) / 30 }, (_, index) => BOARD_START + index * 30);
@@ -130,6 +122,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
   const [savedRows, setSavedRows] = useState<GeneratedRow[]>([]);
   const [unplaced, setUnplaced] = useState<Array<{ code: string; name: string; reason: string }>>([]);
   const [unavailable, setUnavailable] = useState<Array<{ code: string; name: string; reason: string }>>([]);
+  const [generationMessage, setGenerationMessage] = useState('');
   const [suggestions, setSuggestions] = useState<Array<{ label: string; value: string }>>([]);
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -206,6 +199,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
     setRows([]);
     setUnplaced([]);
     setUnavailable([]);
+    setGenerationMessage('');
     setSuggestions([]);
   };
 
@@ -246,7 +240,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
   const generate = async () => {
     const selectedAssignments = selectedFacultyIds.map((facultyId) => ({ facultyId, subjects: subjectsByFaculty[facultyId] || [] }));
     const hasMissingSections = selectedAssignments.some((assignment) => assignment.subjects.some((subject) => subject.sectionIds.length === 0));
-    const assignments = selectedAssignments.map(({ facultyId, subjects: facultySubjects }) => ({ facultyId, subjects: facultySubjects.filter((subject) => subject.deliveryMode === 'on-campus').flatMap((subject) => subject.sectionIds.map((sectionId) => ({ subjectId: subject.id, code: subject.code, name: subject.name, section: sections.find((section) => section.id === sectionId)?.name || sectionId, durationMinutes: Number(subject.hours) > 0 ? Number(subject.hours) * 60 : undefined }))) })).filter((assignment) => assignment.subjects.length > 0);
+    const assignments = selectedAssignments.map(({ facultyId, subjects: facultySubjects }) => ({ facultyId, subjects: facultySubjects.filter((subject) => subject.deliveryMode === 'on-campus').map((subject) => ({ subjectId: subject.id, code: subject.code, name: subject.name, sections: subject.sectionIds.map((sectionId) => sections.find((section) => section.id === sectionId)?.name || sectionId), classType: (subject.lab_units ?? 0) > 0 && (subject.lecture_units ?? 0) === 0 ? 'lab' : 'lecture', durationMinutes: Number(subject.hours) > 0 ? Number(subject.hours) * 60 : undefined })) })).filter((assignment) => assignment.subjects.length > 0);
     if (!selectedRoomId || hasMissingSections || selectedAssignments.some((assignment) => assignment.subjects.length === 0)) {
       toast({ title: 'Complete the generator setup', description: 'Select a room, at least one section for every subject, multiple faculties, and at least one subject for each selected faculty.', type: 'warning' });
       return;
@@ -260,6 +254,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
       return;
     }
     setGenerating(true);
+    setGenerationMessage('Generating schedule placements and checking room, faculty, and section constraints...');
     setSuggestions([]);
     try {
       const response = await fetch('/api/scheduling/ai-generate', {
@@ -275,8 +270,14 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
       setRows((data.generated || []).map((row: Omit<GeneratedRow, 'localId' | 'status'>) => ({ ...row, localId: makeId(), units: String(row.units ?? ''), lectureContactHours: String(row.lectureContactHours ?? ''), labContactHours: String(row.labContactHours ?? ''), classSize: String(row.classSize ?? ''), status: 'idle' })));
       setUnplaced(data.unplaced || []);
       setUnavailable(data.unavailable || []);
-      toast({ title: 'Schedule generated', description: `${data.generated?.length || 0} on-campus subject(s) placed${onlineAssignments.length > 0 ? `; ${onlineAssignments.length} online subject(s) excluded from the matrix` : ''}.`, type: 'success' });
+      const generatedCount = data.generated?.length || 0;
+      const unplacedCount = data.unplaced?.length || 0;
+      setGenerationMessage(generatedCount > 0
+        ? `Placed ${generatedCount} section${generatedCount === 1 ? '' : 's'} in ${selectedRoom?.name || 'the selected room'}. Each section received its own timeslot after checking room, faculty, and section availability. The highest-scoring valid slots favored room packing, section cohesion, and lecture/lab timing.${unplacedCount > 0 ? ` ${unplacedCount} section${unplacedCount === 1 ? '' : 's'} could not be placed.` : ''}`
+        : `No sections were placed because no valid timeslot satisfied the room, faculty, and section constraints.${unplacedCount > 0 ? ` ${unplacedCount} section${unplacedCount === 1 ? '' : 's'} could not be placed.` : ''}`);
+      toast({ title: 'Schedule generated', description: `${generatedCount} section${generatedCount === 1 ? '' : 's'} placed${onlineAssignments.length > 0 ? `; ${onlineAssignments.length} online subject(s) excluded from the matrix` : ''}.`, type: 'success' });
     } catch (error) {
+      setGenerationMessage(`Schedule generation failed: ${error instanceof Error ? error.message : 'Could not generate schedule.'}`);
       toast({ title: 'Generation failed', description: error instanceof Error ? error.message : 'Could not generate schedule.', type: 'error' });
     } finally {
       setGenerating(false);
@@ -357,6 +358,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
     </div>}
     {onlineAssignments.length > 0 && <div className="space-y-1 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900"><div className="font-semibold">Online subjects excluded from the matrix</div>{onlineAssignments.map((assignment) => <div key={`${assignment.facultyName}-${assignment.id}`}>{assignment.code} - {assignment.name} ({assignment.facultyName}) is online and will not use the selected room.</div>)}</div>}
     <Button type="button" onClick={generate} disabled={generating || saving || !selectedRoomId || selectedFacultyIds.length === 0}>{generating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Generate Schedule Matrix</Button>
+    {generationMessage && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"><div className="font-semibold">Generation result</div><p className="mt-1">{generationMessage}</p></div>}
     {unplaced.length > 0 && <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-4"><div className="text-sm font-semibold text-amber-900">Could not place</div>{unplaced.map((item) => <div key={`${item.code}-${item.name}`} className="flex gap-2 text-sm text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span><strong>{item.code} - {item.name}:</strong> {item.reason}</span></div>)}</div>}
     {unavailable.length > 0 && <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-700">Already assigned and excluded</div>{unavailable.map((item) => <div key={`${item.code}-${item.name}`} className="text-sm text-slate-600"><strong>{item.code} - {item.name}</strong> is already assigned to another faculty member.</div>)}</div>}
     {suggestions.length > 0 && <div className="space-y-2 rounded-lg border border-blue-200 bg-blue-50 p-4"><div className="text-sm font-semibold text-blue-900">Conflict suggestions</div>{suggestions.map((suggestion, index) => <div key={`${suggestion.label}-${suggestion.value}-${index}`} className="text-sm text-blue-900"><strong>{suggestion.label}:</strong> {suggestion.value}</div>)}</div>}
