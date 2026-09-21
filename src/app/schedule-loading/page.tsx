@@ -741,6 +741,7 @@ function ScheduleLoadingContent() {
               facultyName={selectedFacultyName}
               rooms={meta.rooms}
               subjects={meta.subjects}
+              sections={meta.sections}
               createdBy={user?.id || ''}
               creatorRole={user?.role || ''}
               onSaved={() => loadData(user)}

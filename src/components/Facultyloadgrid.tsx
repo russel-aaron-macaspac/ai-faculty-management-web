@@ -45,10 +45,17 @@ interface RoomOption {
   capacity: number;
 }
 
+interface SectionOption {
+  id: string;
+  name: string;
+  year_level?: string | number | null;
+}
+
 interface SubjectOption {
   id: string;
   code: string;
   name: string;
+  year_level?: string | number | null;
   units?: number | null;
   hours?: number | null;
   lecture_units?: number | null;
@@ -68,6 +75,7 @@ interface FacultyLoadGridProps {
   facultyName: string;
   rooms: RoomOption[];
   subjects: SubjectOption[];
+  sections: SectionOption[];
   createdBy: string;
   creatorRole: string;
   onSaved?: () => void | Promise<void>;
@@ -153,6 +161,7 @@ export function FacultyLoadGrid({
   facultyName,
   rooms,
   subjects,
+  sections,
   createdBy,
   creatorRole,
   onSaved,
@@ -198,6 +207,7 @@ export function FacultyLoadGrid({
       ...row,
       code: subject.code,
       description: formatSubjectName(subject),
+      section: '',
       endTime: calculateEndTime(row.startTime, subject.hours),
       units: subject.units == null ? '' : String(subject.units),
       lectureContactHours: subject.lecture_units == null ? '' : String(subject.lecture_units),
@@ -214,6 +224,14 @@ export function FacultyLoadGrid({
       const subject = subjects.find((item) => item.code.toLowerCase() === row.code.trim().toLowerCase());
       return { ...row, startTime, endTime: calculateEndTime(startTime, subject?.hours), status: 'idle', statusMessage: undefined };
     }));
+  };
+
+  const availableRooms = rooms.filter((room) => !/\b(tba|tbd|online|virtual|remote)\b/i.test(room.name));
+
+  const availableSections = (row: LoadRow) => {
+    const subject = subjects.find((item) => item.code.toLowerCase() === row.code.trim().toLowerCase());
+    if (!subject || subject.year_level == null) return [];
+    return sections.filter((section) => section.year_level != null && String(section.year_level).trim().toLowerCase() === String(subject.year_level).trim().toLowerCase());
   };
 
   const addRow = (loadType: LoadType) => {
@@ -462,22 +480,32 @@ export function FacultyLoadGrid({
                 />
               </TableCell>
               <TableCell>
-                <Input
-                  className={TEXT_INPUT_CLASS}
-                  value={row.section}
-                  placeholder="e.g. BSIT2B"
-                  title={row.section}
-                  onChange={(e) => updateRow(loadType, row.localId, 'section', e.target.value)}
-                />
+                <Select value={row.section} onValueChange={(value) => updateRow(loadType, row.localId, 'section', value ?? '')}>
+                  <SelectTrigger className="h-9 min-w-[150px]">
+                    <SelectValue placeholder="Select section" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableSections(row).map((section) => (
+                      <SelectItem key={section.id} value={section.name}>
+                        {section.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </TableCell>
               <TableCell>
-                <Input
-                  className={TEXT_INPUT_CLASS}
-                  value={row.roomName}
-                  placeholder="e.g. ComLab 1"
-                  title={row.roomName}
-                  onChange={(e) => updateRow(loadType, row.localId, 'roomName', e.target.value)}
-                />
+                <Select value={row.roomName} onValueChange={(value) => updateRow(loadType, row.localId, 'roomName', value ?? '')}>
+                  <SelectTrigger className="h-9 min-w-[160px]">
+                    <SelectValue placeholder="Select room" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableRooms.map((room) => (
+                      <SelectItem key={room.id} value={room.name}>
+                        {room.name} ({room.capacity} seats)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </TableCell>
               <TableCell>
                 <Input
