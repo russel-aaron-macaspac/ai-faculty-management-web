@@ -12,13 +12,23 @@ import { toast } from '@/lib/toast';
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 type LoadType = 'regular' | 'overload';
 type RowStatus = 'idle' | 'saving' | 'saved' | 'conflict' | 'error';
-type Subject = { id: string; code: string; name: string; hours?: number | null; lecture_units?: number | null; lab_units?: number | null };
+type Subject = { id: string; code: string; name: string; year_level?: string | number | null; hours?: number | null; lecture_units?: number | null; lab_units?: number | null };
 type DeliveryMode = 'on-campus' | 'online';
 type SubjectAssignment = Subject & { deliveryMode: DeliveryMode; sectionIds: string[] };
 type Room = { id: string; name: string; capacity: number };
 type Faculty = { id: string; name: string; role: string };
-type Section = { id: string; name: string };
+type Section = { id: string; name: string; year_level?: string | number | null };
 type GeneratedRow = { localId: string; subjectId: string | null; facultyId: string; facultyName: string; code: string; name: string; day: string; startTime: string; endTime: string; section: string; roomId: string; roomName: string; units: string; lectureContactHours: string; labContactHours: string; classSize: string; loadType: LoadType; status: RowStatus; statusMessage?: string; isSaved?: boolean };
+
+const isGeneratorRoom = (room: Room) => {
+  return !/\b(tba|tbd|online|virtual|remote)\b/i.test(room.name);
+};
+
+const hasMatchingYearLevel = (subject: Subject, section: Section) => (
+  subject.year_level != null
+  && section.year_level != null
+  && String(subject.year_level).trim().toLowerCase() === String(section.year_level).trim().toLowerCase()
+);
 
 interface AIScheduleGeneratorProps {
   faculties: Faculty[];
@@ -326,7 +336,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
     <p className="text-sm text-slate-500">Choose the room first, select the faculty members to load, then assign saved subjects to each faculty member. The generator uses each faculty member&apos;s availability and checks the selected room for overlaps.</p>
     <div className="space-y-2">
       <label htmlFor="ai-room" className="text-sm font-medium text-slate-700">1. Room</label>
-      <Select value={selectedRoomId} onValueChange={handleRoomChange}><SelectTrigger id="ai-room"><SelectValue placeholder="Select a room first">{selectedRoom ? `${selectedRoom.name} (${selectedRoom.capacity} seats)` : undefined}</SelectValue></SelectTrigger><SelectContent>{rooms.map((room) => <SelectItem key={room.id} value={room.id}>{room.name} ({room.capacity} seats)</SelectItem>)}</SelectContent></Select>
+      <Select value={selectedRoomId} onValueChange={handleRoomChange}><SelectTrigger id="ai-room"><SelectValue placeholder="Select a room first">{selectedRoom ? `${selectedRoom.name} (${selectedRoom.capacity} seats)` : undefined}</SelectValue></SelectTrigger><SelectContent positionMethod="fixed">{rooms.filter(isGeneratorRoom).map((room) => <SelectItem key={room.id} value={room.id}>{room.name} ({room.capacity} seats)</SelectItem>)}</SelectContent></Select>
     </div>
     <div className="space-y-2">
       <div className="text-sm font-medium text-slate-700">2. Faculty members</div>
@@ -350,7 +360,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
                 <Select value={assignment.deliveryMode} onValueChange={(value) => changeSubjectDeliveryMode(activeFacultyId, assignment.id, value as DeliveryMode)}><SelectTrigger className="h-8 w-32 rounded-md px-2 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="on-campus">On campus</SelectItem><SelectItem value="online">Online</SelectItem></SelectContent></Select>
                 <button type="button" className="px-1 text-xs font-medium text-slate-500 hover:text-rose-700" onClick={() => toggleSubject(activeFacultyId, assignment)} aria-label={`Remove ${assignment.code}`}>x</button>
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-1"><span className="mr-1 text-[10px] font-medium uppercase text-slate-500">Sections</span>{sections.map((section) => <button key={section.id} type="button" onClick={() => toggleSubjectSection(activeFacultyId, assignment.id, section.id)} className={`rounded border px-1.5 py-0.5 text-[10px] ${assignment.sectionIds.includes(section.id) ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300 bg-white text-slate-600'}`}>{section.name}</button>)}</div>
+              <div className="mt-2 flex flex-wrap items-center gap-1"><span className="mr-1 text-[10px] font-medium uppercase text-slate-500">Sections</span>{sections.filter((section) => hasMatchingYearLevel(assignment, section)).map((section) => <button key={section.id} type="button" onClick={() => toggleSubjectSection(activeFacultyId, assignment.id, section.id)} className={`rounded border px-1.5 py-0.5 text-[10px] ${assignment.sectionIds.includes(section.id) ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300 bg-white text-slate-600'}`}>{section.name}</button>)}</div>
             </div>)}
           </div>
         </div>

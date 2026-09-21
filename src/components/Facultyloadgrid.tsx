@@ -49,6 +49,8 @@ interface SubjectOption {
   id: string;
   code: string;
   name: string;
+  units?: number | null;
+  hours?: number | null;
   lecture_units?: number | null;
   lab_units?: number | null;
 }
@@ -97,6 +99,14 @@ function blankRow(): LoadRow {
 
 function blankTimeRows(): TimeRow[] {
   return [{ day: 'Monday', startTime: '', endTime: '' }];
+}
+
+function calculateEndTime(startTime: string, hours: number | null | undefined): string {
+  if (!startTime || !Number.isFinite(Number(hours)) || Number(hours) <= 0) return '';
+  const [startHours, startMinutes] = startTime.split(':').map(Number);
+  const totalMinutes = startHours * 60 + startMinutes + Number(hours) * 60;
+  if (!Number.isFinite(totalMinutes) || totalMinutes >= 24 * 60) return '';
+  return `${String(Math.floor(totalMinutes / 60)).padStart(2, '0')}:${String(totalMinutes % 60).padStart(2, '0')}`;
 }
 
 function loadConsultationRows(facultyId: string): TimeRow[] {
@@ -180,6 +190,30 @@ export function FacultyLoadGrid({
           : row
       )
     );
+  };
+
+  const selectSubject = (loadType: LoadType, localId: string, subject: SubjectOption) => {
+    const setRows = loadType === 'regular' ? setRegularRows : setOverloadRows;
+    setRows((prev) => prev.map((row) => row.localId === localId ? {
+      ...row,
+      code: subject.code,
+      description: formatSubjectName(subject),
+      endTime: calculateEndTime(row.startTime, subject.hours),
+      units: subject.units == null ? '' : String(subject.units),
+      lectureContactHours: subject.lecture_units == null ? '' : String(subject.lecture_units),
+      labContactHours: subject.lab_units == null ? '' : String(subject.lab_units),
+      status: 'idle',
+      statusMessage: undefined,
+    } : row));
+  };
+
+  const updateStartTime = (loadType: LoadType, localId: string, startTime: string) => {
+    const setRows = loadType === 'regular' ? setRegularRows : setOverloadRows;
+    setRows((prev) => prev.map((row) => {
+      if (row.localId !== localId) return row;
+      const subject = subjects.find((item) => item.code.toLowerCase() === row.code.trim().toLowerCase());
+      return { ...row, startTime, endTime: calculateEndTime(startTime, subject?.hours), status: 'idle', statusMessage: undefined };
+    }));
   };
 
   const addRow = (loadType: LoadType) => {
@@ -377,8 +411,7 @@ export function FacultyLoadGrid({
                           type="button"
                           className="block w-full rounded-md px-2 py-1.5 text-left text-xs text-slate-800 hover:bg-slate-50"
                           onClick={() => {
-                            updateRow(loadType, row.localId, 'code', subject.code);
-                            updateRow(loadType, row.localId, 'description', formatSubjectName(subject));
+                            selectSubject(loadType, row.localId, subject);
                           }}
                         >
                           <span className="font-medium">{subject.code}</span>
@@ -417,7 +450,7 @@ export function FacultyLoadGrid({
                   className="h-9"
                   type="time"
                   value={row.startTime}
-                  onChange={(e) => updateRow(loadType, row.localId, 'startTime', e.target.value)}
+                  onChange={(e) => updateStartTime(loadType, row.localId, e.target.value)}
                 />
               </TableCell>
               <TableCell>
@@ -425,7 +458,7 @@ export function FacultyLoadGrid({
                   className="h-9"
                   type="time"
                   value={row.endTime}
-                  onChange={(e) => updateRow(loadType, row.localId, 'endTime', e.target.value)}
+                  readOnly
                 />
               </TableCell>
               <TableCell>
@@ -452,7 +485,7 @@ export function FacultyLoadGrid({
                   inputMode="numeric"
                   pattern="[0-9]*"
                   value={row.units}
-                  onChange={(e) => updateRow(loadType, row.localId, 'units', e.target.value)}
+                  readOnly
                 />
               </TableCell>
               <TableCell>
@@ -461,7 +494,7 @@ export function FacultyLoadGrid({
                   inputMode="numeric"
                   pattern="[0-9]*"
                   value={row.lectureContactHours}
-                  onChange={(e) => updateRow(loadType, row.localId, 'lectureContactHours', e.target.value)}
+                  readOnly
                 />
               </TableCell>
               <TableCell>
@@ -470,7 +503,7 @@ export function FacultyLoadGrid({
                   inputMode="numeric"
                   pattern="[0-9]*"
                   value={row.labContactHours}
-                  onChange={(e) => updateRow(loadType, row.localId, 'labContactHours', e.target.value)}
+                  readOnly
                 />
               </TableCell>
               <TableCell>

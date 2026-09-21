@@ -84,9 +84,9 @@ export const scheduleService = {
 
   async getMetadata(actor?: { id: string; role: string }): Promise<{
     faculties: Array<{ id: string; name: string; role: string }>;
-    subjects: Array<{ id: string; code: string; name: string; units?: number | null; lecture_units?: number | null; lab_units?: number | null; hours?: number | null }>;
+    subjects: Array<{ id: string; code: string; name: string; year_level?: string | number | null; units?: number | null; lecture_units?: number | null; lab_units?: number | null; hours?: number | null }>;
     rooms: Array<{ id: string; name: string; capacity: number }>;
-    sections: Array<{ id: string; name: string }>;
+    sections: Array<{ id: string; name: string; year_level?: string | number | null }>;
   }> {
     const params = new URLSearchParams();
     if (actor?.id) {
