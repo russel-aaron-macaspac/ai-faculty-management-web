@@ -37,9 +37,9 @@ export async function GET(request) {
           .in("role", ["faculty", "program_chair", "dean"])
           .eq("status", "active")
           .order("last_name", { ascending: true }),
-        supabase.from("subjects").select("id, code, name, lecture_units, lab_units, hours").order("code", { ascending: true }),
+        supabase.from("subjects").select("id, code, name, year_level, units, lecture_units, lab_units, hours").order("code", { ascending: true }),
         supabase.from("rooms").select("id, name, capacity").order("name", { ascending: true }),
-        supabase.from("sections").select("id, name").order("name", { ascending: true }),
+        supabase.from("sections").select("id, name, year_level").order("name", { ascending: true }),
       ]);
 
     if (facultyError || subjectError || roomError || (sectionError && !isMissingSectionsTableError(sectionError))) {
@@ -54,14 +54,14 @@ export async function GET(request) {
     let normalizedSections = sections || [];
     if (sectionError && isMissingSectionsTableError(sectionError)) {
       normalizedSections = [
-        { id: "1A", name: "BSIT1A" },
-        { id: "1B", name: "BSIT1B" },
-        { id: "2A", name: "BSIT2A" },
-        { id: "2B", name: "BSIT2B" },
-        { id: "3A", name: "BSIT3A" },
-        { id: "3B", name: "BSIT3B" },
-        { id: "4A", name: "BSIT4A" },
-        { id: "4B", name: "BSIT4B" },
+        { id: "1A", name: "BSIT1A", year_level: 1 },
+        { id: "1B", name: "BSIT1B", year_level: 1 },
+        { id: "2A", name: "BSIT2A", year_level: 2 },
+        { id: "2B", name: "BSIT2B", year_level: 2 },
+        { id: "3A", name: "BSIT3A", year_level: 3 },
+        { id: "3B", name: "BSIT3B", year_level: 3 },
+        { id: "4A", name: "BSIT4A", year_level: 4 },
+        { id: "4B", name: "BSIT4B", year_level: 4 },
       ];
     }
     normalizedSections = normalizedSections.map((section) => ({ ...section, name: formatSectionName(section.name) }));

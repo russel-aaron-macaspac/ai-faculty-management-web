@@ -45,10 +45,19 @@ interface RoomOption {
   capacity: number;
 }
 
+interface SectionOption {
+  id: string;
+  name: string;
+  year_level?: string | number | null;
+}
+
 interface SubjectOption {
   id: string;
   code: string;
   name: string;
+  year_level?: string | number | null;
+  units?: number | null;
+  hours?: number | null;
   lecture_units?: number | null;
   lab_units?: number | null;
 }
@@ -66,6 +75,7 @@ interface FacultyLoadGridProps {
   facultyName: string;
   rooms: RoomOption[];
   subjects: SubjectOption[];
+  sections: SectionOption[];
   createdBy: string;
   creatorRole: string;
   onSaved?: () => void | Promise<void>;
@@ -97,6 +107,14 @@ function blankRow(): LoadRow {
 
 function blankTimeRows(): TimeRow[] {
   return [{ day: 'Monday', startTime: '', endTime: '' }];
+}
+
+function calculateEndTime(startTime: string, hours: number | null | undefined): string {
+  if (!startTime || !Number.isFinite(Number(hours)) || Number(hours) <= 0) return '';
+  const [startHours, startMinutes] = startTime.split(':').map(Number);
+  const totalMinutes = startHours * 60 + startMinutes + Number(hours) * 60;
+  if (!Number.isFinite(totalMinutes) || totalMinutes >= 24 * 60) return '';
+  return `${String(Math.floor(totalMinutes / 60)).padStart(2, '0')}:${String(totalMinutes % 60).padStart(2, '0')}`;
 }
 
 function loadConsultationRows(facultyId: string): TimeRow[] {
@@ -143,6 +161,7 @@ export function FacultyLoadGrid({
   facultyName,
   rooms,
   subjects,
+  sections,
   createdBy,
   creatorRole,
   onSaved,
@@ -180,6 +199,39 @@ export function FacultyLoadGrid({
           : row
       )
     );
+  };
+
+  const selectSubject = (loadType: LoadType, localId: string, subject: SubjectOption) => {
+    const setRows = loadType === 'regular' ? setRegularRows : setOverloadRows;
+    setRows((prev) => prev.map((row) => row.localId === localId ? {
+      ...row,
+      code: subject.code,
+      description: formatSubjectName(subject),
+      section: '',
+      endTime: calculateEndTime(row.startTime, subject.hours),
+      units: subject.units == null ? '' : String(subject.units),
+      lectureContactHours: subject.lecture_units == null ? '' : String(subject.lecture_units),
+      labContactHours: subject.lab_units == null ? '' : String(subject.lab_units),
+      status: 'idle',
+      statusMessage: undefined,
+    } : row));
+  };
+
+  const updateStartTime = (loadType: LoadType, localId: string, startTime: string) => {
+    const setRows = loadType === 'regular' ? setRegularRows : setOverloadRows;
+    setRows((prev) => prev.map((row) => {
+      if (row.localId !== localId) return row;
+      const subject = subjects.find((item) => item.code.toLowerCase() === row.code.trim().toLowerCase());
+      return { ...row, startTime, endTime: calculateEndTime(startTime, subject?.hours), status: 'idle', statusMessage: undefined };
+    }));
+  };
+
+  const availableRooms = rooms.filter((room) => !/\b(tba|tbd|online|virtual|remote)\b/i.test(room.name));
+
+  const availableSections = (row: LoadRow) => {
+    const subject = subjects.find((item) => item.code.toLowerCase() === row.code.trim().toLowerCase());
+    if (!subject || subject.year_level == null) return [];
+    return sections.filter((section) => section.year_level != null && String(section.year_level).trim().toLowerCase() === String(subject.year_level).trim().toLowerCase());
   };
 
   const addRow = (loadType: LoadType) => {
@@ -377,8 +429,7 @@ export function FacultyLoadGrid({
                           type="button"
                           className="block w-full rounded-md px-2 py-1.5 text-left text-xs text-slate-800 hover:bg-slate-50"
                           onClick={() => {
-                            updateRow(loadType, row.localId, 'code', subject.code);
-                            updateRow(loadType, row.localId, 'description', formatSubjectName(subject));
+                            selectSubject(loadType, row.localId, subject);
                           }}
                         >
                           <span className="font-medium">{subject.code}</span>
@@ -417,7 +468,7 @@ export function FacultyLoadGrid({
                   className="h-9"
                   type="time"
                   value={row.startTime}
-                  onChange={(e) => updateRow(loadType, row.localId, 'startTime', e.target.value)}
+                  onChange={(e) => updateStartTime(loadType, row.localId, e.target.value)}
                 />
               </TableCell>
               <TableCell>
@@ -425,26 +476,36 @@ export function FacultyLoadGrid({
                   className="h-9"
                   type="time"
                   value={row.endTime}
-                  onChange={(e) => updateRow(loadType, row.localId, 'endTime', e.target.value)}
+                  readOnly
                 />
               </TableCell>
               <TableCell>
-                <Input
-                  className={TEXT_INPUT_CLASS}
-                  value={row.section}
-                  placeholder="e.g. BSIT2B"
-                  title={row.section}
-                  onChange={(e) => updateRow(loadType, row.localId, 'section', e.target.value)}
-                />
+                <Select value={row.section} onValueChange={(value) => updateRow(loadType, row.localId, 'section', value ?? '')}>
+                  <SelectTrigger className="h-9 min-w-[150px]">
+                    <SelectValue placeholder="Select section" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableSections(row).map((section) => (
+                      <SelectItem key={section.id} value={section.name}>
+                        {section.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </TableCell>
               <TableCell>
-                <Input
-                  className={TEXT_INPUT_CLASS}
-                  value={row.roomName}
-                  placeholder="e.g. ComLab 1"
-                  title={row.roomName}
-                  onChange={(e) => updateRow(loadType, row.localId, 'roomName', e.target.value)}
-                />
+                <Select value={row.roomName} onValueChange={(value) => updateRow(loadType, row.localId, 'roomName', value ?? '')}>
+                  <SelectTrigger className="h-9 min-w-[160px]">
+                    <SelectValue placeholder="Select room" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableRooms.map((room) => (
+                      <SelectItem key={room.id} value={room.name}>
+                        {room.name} ({room.capacity} seats)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </TableCell>
               <TableCell>
                 <Input
@@ -452,7 +513,7 @@ export function FacultyLoadGrid({
                   inputMode="numeric"
                   pattern="[0-9]*"
                   value={row.units}
-                  onChange={(e) => updateRow(loadType, row.localId, 'units', e.target.value)}
+                  readOnly
                 />
               </TableCell>
               <TableCell>
@@ -461,7 +522,7 @@ export function FacultyLoadGrid({
                   inputMode="numeric"
                   pattern="[0-9]*"
                   value={row.lectureContactHours}
-                  onChange={(e) => updateRow(loadType, row.localId, 'lectureContactHours', e.target.value)}
+                  readOnly
                 />
               </TableCell>
               <TableCell>
@@ -470,7 +531,7 @@ export function FacultyLoadGrid({
                   inputMode="numeric"
                   pattern="[0-9]*"
                   value={row.labContactHours}
-                  onChange={(e) => updateRow(loadType, row.localId, 'labContactHours', e.target.value)}
+                  readOnly
                 />
               </TableCell>
               <TableCell>
