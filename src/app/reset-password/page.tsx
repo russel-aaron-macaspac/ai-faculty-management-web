@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser-client';
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 const schema = z.object({
   password: z.string().min(8, 'Use at least 8 characters.'),
@@ -28,8 +29,8 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     const client = getSupabaseBrowserClient();
-    client.auth.getSession().then((sessionResult) => setReady(Boolean(sessionResult.data.session)));
-    const { data: listener } = client.auth.onAuthStateChange((event, session) => {
+    client.auth.getSession().then((sessionResult: { data: { session: Session | null } }) => setReady(Boolean(sessionResult.data.session)));
+    const { data: listener } = client.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
       if (event === 'PASSWORD_RECOVERY' || session) setReady(true);
     });
     return () => listener.subscription.unsubscribe();
