@@ -14,7 +14,7 @@ export function getSupabaseBrowserClient() {
 
   if (!supabaseUrl || !supabasePubKey) {
     throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY. Add both variables to .env.local."
+      "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY. Add both variables to the deployment environment."
     );
   }
 

@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { getSupabaseBrowserClient } from '@/lib/supabase/browser-client';
 
 const schema = z.object({ email: z.string().trim().email('Enter a valid school email address.') });
 
@@ -19,20 +18,19 @@ export default function ForgotPasswordPage() {
 
   const onSubmit = async ({ email }: z.infer<typeof schema>) => {
     try {
-      const redirectTo = `${window.location.origin}/reset-password`;
-      const { error } = await getSupabaseBrowserClient().auth.resetPasswordForEmail(email.toLowerCase(), { redirectTo });
-      if (error) {
+      const response = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.toLowerCase() }),
+      });
+      if (!response.ok) {
         form.setError('root', { message: 'We could not send the reset email. Please check the address and try again.' });
         return;
       }
       form.clearErrors('root');
       form.setError('root', { type: 'success', message: 'If an account exists for that email, a reset link is on its way.' });
-    } catch (error) {
-      form.setError('root', {
-        message: error instanceof Error && error.message.includes('Missing NEXT_PUBLIC')
-          ? 'Password recovery is not configured. Add the Supabase URL and public key to .env.local, then restart the dev server.'
-          : 'We could not send the reset email. Please try again.',
-      });
+    } catch {
+      form.setError('root', { message: 'We could not send the reset email. Please try again.' });
       return;
     }
   };
