@@ -21,6 +21,7 @@ import { authService } from '@/services/authService';
 import { getDashboardPathForRole } from '@/lib/roleConfig';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { toast } from '@/lib/toast';
+import Link from 'next/link';
 
 const loginSchema = z.object({
   email: z
@@ -205,6 +206,11 @@ if (showSplash) {
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Sign In
               </Button>
+              <div className="text-center text-sm">
+                <Link href="/forgot-password" className="font-medium text-slate-600 underline-offset-4 hover:text-slate-900 hover:underline">
+                  Forgot your password?
+                </Link>
+              </div>
             </form>
           </Form>
         </CardContent>
