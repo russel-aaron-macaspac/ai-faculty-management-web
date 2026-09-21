@@ -28,7 +28,7 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     const client = getSupabaseBrowserClient();
-    client.auth.getSession().then(({ data }) => setReady(Boolean(data.session)));
+    client.auth.getSession().then((sessionResult) => setReady(Boolean(sessionResult.data.session)));
     const { data: listener } = client.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY' || session) setReady(true);
     });
@@ -42,8 +42,8 @@ export default function ResetPasswordPage() {
       form.setError('root', { message: 'The reset link is invalid or expired. Request a new one and try again.' });
       return;
     }
-    const { data: sessionData } = await client.auth.getSession();
-    const accessToken = sessionData.session?.access_token;
+    const sessionResult = await client.auth.getSession();
+    const accessToken = sessionResult.data.session?.access_token;
     if (!accessToken) {
       form.setError('root', { message: 'Your recovery session expired. Request a new reset link.' });
       return;
