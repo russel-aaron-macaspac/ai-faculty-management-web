@@ -1,3 +1,13 @@
+# Mistral scheduling setup
+
+Create a `.env.local` file in the project root and add your Gemini key:
+
+```env
+MISTRAL_API_KEY=your_mistral_api_key_here
+MISTRAL_MODEL=mistral-large-latest
+```
+
+Restart the development server after changing environment variables. The key is read only by the server-side scheduling route and must not use a `NEXT_PUBLIC_` prefix.
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started

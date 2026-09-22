@@ -19,6 +19,7 @@ type Room = { id: string; name: string; capacity: number };
 type Faculty = { id: string; name: string; role: string };
 type Section = { id: string; name: string; year_level?: string | number | null };
 type GeneratedRow = { localId: string; subjectId: string | null; facultyId: string; facultyName: string; code: string; name: string; day: string; startTime: string; endTime: string; section: string; roomId: string; roomName: string; units: string; lectureContactHours: string; labContactHours: string; classSize: string; loadType: LoadType; status: RowStatus; statusMessage?: string; isSaved?: boolean };
+type AISuggestedPlacement = Omit<GeneratedRow, 'localId' | 'status'>;
 
 const isGeneratorRoom = (room: Room) => {
   return !/\b(tba|tbd|online|virtual|remote)\b/i.test(room.name);
@@ -130,8 +131,10 @@ function ExpandableGeneratorCard({ isMinimized, onExpand, children }: Readonly<{
 export function AIScheduleGenerator({ faculties, subjects, rooms, sections, createdBy, creatorRole, onSaved }: Readonly<AIScheduleGeneratorProps>) {
   const [rows, setRows] = useState<GeneratedRow[]>([]);
   const [savedRows, setSavedRows] = useState<GeneratedRow[]>([]);
-  const [unplaced, setUnplaced] = useState<Array<{ code: string; name: string; reason: string }>>([]);
-  const [unavailable, setUnavailable] = useState<Array<{ code: string; name: string; reason: string }>>([]);
+  const [unplaced, setUnplaced] = useState<Array<{ code: string; name: string; reason: string; section?: string; facultyId?: string; suggestion?: string }>>([]);
+  const [aiSuggestionsAvailable, setAiSuggestionsAvailable] = useState(true);
+  const [aiSuggestedPlacements, setAiSuggestedPlacements] = useState<AISuggestedPlacement[]>([]);
+  const [unavailable, setUnavailable] = useState<Array<{ code: string; name: string; section?: string; reason: string; assignedFacultyName?: string }>>([]);
   const [generationMessage, setGenerationMessage] = useState('');
   const [suggestions, setSuggestions] = useState<Array<{ label: string; value: string }>>([]);
   const [generating, setGenerating] = useState(false);
@@ -252,7 +255,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
     const hasMissingSections = selectedAssignments.some((assignment) => assignment.subjects.some((subject) => subject.sectionIds.length === 0));
     const assignments = selectedAssignments.map(({ facultyId, subjects: facultySubjects }) => ({ facultyId, subjects: facultySubjects.filter((subject) => subject.deliveryMode === 'on-campus').map((subject) => ({ subjectId: subject.id, code: subject.code, name: subject.name, sections: subject.sectionIds.map((sectionId) => sections.find((section) => section.id === sectionId)?.name || sectionId), classType: (subject.lab_units ?? 0) > 0 && (subject.lecture_units ?? 0) === 0 ? 'lab' : 'lecture', durationMinutes: Number(subject.hours) > 0 ? Number(subject.hours) * 60 : undefined })) })).filter((assignment) => assignment.subjects.length > 0);
     if (!selectedRoomId || hasMissingSections || selectedAssignments.some((assignment) => assignment.subjects.length === 0)) {
-      toast({ title: 'Complete the generator setup', description: 'Select a room, at least one section for every subject, multiple faculties, and at least one subject for each selected faculty.', type: 'warning' });
+      toast({ title: 'A few details are missing', description: 'Choose a room, select at least one section for every subject, and assign at least one subject to each faculty member.', type: 'warning' });
       return;
     }
     if (assignments.length === 0) {
@@ -264,7 +267,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
       return;
     }
     setGenerating(true);
-    setGenerationMessage('Generating schedule placements and checking room, faculty, and section constraints...');
+    setGenerationMessage('The AI is preparing your schedule. This may take a moment while it checks availability, rooms, and existing classes.');
     setSuggestions([]);
     try {
       const response = await fetch('/api/scheduling/ai-generate', {
@@ -279,19 +282,38 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
       if (!response.ok) throw new Error(data.error || 'Could not generate schedule.');
       setRows((data.generated || []).map((row: Omit<GeneratedRow, 'localId' | 'status'>) => ({ ...row, localId: makeId(), units: String(row.units ?? ''), lectureContactHours: String(row.lectureContactHours ?? ''), labContactHours: String(row.labContactHours ?? ''), classSize: String(row.classSize ?? ''), status: 'idle' })));
       setUnplaced(data.unplaced || []);
+      setAiSuggestionsAvailable(data.aiSuggestionsAvailable !== false);
+      setAiSuggestedPlacements(data.alternativePlacements || []);
       setUnavailable(data.unavailable || []);
       const generatedCount = data.generated?.length || 0;
       const unplacedCount = data.unplaced?.length || 0;
       setGenerationMessage(generatedCount > 0
-        ? `Placed ${generatedCount} section${generatedCount === 1 ? '' : 's'} in ${selectedRoom?.name || 'the selected room'}. Each section received its own timeslot after checking room, faculty, and section availability. The highest-scoring valid slots favored room packing, section cohesion, and lecture/lab timing.${unplacedCount > 0 ? ` ${unplacedCount} section${unplacedCount === 1 ? '' : 's'} could not be placed.` : ''}`
-        : `No sections were placed because no valid timeslot satisfied the room, faculty, and section constraints.${unplacedCount > 0 ? ` ${unplacedCount} section${unplacedCount === 1 ? '' : 's'} could not be placed.` : ''}`);
-      toast({ title: 'Schedule generated', description: `${generatedCount} section${generatedCount === 1 ? '' : 's'} placed${onlineAssignments.length > 0 ? `; ${onlineAssignments.length} online subject(s) excluded from the matrix` : ''}.`, type: 'success' });
+        ? `Your schedule is ready with ${generatedCount} class${generatedCount === 1 ? '' : 'es'}. The AI created the placements and they passed the availability and conflict checks.${unplacedCount > 0 ? ` ${unplacedCount} class${unplacedCount === 1 ? '' : 'es'} still need attention below.` : ''}`
+        : `The AI could not place any classes this time. Review the details below, adjust the room or availability, and try again.`);
+      toast({ title: 'Your schedule is ready', description: `${generatedCount} class${generatedCount === 1 ? '' : 'es'} added to the review matrix${onlineAssignments.length > 0 ? `. ${onlineAssignments.length} online subject${onlineAssignments.length === 1 ? '' : 's'} were left out of the room schedule` : ''}.`, type: generatedCount > 0 ? 'success' : 'warning' });
     } catch (error) {
-      setGenerationMessage(`Schedule generation failed: ${error instanceof Error ? error.message : 'Could not generate schedule.'}`);
-      toast({ title: 'Generation failed', description: error instanceof Error ? error.message : 'Could not generate schedule.', type: 'error' });
+      setGenerationMessage('We could not finish the schedule because the AI service is temporarily unavailable. Please try again in a moment.');
+      toast({ title: 'Schedule could not be prepared', description: 'The AI service may be busy. Please try again shortly.', type: 'error' });
     } finally {
       setGenerating(false);
     }
+  };
+
+  const applyAISuggestions = () => {
+    if (aiSuggestedPlacements.length === 0) return;
+    const suggestedRows = aiSuggestedPlacements.map((row) => ({
+      ...row,
+      localId: makeId(),
+      units: String(row.units ?? ''),
+      lectureContactHours: String(row.lectureContactHours ?? ''),
+      labContactHours: String(row.labContactHours ?? ''),
+      classSize: String(row.classSize ?? ''),
+      status: 'idle' as RowStatus,
+    }));
+    setRows((current) => [...current, ...suggestedRows]);
+    setUnplaced((current) => current.filter((item) => !aiSuggestedPlacements.some((placement) => placement.code === item.code && placement.section === item.section && placement.facultyId === item.facultyId)));
+    setAiSuggestedPlacements([]);
+    toast({ title: 'AI suggestions applied', description: `${suggestedRows.length} alternative class${suggestedRows.length === 1 ? '' : 'es'} added to the matrix for review.`, type: 'success' });
   };
 
   const saveRow = async (row: GeneratedRow) => {
@@ -369,8 +391,9 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
     {onlineAssignments.length > 0 && <div className="space-y-1 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900"><div className="font-semibold">Online subjects excluded from the matrix</div>{onlineAssignments.map((assignment) => <div key={`${assignment.facultyName}-${assignment.id}`}>{assignment.code} - {assignment.name} ({assignment.facultyName}) is online and will not use the selected room.</div>)}</div>}
     <Button type="button" onClick={generate} disabled={generating || saving || !selectedRoomId || selectedFacultyIds.length === 0}>{generating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Generate Schedule Matrix</Button>
     {generationMessage && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"><div className="font-semibold">Generation result</div><p className="mt-1">{generationMessage}</p></div>}
-    {unplaced.length > 0 && <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-4"><div className="text-sm font-semibold text-amber-900">Could not place</div>{unplaced.map((item) => <div key={`${item.code}-${item.name}`} className="flex gap-2 text-sm text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span><strong>{item.code} - {item.name}:</strong> {item.reason}</span></div>)}</div>}
-    {unavailable.length > 0 && <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-700">Already assigned and excluded</div>{unavailable.map((item) => <div key={`${item.code}-${item.name}`} className="text-sm text-slate-600"><strong>{item.code} - {item.name}</strong> is already assigned to another faculty member.</div>)}</div>}
+    {unplaced.length > 0 && <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-4"><div className="text-sm font-semibold text-amber-900">Classes needing attention</div><p className="text-xs text-amber-800">These classes were not added because the AI could not find a conflict-free placement.</p>{unplaced.map((item) => <div key={`${item.code}-${item.name}`} className="flex gap-2 text-sm text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span><strong>{item.code} - {item.name}:</strong> {item.reason}</span></div>)}</div>}
+    {unplaced.length > 0 && <div className="space-y-3 rounded-lg border border-blue-200 bg-blue-50 p-4"><div className="text-sm font-semibold text-blue-900">AI help</div>{aiSuggestionsAvailable && unplaced.some((item) => item.suggestion) && unplaced.filter((item) => item.suggestion).map((item) => <div key={`suggestion-${item.code}-${item.name}`} className="flex gap-2 text-sm text-blue-900"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /><span><strong>{item.code} - {item.name}:</strong> {item.suggestion}</span></div>)}{aiSuggestedPlacements.length > 0 ? <><p className="text-sm text-blue-800">The AI found alternative rooms and times that you can review before saving.</p><Button type="button" onClick={applyAISuggestions}>Apply AI alternatives ({aiSuggestedPlacements.length})</Button></> : !aiSuggestionsAvailable && <p className="text-sm text-blue-800">AI help is unavailable right now. Please try generating again later.</p>}</div>}
+    {unavailable.length > 0 && <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-700">Already assigned and excluded</div>{unavailable.map((item) => <div key={`${item.code}-${item.name}-${item.section || 'subject'}`} className="text-sm text-slate-600"><strong>{item.code} - {item.name}{item.section ? ` (${item.section})` : ''}</strong> is already assigned to {item.assignedFacultyName || 'another faculty member'} and was left out of this plan.</div>)}</div>}
     {suggestions.length > 0 && <div className="space-y-2 rounded-lg border border-blue-200 bg-blue-50 p-4"><div className="text-sm font-semibold text-blue-900">Conflict suggestions</div>{suggestions.map((suggestion, index) => <div key={`${suggestion.label}-${suggestion.value}-${index}`} className="text-sm text-blue-900"><strong>{suggestion.label}:</strong> {suggestion.value}</div>)}</div>}
     <div className="space-y-2"><div className="text-sm font-semibold uppercase tracking-wide text-slate-500">Schedule Matrix</div>{selectedRoomId && savedRows.length > 0 && <div className="text-xs text-slate-500">Showing {savedRows.length} existing schedule{savedRows.length === 1 ? '' : 's'} already assigned to {selectedRoom?.name}.</div>}<ScheduleBoard rows={[...savedRows, ...rows]} onUpdate={updateRow} onDelete={(localId) => setRows((current) => current.filter((item) => item.localId !== localId))} />{rows.length > 0 && <div className="flex items-center gap-3"><Button type="button" onClick={saveAll} disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save All to Master Schedule</Button><div className="flex items-center gap-3 text-xs text-slate-500">{rows.map((row) => <RowStatusBadge key={row.localId} status={row.status} message={row.statusMessage} />)}</div></div>}</div>
   </CardContent>}</ExpandableGeneratorCard>;
