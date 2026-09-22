@@ -7,7 +7,7 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from("clearance_categories")
-      .select("office_id , name, description, is_required, sort_order")
+      .select("category_id, office_id, name, description, is_required, sort_order, office:offices(name)")
       .order("sort_order", { ascending: true });
 
     if (error) {
@@ -19,7 +19,9 @@ export async function GET() {
     }
 
     const formatted = data.map((c) => ({
-      id:          String(c.office_id ),
+      id:          String(c.category_id),
+      officeId:    String(c.office_id),
+      officeName:  c.office?.name ?? "",
       name:        c.name,
       description: c.description ?? "",
       isRequired:  c.is_required ?? false,
@@ -40,13 +42,13 @@ export async function POST(request) {
   try {
     const supabase = createSupabaseAdminClient();
     const body = await request.json();
-    const { name, description, isRequired, sortOrder } = body;
+    const { officeId, name, description, isRequired, sortOrder } = body;
 
     console.log("[CLEARANCE CATEGORIES POST BODY]", body);
 
-    if (!name) {
+    if (!officeId || !name) {
       return NextResponse.json(
-        { error: "name is required" },
+        { error: "officeId and name are required" },
         { status: 400 }
       );
     }
@@ -54,12 +56,13 @@ export async function POST(request) {
     const { data, error } = await supabase
       .from("clearance_categories")
       .insert({
+        office_id: Number(officeId),
         name,
         description:  description ?? null,
         is_required:  isRequired ?? false,
         sort_order:   sortOrder ?? 0,
       })
-      .select("office_id ")
+      .select("category_id")
       .single();
 
     if (error) {
@@ -71,7 +74,7 @@ export async function POST(request) {
     }
 
     return NextResponse.json(
-      { message: "Category created successfully", id: String(data.office_id ) },
+      { message: "Category created successfully", id: String(data.category_id) },
       { status: 201 }
     );
   } catch (err) {

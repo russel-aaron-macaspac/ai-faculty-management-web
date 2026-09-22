@@ -3,17 +3,20 @@
 import { useState, useEffect, useMemo } from 'react';
 import { clearanceService } from '@/services/clearanceService';
 import { Clearance } from '@/types/clearance';
+import { Faculty } from '@/types/faculty';
+import { facultyService } from '@/services/facultyService';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
-import { UploadCloud, CheckCircle2, AlertTriangle, FileText, Loader2, Search, Check, X, Clock } from 'lucide-react';
+import { UploadCloud, CheckCircle2, AlertTriangle, FileText, Loader2, Search, Check, X, Clock, Users, ClipboardCheck, ShieldCheck } from 'lucide-react';
 import { FACULTY_REQUIRED_OFFICES } from '@/lib/clearanceOffices';
 import { isApprovalOfficer, getClearancePageInfo, isFacultyLikeRole } from '@/lib/roleConfig';
 import { StoredUser, normalize } from '@/lib/stringUtils';
 import { toast } from '@/lib/toast';
+import { ClearanceRequirementsPanel } from '@/components/ClearanceRequirementsPanel';
 
 const OFFICER_OFFICE_MAP: Record<string, number> = {
   dlrc:         1,
@@ -35,6 +38,17 @@ type FacultyStepRecord = Clearance & {
   _isRequiredPlaceholder?: boolean;
 };
 
+type AdminFacultyProgress = {
+  id: string;
+  name: string;
+  department: string;
+  records: Clearance[];
+  submitted: number;
+  approved: number;
+  rejected: number;
+  completion: number;
+};
+
 export default function ClearancePage() {
   const [records, setRecords] = useState<Clearance[]>([]);
   const [offices, setOffices] = useState<{ id: string; name: string }[]>([]);
@@ -45,6 +59,7 @@ export default function ClearancePage() {
   const [submittingOfficeId, setSubmittingOfficeId] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<StoredUser | null>(null);
+  const [facultyMembers, setFacultyMembers] = useState<Faculty[]>([]);
   const [docName, setDocName] = useState('Safety Training Certificate');
   const [uploadError, setUploadError] = useState('');
 
@@ -104,6 +119,11 @@ export default function ClearancePage() {
       }
     });
   }, []);
+
+  useEffect(() => {
+    if (currentUser?.role !== 'admin' && !isApprovalOfficer(currentUser?.role)) return;
+    void facultyService.getFaculty().then(setFacultyMembers);
+  }, [currentUser]);
 
   useEffect(() => {
     const raw = localStorage.getItem('user');
@@ -250,6 +270,75 @@ export default function ClearancePage() {
     );
   }, [records, searchTerm, currentUser, facultyStepRecords]);
 
+  const adminFacultyProgress = useMemo<AdminFacultyProgress[]>(() => {
+    if (currentUser?.role !== 'admin') return [];
+
+    const recordsByFaculty = new Map<string, Clearance[]>();
+    records.forEach((record) => {
+      const key = String(record.employeeId);
+      const existing = recordsByFaculty.get(key) ?? [];
+      existing.push(record);
+      recordsByFaculty.set(key, existing);
+    });
+
+    const knownFaculty = facultyMembers.map((member) => ({
+      id: String(member.id),
+      name: member.fullName,
+      department: member.department,
+    }));
+    const submittedFaculty = Array.from(recordsByFaculty.entries())
+      .filter(([id]) => !knownFaculty.some((member) => member.id === id))
+      .map(([id, memberRecords]) => ({
+        id,
+        name: memberRecords[0]?.employeeName || 'Unknown faculty',
+        department: 'Unassigned',
+      }));
+
+    return [...knownFaculty, ...submittedFaculty].map((faculty) => {
+      const memberRecords = recordsByFaculty.get(faculty.id) ?? [];
+      const approved = FACULTY_REQUIRED_OFFICES.filter((office) =>
+        memberRecords.some((record) => normalize(record.requiredDocument) === normalize(office) && record.status === 'approved')
+      ).length;
+      const submitted = FACULTY_REQUIRED_OFFICES.filter((office) =>
+        memberRecords.some((record) => normalize(record.requiredDocument) === normalize(office) && record.status !== 'rejected')
+      ).length;
+      const rejected = memberRecords.filter((record) => record.status === 'rejected').length;
+
+      return {
+        ...faculty,
+        records: memberRecords,
+        submitted,
+        approved,
+        rejected,
+        completion: Math.round((approved / FACULTY_REQUIRED_OFFICES.length) * 100),
+      };
+    });
+  }, [currentUser, facultyMembers, records]);
+
+  const adminOverview = useMemo(() => {
+    const total = adminFacultyProgress.length * FACULTY_REQUIRED_OFFICES.length;
+    const submitted = adminFacultyProgress.reduce((sum, faculty) => sum + faculty.submitted, 0);
+    const approved = adminFacultyProgress.reduce((sum, faculty) => sum + faculty.approved, 0);
+    const rejected = adminFacultyProgress.reduce((sum, faculty) => sum + faculty.rejected, 0);
+    const officeProgress = FACULTY_REQUIRED_OFFICES.map((office) => {
+      const approvedForOffice = adminFacultyProgress.filter((faculty) =>
+        faculty.records.some((record) => normalize(record.requiredDocument) === normalize(office) && record.status === 'approved')
+      ).length;
+      return { office, approved: approvedForOffice, total: adminFacultyProgress.length };
+    });
+
+    return {
+      faculty: adminFacultyProgress.length,
+      submitted,
+      approved,
+      rejected,
+      total,
+      submissionPercent: total ? Math.round((submitted / total) * 100) : 0,
+      completionPercent: total ? Math.round((approved / total) * 100) : 0,
+      officeProgress,
+    };
+  }, [adminFacultyProgress]);
+
   const facultyProgress = useMemo(() => {
     if (!isFacultyUser || facultyStepRecords.length === 0) return null;
 
@@ -349,25 +438,68 @@ export default function ClearancePage() {
   };
 
   let tableRows: React.ReactNode;
+  let tableColumnCount = 3;
+  if (currentUser?.role === 'admin' || showActionColumn || showSubmitColumn) {
+    tableColumnCount = 4;
+  }
+  const adminRows = currentUser?.role === 'admin'
+    ? adminFacultyProgress.filter((faculty) => faculty.name.toLowerCase().includes(searchTerm.toLowerCase()) || faculty.department.toLowerCase().includes(searchTerm.toLowerCase()))
+    : [];
+  const hasNoRows = currentUser?.role === 'admin' ? adminRows.length === 0 : filtered.length === 0;
   if (loading) {
     tableRows = (
       <TableRow>
-        <TableCell colSpan={showActionColumn || showSubmitColumn ? 4 : 3} className="text-center py-10 text-slate-500">
+        <TableCell colSpan={tableColumnCount} className="text-center py-10 text-slate-500">
           <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-red-500" />
           Loading clearance data...
         </TableCell>
       </TableRow>
     );
-  } else if (filtered.length === 0) {
+  } else if (hasNoRows) {
     tableRows = (
       <TableRow>
-        <TableCell colSpan={showActionColumn || showSubmitColumn ? 4 : 3} className="text-center py-10 text-slate-500">
+        <TableCell colSpan={tableColumnCount} className="text-center py-10 text-slate-500">
           No documents found.
         </TableCell>
       </TableRow>
     );
+  } else if (currentUser?.role === 'admin') {
+    tableRows = adminRows.map((faculty) => {
+      let statusLabel = 'In progress';
+      let statusClass = 'bg-amber-100 text-amber-800';
+      if (faculty.rejected > 0) {
+        statusLabel = 'Needs resubmission';
+        statusClass = 'bg-rose-100 text-rose-800';
+      } else if (faculty.completion === 100) {
+        statusLabel = 'Complete';
+        statusClass = 'bg-emerald-100 text-emerald-800';
+      } else if (faculty.submitted === 0) {
+        statusLabel = 'Not submitted';
+      }
+
+      return (
+        <TableRow key={faculty.id}>
+        <TableCell>
+          <div className="font-medium text-slate-800">{faculty.name}</div>
+          <div className="text-xs text-slate-500">{faculty.department || 'Department not assigned'}</div>
+        </TableCell>
+        <TableCell className="text-sm text-slate-600">{faculty.submitted} / {FACULTY_REQUIRED_OFFICES.length} submitted</TableCell>
+        <TableCell>
+          <div className="flex min-w-40 items-center gap-3">
+            <Progress value={faculty.completion} className="h-2" indicatorClassName={faculty.completion === 100 ? 'bg-emerald-500' : 'bg-[#D4A017]'} />
+            <span className="text-sm font-semibold text-slate-700">{faculty.completion}%</span>
+          </div>
+        </TableCell>
+        <TableCell>
+          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${statusClass}`}>
+            {statusLabel}
+          </span>
+        </TableCell>
+        </TableRow>
+      );
+    });
   } else {
-    tableRows = filtered.map((record: any) => (
+    tableRows = filtered.map((record: Clearance & { _hasRecord?: boolean; _isRequiredPlaceholder?: boolean }) => (
       <TableRow
         key={record.id}
         className={isApprovalOfficer_ ? 'cursor-pointer hover:bg-slate-50' : ''}
@@ -546,6 +678,30 @@ export default function ClearancePage() {
         </Card>
       )}
 
+      <ClearanceRequirementsPanel user={currentUser} offices={offices} />
+
+      {currentUser?.role === 'admin' && (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Card><CardContent className="flex items-center gap-3 p-5"><Users className="h-8 w-8 text-slate-500" /><div><p className="text-sm text-slate-500">Faculty monitored</p><p className="text-2xl font-semibold text-slate-900">{adminOverview.faculty}</p></div></CardContent></Card>
+            <Card><CardContent className="flex items-center gap-3 p-5"><ClipboardCheck className="h-8 w-8 text-[#D4A017]" /><div><p className="text-sm text-slate-500">Submission progress</p><p className="text-2xl font-semibold text-slate-900">{adminOverview.submissionPercent}%</p></div></CardContent></Card>
+            <Card><CardContent className="flex items-center gap-3 p-5"><ShieldCheck className="h-8 w-8 text-emerald-600" /><div><p className="text-sm text-slate-500">Requirements completed</p><p className="text-2xl font-semibold text-slate-900">{adminOverview.completionPercent}%</p></div></CardContent></Card>
+            <Card><CardContent className="flex items-center gap-3 p-5"><AlertTriangle className="h-8 w-8 text-rose-500" /><div><p className="text-sm text-slate-500">Needs resubmission</p><p className="text-2xl font-semibold text-slate-900">{adminOverview.rejected}</p></div></CardContent></Card>
+          </div>
+          <Card>
+            <CardHeader><h2 className="text-lg font-semibold text-slate-900">Requirement coverage by approval office</h2><p className="text-sm text-slate-500">Approved faculty requirements out of the monitored faculty population.</p></CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {adminOverview.officeProgress.map((office) => (
+                <div key={office.office} className="rounded-lg border border-slate-200 p-3">
+                  <div className="mb-2 flex items-start justify-between gap-3"><span className="text-sm font-medium text-slate-700">{office.office}</span><span className="text-xs font-semibold text-slate-500">{office.approved}/{office.total}</span></div>
+                  <Progress value={office.total ? (office.approved / office.total) * 100 : 0} className="h-2" indicatorClassName="bg-emerald-500" />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </>
+      )}
+
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex items-center gap-2">
           <Search className="h-5 w-5 text-slate-400" />
@@ -562,8 +718,18 @@ export default function ClearancePage() {
             <TableHeader>
               <TableRow className="bg-slate-50">
                 <TableHead>Faculty / Department</TableHead>
-                <TableHead>Submission Date</TableHead>
-                <TableHead>Status</TableHead>
+                {currentUser?.role === 'admin' ? (
+                  <>
+                    <TableHead>Submission progress</TableHead>
+                    <TableHead>Completion</TableHead>
+                    <TableHead>Status</TableHead>
+                  </>
+                ) : (
+                  <>
+                    <TableHead>Submission Date</TableHead>
+                    <TableHead>Status</TableHead>
+                  </>
+                )}
                 {showSubmitColumn && <TableHead className="text-right">Action</TableHead>}
                 {showActionColumn && <TableHead className="text-right">Decision</TableHead>}
               </TableRow>
