@@ -47,9 +47,10 @@ async function addUnplacedSuggestions(unplaced, selectedRoom, requestedClassSize
     const prompt = [
       "You are helping a university scheduler recover classes that could not be placed.",
       "For each item, give one specific, actionable recommendation based only on its diagnostics.",
+      "Do not claim that a specific room or time is conflict-free. Do not say to schedule a class in a room unless the diagnostics explicitly confirm that placement.",
       "Return JSON only as an array of objects with this shape: [{\"index\": number, \"suggestion\": string}].",
       `Selected room: ${selectedRoom.name}; capacity: ${selectedRoom.capacity}; requested class size: ${requestedClassSize}.`,
-      `Unplaced classes: ${JSON.stringify(unplaced.map((item, index) => ({ index, code: item.code, name: item.name, faculty: item.facultyName, durationMinutes: item.durationMinutes, availabilityWindowCount: item.availabilityWindowCount, roomTooSmall: item.roomTooSmall, roomConflictCount: item.roomConflictCount, sectionConflictCount: item.sectionConflictCount })))} `,
+      `Unplaced classes: ${JSON.stringify(unplaced.map((item, index) => ({ index, code: item.code, name: item.name, faculty: item.facultyName, durationMinutes: item.durationMinutes, validationReason: item.validationReason, availabilityWindowCount: item.availabilityWindowCount, roomTooSmall: item.roomTooSmall, roomConflictCount: item.roomConflictCount, sectionConflictCount: item.sectionConflictCount })))} `,
     ].join("\n");
     const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
       method: "POST",
@@ -158,9 +159,24 @@ function validateMistralSchedule({ requestedClasses, proposals, rooms, windowsBy
     const facultyId = requested.facultyId;
     const facultyWindows = windowsByFaculty.get(facultyId) || [];
     const validWindow = facultyWindows.some((window) => window.day === proposal?.day && start >= window.start && end <= window.end);
-    const valid = proposal && room && !isOnlineRoom(room.name) && Number(room.capacity) >= requestedClassSize && DAYS.includes(proposal.day) && Number.isFinite(start) && Number.isFinite(end) && start < end && end - start === requested.durationMinutes && validWindow && !hasFacultyTimeConflict(facultyBookings.get(facultyId) || [], proposal.day, start, end) && !roomBookings.some((booking) => booking.roomId === String(room.id) && booking.day === proposal.day && overlaps(start, end, booking.start, booking.end)) && !sectionBookings.some((booking) => booking.day === proposal.day && booking.sections.includes(requested.section) && overlaps(start, end, booking.start, booking.end));
+    const facultyConflict = Boolean(proposal && hasFacultyTimeConflict(facultyBookings.get(facultyId) || [], proposal.day, start, end));
+    const roomConflict = Boolean(proposal && room && roomBookings.some((booking) => booking.roomId === String(room.id) && booking.day === proposal.day && overlaps(start, end, booking.start, booking.end)));
+    const sectionConflict = Boolean(proposal && sectionBookings.some((booking) => booking.day === proposal.day && booking.sections.includes(requested.section) && overlaps(start, end, booking.start, booking.end)));
+    const validationReasons = [];
+    if (!proposal) validationReasons.push("the AI did not return a matching placement");
+    if (proposal && !room) validationReasons.push("the selected room was not found");
+    if (room && isOnlineRoom(room.name)) validationReasons.push("the selected room is not a physical classroom");
+    if (room && Number(room.capacity) < requestedClassSize) validationReasons.push(`room capacity is ${room.capacity}, but ${requestedClassSize} seats are required`);
+    if (proposal && !DAYS.includes(proposal.day)) validationReasons.push("the returned day is invalid");
+    if (proposal && (!Number.isFinite(start) || !Number.isFinite(end) || start >= end)) validationReasons.push("the returned time range is invalid");
+    if (proposal && Number.isFinite(start) && Number.isFinite(end) && end - start !== requested.durationMinutes) validationReasons.push(`the class duration must be ${requested.durationMinutes} minutes`);
+    if (proposal && !validWindow) validationReasons.push("the time is outside the faculty member's availability");
+    if (facultyConflict) validationReasons.push("the faculty member has another class at that time");
+    if (roomConflict) validationReasons.push("the room is already occupied at that time");
+    if (sectionConflict) validationReasons.push("the section already has a class at that time");
+    const valid = validationReasons.length === 0;
     if (!valid) {
-      unplaced.push({ subjectId: requested.subjectId, facultyId, facultyName: requested.facultyName, code: requested.code, name: requested.name, section: requested.section, durationMinutes: requested.durationMinutes, availabilityWindowCount: facultyWindows.length, roomTooSmall: Boolean(room && Number(room.capacity) < requestedClassSize), roomConflictCount: 0, sectionConflictCount: 0, reason: "The AI could not find a time and room that fit this class without creating a conflict." });
+      unplaced.push({ subjectId: requested.subjectId, facultyId, facultyName: requested.facultyName, code: requested.code, name: requested.name, section: requested.section, durationMinutes: requested.durationMinutes, availabilityWindowCount: facultyWindows.length, roomTooSmall: Boolean(room && Number(room.capacity) < requestedClassSize), roomConflictCount: roomConflict ? 1 : 0, sectionConflictCount: sectionConflict ? 1 : 0, validationReason: validationReasons.join("; "), reason: `The AI's proposed placement was not accepted because ${validationReasons.join("; ")}.` });
       continue;
     }
     facultyBookings.get(facultyId)?.push({ day: proposal.day, start, end });
