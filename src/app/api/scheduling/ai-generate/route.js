@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const ONLINE_ROOM_PATTERN = /online|virtual|remote|tbd|tba/i;
 
+export const maxDuration = 60;
+
 function toMinutes(value) {
   const [hours, minutes] = String(value || "").split(":").map(Number);
   return Number.isFinite(hours) && Number.isFinite(minutes) ? hours * 60 + minutes : Number.NaN;
@@ -117,7 +119,11 @@ async function addUnplacedSuggestions(unplaced, rooms, requestedClassSize) {
 
 async function generateFullScheduleWithMistral({ assignments, facultyById, windowsByFaculty, rooms, existingSchedules, requestedClassSize, loadType }) {
   const apiKey = process.env.MISTRAL_API_KEY;
-  if (!apiKey) throw new Error("MISTRAL_API_KEY is not configured. Add it to .env.local and restart the server.");
+  if (!apiKey) {
+    const error = new Error("MISTRAL_API_KEY is not configured on the deployed server.");
+    error.status = 503;
+    throw error;
+  }
 
   const model = process.env.MISTRAL_MODEL || "mistral-large-latest";
   const facultyAvailability = assignments.map((assignment) => ({
@@ -164,7 +170,7 @@ async function generateFullScheduleWithMistral({ assignments, facultyById, windo
       const retryable = [408, 429, 500, 502, 503, 504].includes(response.status);
       if (!retryable || attempt === maxAttempts - 1) {
         const error = new Error(`Mistral schedule generation failed (${response.status}): ${details.slice(0, 300)}`);
-        error.status = response.status;
+        error.status = 502;
         throw error;
       }
 
@@ -371,6 +377,7 @@ export async function POST(request) {
     return NextResponse.json({ generated, unplaced: aiSuggestionResult.items, alternativePlacements, aiSuggestionsAvailable: aiSuggestionResult.available, unavailable });
   } catch (error) {
     console.error("[AI SCHEDULING GENERATE ERROR]", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "AI schedule generation failed" }, { status: error?.status || 500 });
+    const status = Number.isInteger(error?.status) ? error.status : 500;
+    return NextResponse.json({ error: error instanceof Error ? error.message : "AI schedule generation failed" }, { status });
   }
 }
