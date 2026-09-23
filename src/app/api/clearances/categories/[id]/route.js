@@ -25,7 +25,7 @@ export async function PUT(request, { params }) {
         is_required:  isRequired ?? false,
         sort_order:   sortOrder ?? 0,
       })
-      .eq("office_id ", id);
+      .eq("category_id", id);
 
     if (error) {
       console.error("[CLEARANCE CATEGORIES PUT ERROR]", error);
@@ -55,7 +55,7 @@ export async function DELETE(request, { params }) {
     const { error } = await supabase
       .from("clearance_categories")
       .delete()
-      .eq("office_id ", id);
+      .eq("category_id", id);
 
     if (error) {
       console.error("[CLEARANCE CATEGORIES DELETE ERROR]", error);

@@ -42,6 +42,29 @@ export const clearanceService = {
     return data || [];
   },
 
+  async getCategories() {
+    const res = await fetch('/api/clearances/categories');
+    if (!res.ok) return [];
+    const { data } = await res.json();
+    return data || [];
+  },
+
+  async createCategory(payload: { officeId: string; name: string; description?: string; isRequired?: boolean; sortOrder?: number }) {
+    const res = await fetch('/api/clearances/categories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error ?? 'Could not save requirement.');
+    return json.data;
+  },
+
+  async deleteCategory(id: string) {
+    const res = await fetch(`/api/clearances/categories/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Could not remove requirement.');
+  },
+
   async uploadDocument(
     userId: string,
     officeId: number,

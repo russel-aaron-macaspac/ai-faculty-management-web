@@ -56,8 +56,20 @@ export interface ClearanceAuditLog {
   created_at: string;
 }
 
+export interface ClearanceRequirement {
+  id: string;
+  officeId: string;
+  officeName: string;
+  title: string;
+  description?: string;
+  isRequired: boolean;
+  createdBy?: string;
+}
+
 export class ClearanceCategory {
   id?: string;
+  officeId?: string;
+  officeName?: string;
   name?: string;
   description?: string;
   is_required?: boolean;

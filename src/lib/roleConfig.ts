@@ -178,6 +178,13 @@ export const getDashboardPathForRole = (role: string | undefined): string => {
  * Helper: Get clearance page title and subtitle
  */
 export const getClearancePageInfo = (role: string | undefined): { title: string; subtitle: string } => {
+  if (role === 'admin') {
+    return {
+      title: 'Requirements Management',
+      subtitle: 'Monitor faculty document submissions and completion across every approval office.',
+    };
+  }
+
   if (role === 'faculty' || role === 'program_chair') {
     return {
       title: 'Clearance Tracking',
