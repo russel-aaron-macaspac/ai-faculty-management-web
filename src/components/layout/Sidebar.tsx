@@ -109,6 +109,10 @@ export function Sidebar({ user, collapsed = false, onToggle }: Readonly<SidebarP
     links.push({ href: '/schedule-loading', label: 'Schedule Loading', icon: Calendar });
   }
 
+  if (user?.role === 'program_chair' || user?.role === 'dean' || user?.role === 'registrar') {
+    links.push({ href: '/section-matrix', label: 'Section Matrix', icon: BookOpen });
+  }
+
   // Split into primary nav vs. account-related items so the list gets a
   // section break instead of one long undifferentiated column with a
   // large empty gap above the footer.
