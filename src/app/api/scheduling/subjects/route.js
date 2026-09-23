@@ -36,8 +36,8 @@ export async function POST(request) {
       return NextResponse.json({ error: "code and name are required" }, { status: 400 });
     }
 
-    if (requiredEquipmentType !== null && requiredEquipmentType !== "computer") {
-      return NextResponse.json({ error: "requiredEquipmentType must be computer" }, { status: 400 });
+    if (requiredEquipmentType !== null && !["computer", "networking_tools"].includes(requiredEquipmentType)) {
+      return NextResponse.json({ error: "requiredEquipmentType must be computer or networking_tools" }, { status: 400 });
     }
 
     if (units !== null && (!Number.isFinite(units) || units <= 0)) {

@@ -37,8 +37,8 @@ export async function POST(request) {
       return NextResponse.json({ error: "name and valid capacity are required" }, { status: 400 });
     }
 
-    if (equipmentType !== null && equipmentType !== "computer") {
-      return NextResponse.json({ error: "equipmentType must be computer" }, { status: 400 });
+    if (equipmentType !== null && !["computer", "networking_tools"].includes(equipmentType)) {
+      return NextResponse.json({ error: "equipmentType must be computer or networking_tools" }, { status: 400 });
     }
 
     const supabase = createSupabaseAdminClient();

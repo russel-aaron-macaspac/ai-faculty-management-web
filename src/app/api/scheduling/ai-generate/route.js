@@ -32,13 +32,14 @@ function normalizeRoomName(value) {
   return /^(tba|tbd)(\s*[-: ].*)?$/i.test(name) ? "TBA" : name;
 }
 
-function isComputerLab(room) {
-  return /computer|comlab|comp\s*lab|ict\s*lab|it\s*lab/i.test(String(room?.name || ""));
+function normalizeEquipmentType(value) {
+  return String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
 }
 
-function subjectNeedsComputerLab(subject) {
-  const text = `${subject.code || ""} ${subject.name || ""}`.toLowerCase();
-  return /computer|programming|coding|software|system|network|database|web|development|architecture|informatics|ict|computer servicing|computer systems/.test(text);
+function roomSupportsRequirement(room, requirement) {
+  const requiredEquipment = normalizeEquipmentType(requirement);
+  if (!requiredEquipment) return true;
+  return normalizeEquipmentType(room?.equipment_type || room?.equipmentType) === requiredEquipment;
 }
 
 function isPartTimeStatus(value) {
@@ -60,11 +61,11 @@ function scheduleSections(schedule) {
 function findLegalPlacement({ requested, rooms, facultyWindows, facultyBookings, roomBookings, sectionBookings, requestedClassSize }) {
   const roomCandidates = rooms
     .filter((room) => !isOnlineRoom(room.name))
-    .filter((room) => requested.needsComputerLab ? isComputerLab(room) : true)
+    .filter((room) => roomSupportsRequirement(room, requested.requiredEquipmentType))
     .filter((room) => requestedClassSize == null || Number(room.capacity) >= requestedClassSize)
-    .sort((left, right) => requested.needsComputerLab
+    .sort((left, right) => requested.requiredEquipmentType
       ? Number(right.capacity) - Number(left.capacity)
-      : Number(isComputerLab(left)) - Number(isComputerLab(right)) || Number(left.capacity) - Number(right.capacity));
+      : Number(normalizeEquipmentType(left.equipment_type) === "computer") - Number(normalizeEquipmentType(right.equipment_type) === "computer") || Number(left.capacity) - Number(right.capacity));
   const candidates = [];
   for (const room of roomCandidates) {
     for (const window of facultyWindows) {
@@ -132,13 +133,13 @@ async function generateFullScheduleWithMistral({ assignments, facultyById, windo
     facultyName: [facultyById.get(String(assignment.facultyId))?.first_name, facultyById.get(String(assignment.facultyId))?.middle_name, facultyById.get(String(assignment.facultyId))?.last_name].filter(Boolean).join(" "),
     windows: (windowsByFaculty.get(String(assignment.facultyId)) || []).map((window) => ({ day: window.day, startTime: toTime(window.start), endTime: toTime(window.end) })),
   }));
-  const requestedClasses = assignments.flatMap((assignment) => assignment.subjects.flatMap((subject) => normalizeSections(subject).map((section) => ({ facultyId: String(assignment.facultyId), subjectId: subject.subjectId ?? null, code: subject.code, name: subject.name, section, classType: subject.classType, needsComputerLab: subjectNeedsComputerLab(subject), durationMinutes: Number(subject.durationMinutes) > 0 ? Number(subject.durationMinutes) : 90 }))));
+  const requestedClasses = assignments.flatMap((assignment) => assignment.subjects.flatMap((subject) => normalizeSections(subject).map((section) => ({ facultyId: String(assignment.facultyId), subjectId: subject.subjectId ?? null, code: subject.code, name: subject.name, section, classType: subject.classType, requiredEquipmentType: subject.requiredEquipmentType || subject.required_equipment_type || null, needsComputerLab: (subject.requiredEquipmentType || subject.required_equipment_type) === "computer", durationMinutes: Number(subject.durationMinutes) > 0 ? Number(subject.durationMinutes) : 90 }))));
   const prompt = [
     "You are the primary university schedule generator. Generate the complete schedule for every requested class in one plan.",
     "Choose from all available physical rooms, days, and times yourself.",
     "Never schedule outside the assigned faculty availability. Never overlap a faculty member, room, or section. Respect room capacity and existing schedules.",
     "Schedule part-time faculty before full-time faculty so their more limited availability is protected. Within each faculty group, schedule every section.",
-    "A class that needs computers must use a computer laboratory. Give computer laboratories first priority to computer-dependent classes. Classes that do not need computers should use ordinary available rooms first and may use a computer laboratory only when no suitable ordinary room is available.",
+    "Use the database equipment requirement exactly. A class requires a computer laboratory only when requiredEquipmentType is \"computer\". Do not infer equipment needs from the subject code or title. Give computer laboratories first priority to those classes; classes with no computer requirement should use ordinary rooms first.",
     "A faculty member may teach multiple sections. Schedule every section as its own class at a different, non-overlapping time; do not omit a section just because its faculty member is already assigned another section.",
     "Return JSON only in exactly this shape: {\"schedule\":[{\"facultyId\":string,\"subjectId\":string|null,\"code\":string,\"name\":string,\"section\":string,\"day\":string,\"startTime\":\"HH:mm\",\"endTime\":\"HH:mm\",\"roomId\":string}]}. You must return exactly one row for every requested class. Never return fewer rows.",
     `Requested class size: ${requestedClassSize ?? "not provided"}; load type: ${loadType}`,
@@ -216,7 +217,7 @@ function validateMistralSchedule({ requestedClasses, proposals, rooms, windowsBy
     if (!proposal) validationReasons.push("the AI did not return a matching placement");
     if (proposal && !room) validationReasons.push("the selected room was not found");
     if (room && isOnlineRoom(room.name)) validationReasons.push("the selected room is not a physical classroom");
-    if (needsComputerLab && room && !isComputerLab(room)) validationReasons.push("this class requires a computer laboratory");
+    if (needsComputerLab && room && !isComputerLab(room)) validationReasons.push("the database marks this class as requiring a computer laboratory");
     if (requestedClassSize != null && room && Number(room.capacity) < requestedClassSize) validationReasons.push(`room capacity is ${room.capacity}, but ${requestedClassSize} seats are required`);
     if (proposal && !DAYS.includes(proposal.day)) validationReasons.push("the returned day is invalid");
     if (proposal && (!Number.isFinite(start) || !Number.isFinite(end) || start >= end)) validationReasons.push("the returned time range is invalid");
@@ -340,7 +341,7 @@ export async function POST(request) {
       existingSchedules = data || [];
     }
 
-    const { data: roomsData, error: roomsError } = await supabase.from("rooms").select("id, name, capacity");
+    const { data: roomsData, error: roomsError } = await supabase.from("rooms").select("id, name, capacity, equipment_type");
     if (roomsError) throw roomsError;
     const rooms = (roomsData || [])
       .map((room) => ({ ...room, name: normalizeRoomName(room.name) }))

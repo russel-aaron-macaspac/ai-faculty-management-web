@@ -13,10 +13,10 @@ const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 const isPhysicalRoom = (name?: string | null) => !/\b(tba|tbd|online|virtual|remote)\b/i.test(name || '');
 type LoadType = 'regular' | 'overload';
 type RowStatus = 'idle' | 'saving' | 'saved' | 'conflict' | 'error';
-type Subject = { id: string; code: string; name: string; year_level?: string | number | null; hours?: number | null; lecture_units?: number | null; lab_units?: number | null };
+type Subject = { id: string; code: string; name: string; year_level?: string | number | null; hours?: number | null; lecture_units?: number | null; lab_units?: number | null; required_equipment_type?: string | null };
 type DeliveryMode = 'on-campus' | 'online';
 type SubjectAssignment = Subject & { deliveryMode: DeliveryMode; sectionIds: string[] };
-type Room = { id: string; name: string; capacity: number };
+type Room = { id: string; name: string; capacity: number; equipment_type?: string | null };
 type Faculty = { id: string; name: string; role: string; statusOfAppointment?: string | null };
 type Section = { id: string; name: string; year_level?: string | number | null };
 type GeneratedRow = { localId: string; subjectId: string | null; facultyId: string; facultyName: string; code: string; name: string; day: string; startTime: string; endTime: string; section: string; roomId: string; roomName: string; units: string; lectureContactHours: string; labContactHours: string; classSize: string; loadType: LoadType; status: RowStatus; statusMessage?: string; isSaved?: boolean };
@@ -269,7 +269,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
   const generate = async () => {
     const selectedAssignments = selectedFacultyIds.map((facultyId) => ({ facultyId, subjects: subjectsByFaculty[facultyId] || [] }));
     const hasMissingSections = selectedAssignments.some((assignment) => assignment.subjects.some((subject) => subject.sectionIds.length === 0));
-    const assignments = selectedAssignments.map(({ facultyId, subjects: facultySubjects }) => ({ facultyId, subjects: facultySubjects.filter((subject) => subject.deliveryMode === 'on-campus').map((subject) => ({ subjectId: subject.id, code: subject.code, name: subject.name, sections: subject.sectionIds.map((sectionId) => sections.find((section) => section.id === sectionId)?.name || sectionId), classType: (subject.lab_units ?? 0) > 0 && (subject.lecture_units ?? 0) === 0 ? 'lab' : 'lecture', durationMinutes: Number(subject.hours) > 0 ? Number(subject.hours) * 60 : undefined })) })).filter((assignment) => assignment.subjects.length > 0);
+    const assignments = selectedAssignments.map(({ facultyId, subjects: facultySubjects }) => ({ facultyId, subjects: facultySubjects.filter((subject) => subject.deliveryMode === 'on-campus').map((subject) => ({ subjectId: subject.id, code: subject.code, name: subject.name, requiredEquipmentType: subject.required_equipment_type || null, sections: subject.sectionIds.map((sectionId) => sections.find((section) => section.id === sectionId)?.name || sectionId), classType: (subject.lab_units ?? 0) > 0 && (subject.lecture_units ?? 0) === 0 ? 'lab' : 'lecture', durationMinutes: Number(subject.hours) > 0 ? Number(subject.hours) * 60 : undefined })) })).filter((assignment) => assignment.subjects.length > 0);
     if (hasMissingSections || selectedAssignments.some((assignment) => assignment.subjects.length === 0)) {
       toast({ title: 'A few details are missing', description: 'Select at least one section for every subject and assign at least one subject to each faculty member.', type: 'warning' });
       return;

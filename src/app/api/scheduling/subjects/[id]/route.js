@@ -51,8 +51,8 @@ export async function PUT(request, { params }) {
 
     if (body?.requiredEquipmentType !== undefined) {
       const value = body.requiredEquipmentType === null || body.requiredEquipmentType === "" ? null : String(body.requiredEquipmentType).trim().toLowerCase();
-      if (value !== null && value !== "computer") {
-        return NextResponse.json({ error: "requiredEquipmentType must be computer" }, { status: 400 });
+      if (value !== null && !["computer", "networking_tools"].includes(value)) {
+        return NextResponse.json({ error: "requiredEquipmentType must be computer or networking_tools" }, { status: 400 });
       }
       payload.required_equipment_type = value;
     }

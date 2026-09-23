@@ -41,13 +41,13 @@ interface SubjectPayload {
   lectureUnits?: number;
   labUnits?: number;
   hours?: number;
-  requiredEquipmentType?: 'computer' | null;
+  requiredEquipmentType?: 'computer' | 'networking_tools' | null;
 }
 
 interface RoomPayload {
   name: string;
   capacity: number;
-  equipmentType?: 'computer' | null;
+  equipmentType?: 'computer' | 'networking_tools' | null;
 }
 
 interface SectionPayload {

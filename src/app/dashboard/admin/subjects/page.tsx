@@ -4,7 +4,6 @@ import { RouteGuard } from '@/components/RouteGuard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from '@/lib/toast';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { BookOpen, CheckCircle2, Loader2, Plus } from 'lucide-react';
@@ -19,7 +18,7 @@ const subjectSchema = z.object({
   lectureUnits: z.coerce.number({ message: 'Enter lecture units.' }).min(0, 'Lecture units cannot be negative.'),
   labUnits: z.coerce.number({ message: 'Enter lab units.' }).min(0, 'Lab units cannot be negative.'),
   hours: z.coerce.number({ message: 'Enter the number of hours.' }).positive('Hours must be greater than zero.'),
-  requiresComputer: z.boolean().default(false),
+  requiredEquipmentType: z.enum(['none', 'computer', 'networking_tools']).default('none'),
 }).refine((values) => values.lectureUnits + values.labUnits <= values.units, {
   message: 'Lecture and lab units cannot exceed total units.',
   path: ['labUnits'],
@@ -44,7 +43,7 @@ function SubjectManagementContent() {
   const [createdSubject, setCreatedSubject] = useState<Subject | null>(null);
   const form = useForm<SubjectFormInput, unknown, SubjectFormValues>({
     resolver: zodResolver(subjectSchema),
-    defaultValues: { code: '', name: '', units: undefined, lectureUnits: 0, labUnits: 0, hours: undefined, requiresComputer: false },
+    defaultValues: { code: '', name: '', units: undefined, lectureUnits: 0, labUnits: 0, hours: undefined, requiredEquipmentType: 'none' },
   });
 
   const loadSubjects = async () => {
@@ -72,7 +71,7 @@ function SubjectManagementContent() {
       const response = await fetch('/api/scheduling/subjects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...values, requiredEquipmentType: values.requiresComputer ? 'computer' : null }),
+        body: JSON.stringify({ ...values, requiredEquipmentType: values.requiredEquipmentType === 'none' ? null : values.requiredEquipmentType }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.error || 'Unable to create the subject.');
@@ -138,10 +137,14 @@ function SubjectManagementContent() {
             </div>
           </div>
 
-          <label className="flex items-center gap-3 text-sm text-slate-700">
-            <Checkbox checked={form.watch('requiresComputer')} onCheckedChange={(checked) => form.setValue('requiresComputer', checked === true)} />
-            Requires a computer room
-          </label>
+          <div className="max-w-sm space-y-2">
+            <Label htmlFor="requiredEquipmentType">Required Equipment</Label>
+            <select id="requiredEquipmentType" className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3.5 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#D4A017] focus:ring-4 focus:ring-[#D4A017]/10" {...form.register('requiredEquipmentType')}>
+              <option value="none">None</option>
+              <option value="computer">Computer</option>
+              <option value="networking_tools">Networking tools</option>
+            </select>
+          </div>
 
           <div className="flex justify-end border-t border-slate-200 pt-5">
             <Button type="submit" disabled={isSubmitting}>
@@ -160,7 +163,7 @@ function SubjectManagementContent() {
         </div>
         {isLoading ? <p className="text-sm text-slate-500">Loading subjects...</p> : subjects.length === 0 ? <p className="text-sm text-slate-500">No subjects have been added yet.</p> : (
           <div className="divide-y divide-slate-200 border-y border-slate-200">
-            {subjects.map((subject) => <div key={subject.id} className="grid gap-1 py-3 sm:grid-cols-[minmax(0,0.7fr)_minmax(0,1.5fr)_minmax(0,1.8fr)]"><span className="font-medium text-slate-900">{subject.code}</span><span className="text-slate-600">{subject.name}</span><span className="text-slate-500">{subject.units ?? '-'} units · Lec {subject.lecture_units ?? 0}u · Lab {subject.lab_units ?? 0}u · {subject.hours ?? '-'} hours · {subject.required_equipment_type === 'computer' ? 'Computer required' : 'No equipment requirement'}</span></div>)}
+            {subjects.map((subject) => <div key={subject.id} className="grid gap-1 py-3 sm:grid-cols-[minmax(0,0.7fr)_minmax(0,1.5fr)_minmax(0,1.8fr)]"><span className="font-medium text-slate-900">{subject.code}</span><span className="text-slate-600">{subject.name}</span><span className="text-slate-500">{subject.units ?? '-'} units · Lec {subject.lecture_units ?? 0}u · Lab {subject.lab_units ?? 0}u · {subject.hours ?? '-'} hours · {subject.required_equipment_type === 'computer' ? 'Computer required' : subject.required_equipment_type === 'networking_tools' ? 'Networking tools required' : 'No equipment requirement'}</span></div>)}
           </div>
         )}
       </section>
