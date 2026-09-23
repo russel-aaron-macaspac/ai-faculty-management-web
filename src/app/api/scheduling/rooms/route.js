@@ -11,7 +11,7 @@ export async function GET() {
     const supabase = createSupabaseAdminClient();
     const { data, error } = await supabase
       .from("rooms")
-      .select("id, name, capacity")
+      .select("id, name, capacity, equipment_type")
       .order("name", { ascending: true });
 
     if (error) {
@@ -31,16 +31,21 @@ export async function POST(request) {
     const body = await request.json();
     const name = normalizeRoomName(body?.name);
     const capacity = Number(body?.capacity);
+    const equipmentType = body?.equipmentType === null || body?.equipmentType === undefined || body?.equipmentType === "" ? null : String(body.equipmentType).trim().toLowerCase();
 
     if (!name || Number.isNaN(capacity) || capacity <= 0) {
       return NextResponse.json({ error: "name and valid capacity are required" }, { status: 400 });
     }
 
+    if (equipmentType !== null && equipmentType !== "computer") {
+      return NextResponse.json({ error: "equipmentType must be computer" }, { status: 400 });
+    }
+
     const supabase = createSupabaseAdminClient();
     const { data, error } = await supabase
       .from("rooms")
-      .insert({ name, capacity })
-      .select("id, name, capacity")
+      .insert({ name, capacity, equipment_type: equipmentType })
+      .select("id, name, capacity, equipment_type")
       .single();
 
     if (error) {

@@ -46,8 +46,8 @@ export async function GET(request) {
           .in("role", ["faculty", "program_chair", "dean"])
           .eq("status", "active")
           .order("last_name", { ascending: true }),
-        supabase.from("subjects").select("id, code, name, year_level, units, lecture_units, lab_units, hours").order("code", { ascending: true }),
-        supabase.from("rooms").select("id, name, capacity").order("name", { ascending: true }),
+        supabase.from("subjects").select("id, code, name, year_level, units, lecture_units, lab_units, hours, required_equipment_type").order("code", { ascending: true }),
+        supabase.from("rooms").select("id, name, capacity, equipment_type").order("name", { ascending: true }),
         supabase.from("sections").select("id, name, year_level").order("name", { ascending: true }),
       ]);
 
