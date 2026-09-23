@@ -89,7 +89,7 @@ export function DashboardLayout({ children }: Readonly<{ children: React.ReactNo
 
       {/* Sidebar Desktop & Mobile */}
       <div
-        className={`fixed inset-y-0 left-0 z-50 h-screen w-72 shrink-0 transform transition-[width,transform] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] ${
+        className={`fixed inset-y-0 left-0 z-50 h-screen w-72 shrink-0 transform transition-[width,transform] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] print:hidden ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         } md:relative md:translate-x-0 ${sidebarCollapsed ? 'md:w-20' : 'md:w-72'}`}
       >

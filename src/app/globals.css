@@ -148,6 +148,17 @@
   box-sizing: border-box;
 }
 
+@media print {
+  @page {
+    size: landscape;
+    margin: 10mm;
+  }
+
+  body {
+    background: #fff !important;
+  }
+}
+
 ::selection {
   background: rgba(212, 160, 23, 0.22);
   color: #0F172A;

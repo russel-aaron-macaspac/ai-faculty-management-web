@@ -15,7 +15,7 @@ export function Navbar({ onMenuClick, user = null }: Readonly<NavbarProps>) {
   const roleLabel = user?.role ? user.role.replaceAll('_', ' ') : 'Active session';
 
   return (
-    <header className="sticky top-0 z-30 flex h-20 w-full items-center justify-between border-b border-slate-200/80 bg-white/92 px-4 backdrop-blur-xl sm:px-6">
+    <header className="sticky top-0 z-30 flex h-20 w-full items-center justify-between border-b border-slate-200/80 bg-white/92 px-4 backdrop-blur-xl sm:px-6 print:hidden">
       <div className="flex min-w-0 items-center gap-4 flex-1">
         <Button variant="ghost" size="icon" className="md:hidden" onClick={onMenuClick} aria-label="Open navigation">
           <Menu className="h-5 w-5" />
