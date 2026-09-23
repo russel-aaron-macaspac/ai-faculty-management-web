@@ -16,6 +16,7 @@ export interface Clearance {
   officeCategory?: string;
   officeId?: string;
   filePath?: string;
+  notes?: ClearanceNote[];
 }
 
 export interface ClearanceNote {

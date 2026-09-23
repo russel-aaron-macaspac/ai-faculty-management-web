@@ -11,12 +11,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
-import { UploadCloud, CheckCircle2, AlertTriangle, FileText, Loader2, Search, Check, X, Clock, Users, ClipboardCheck, ShieldCheck } from 'lucide-react';
+import { UploadCloud, CheckCircle2, AlertTriangle, FileText, Loader2, Search, Check, X, Clock, Users, ClipboardCheck, ShieldCheck, MessageSquare, Trash2 } from 'lucide-react';
 import { FACULTY_REQUIRED_OFFICES } from '@/lib/clearanceOffices';
 import { isApprovalOfficer, getClearancePageInfo, isFacultyLikeRole } from '@/lib/roleConfig';
 import { StoredUser, normalize } from '@/lib/stringUtils';
 import { toast } from '@/lib/toast';
-import { ClearanceRequirementsPanel } from '@/components/ClearanceRequirementsPanel';
 
 const OFFICER_OFFICE_MAP: Record<string, number> = {
   dlrc:         1,
@@ -62,10 +61,15 @@ export default function ClearancePage() {
   const [facultyMembers, setFacultyMembers] = useState<Faculty[]>([]);
   const [docName, setDocName] = useState('Safety Training Certificate');
   const [uploadError, setUploadError] = useState('');
+  const [remarkRecord, setRemarkRecord] = useState<Clearance | null>(null);
+  const [remarkText, setRemarkText] = useState('');
+  const [remarkSaving, setRemarkSaving] = useState(false);
 
   const isFacultyUser = isFacultyLikeRole(currentUser?.role);
   const isApprovalOfficer_ = isApprovalOfficer(currentUser?.role);
+  const canReviewFaculty = isApprovalOfficer_;
   const showActionColumn = isApprovalOfficer_;
+  const showRemarkColumn = canReviewFaculty;
   const showSubmitColumn = isFacultyUser;
 
   const officeIdMap = useMemo(() => {
@@ -99,7 +103,7 @@ export default function ClearancePage() {
     const officeId = isApprovalOfficer(role) ? getOfficeId(role) : undefined;
     let userId: string | undefined;
 
-    if (!isApprovalOfficer(role)) {
+    if (!isApprovalOfficer(role) && role !== 'admin') {
       if (user?.supabase_id) {
         userId = user.supabase_id;
       } else if (user?.id) {
@@ -107,9 +111,15 @@ export default function ClearancePage() {
       }
     }
 
-    const data = await clearanceService.getClearances(userId, officeId);
-    setRecords(data || []);
-    setLoading(false);
+    try {
+      const data = await clearanceService.getClearances(userId, officeId, {
+        actorId: user?.id ? String(user.id) : undefined,
+        actorRole: role,
+      });
+      setRecords(data || []);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -121,9 +131,9 @@ export default function ClearancePage() {
   }, []);
 
   useEffect(() => {
-    if (currentUser?.role !== 'admin' && !isApprovalOfficer(currentUser?.role)) return;
+    if (currentUser?.role !== 'admin' && !canReviewFaculty) return;
     void facultyService.getFaculty().then(setFacultyMembers);
-  }, [currentUser]);
+  }, [currentUser, canReviewFaculty]);
 
   useEffect(() => {
     const raw = localStorage.getItem('user');
@@ -244,7 +254,7 @@ export default function ClearancePage() {
       );
     }
 
-    if (isApprovalOfficer(currentUser.role)) {
+    if (canReviewFaculty) {
       const officeRecords = records;
 
       const facultyMap = new Map<string, Clearance[]>();
@@ -268,10 +278,14 @@ export default function ClearancePage() {
       (record.employeeName ?? '').toLowerCase().includes(term) ||
       (record.requiredDocument ?? '').toLowerCase().includes(term)
     );
-  }, [records, searchTerm, currentUser, facultyStepRecords]);
+  }, [records, searchTerm, currentUser, facultyStepRecords, canReviewFaculty]);
 
   const adminFacultyProgress = useMemo<AdminFacultyProgress[]>(() => {
     if (currentUser?.role !== 'admin') return [];
+
+    const monitoredOffices = offices.length > 0
+      ? offices.map((office) => office.name).filter(Boolean)
+      : FACULTY_REQUIRED_OFFICES;
 
     const recordsByFaculty = new Map<string, Clearance[]>();
     records.forEach((record) => {
@@ -296,10 +310,10 @@ export default function ClearancePage() {
 
     return [...knownFaculty, ...submittedFaculty].map((faculty) => {
       const memberRecords = recordsByFaculty.get(faculty.id) ?? [];
-      const approved = FACULTY_REQUIRED_OFFICES.filter((office) =>
+      const approved = monitoredOffices.filter((office) =>
         memberRecords.some((record) => normalize(record.requiredDocument) === normalize(office) && record.status === 'approved')
       ).length;
-      const submitted = FACULTY_REQUIRED_OFFICES.filter((office) =>
+      const submitted = monitoredOffices.filter((office) =>
         memberRecords.some((record) => normalize(record.requiredDocument) === normalize(office) && record.status !== 'rejected')
       ).length;
       const rejected = memberRecords.filter((record) => record.status === 'rejected').length;
@@ -310,17 +324,20 @@ export default function ClearancePage() {
         submitted,
         approved,
         rejected,
-        completion: Math.round((approved / FACULTY_REQUIRED_OFFICES.length) * 100),
+        completion: monitoredOffices.length > 0 ? Math.round((approved / monitoredOffices.length) * 100) : 0,
       };
     });
-  }, [currentUser, facultyMembers, records]);
+  }, [currentUser, facultyMembers, offices, records]);
 
   const adminOverview = useMemo(() => {
-    const total = adminFacultyProgress.length * FACULTY_REQUIRED_OFFICES.length;
+    const monitoredOffices = offices.length > 0
+      ? offices.map((office) => office.name).filter(Boolean)
+      : FACULTY_REQUIRED_OFFICES;
+    const total = adminFacultyProgress.length * monitoredOffices.length;
     const submitted = adminFacultyProgress.reduce((sum, faculty) => sum + faculty.submitted, 0);
     const approved = adminFacultyProgress.reduce((sum, faculty) => sum + faculty.approved, 0);
     const rejected = adminFacultyProgress.reduce((sum, faculty) => sum + faculty.rejected, 0);
-    const officeProgress = FACULTY_REQUIRED_OFFICES.map((office) => {
+    const officeProgress = monitoredOffices.map((office) => {
       const approvedForOffice = adminFacultyProgress.filter((faculty) =>
         faculty.records.some((record) => normalize(record.requiredDocument) === normalize(office) && record.status === 'approved')
       ).length;
@@ -337,7 +354,7 @@ export default function ClearancePage() {
       completionPercent: total ? Math.round((approved / total) * 100) : 0,
       officeProgress,
     };
-  }, [adminFacultyProgress]);
+  }, [adminFacultyProgress, offices]);
 
   const facultyProgress = useMemo(() => {
     if (!isFacultyUser || facultyStepRecords.length === 0) return null;
@@ -418,6 +435,41 @@ export default function ClearancePage() {
     }
   };
 
+  const handleAddRemark = async () => {
+    if (!currentUser || !remarkRecord?.id || !remarkText.trim()) return;
+
+    setRemarkSaving(true);
+    try {
+      await clearanceService.addClearanceNote(
+        remarkRecord.id,
+        remarkText.trim(),
+        String(currentUser.id),
+        currentUser.full_name || currentUser.name || 'Approval officer',
+        'remark'
+      );
+      setRemarkRecord(null);
+      setRemarkText('');
+      await loadData(currentUser);
+      toast({ title: 'Remark sent', description: 'The faculty member was notified of the requirement reminder.', type: 'success' });
+    } catch (err) {
+      toast({ title: 'Remark failed', description: err instanceof Error ? err.message : 'Could not send the remark.', type: 'error' });
+    } finally {
+      setRemarkSaving(false);
+    }
+  };
+
+  const handleDeleteRemark = async (record: Clearance, noteId: string) => {
+    if (!window.confirm('Delete this requirement reminder?')) return;
+
+    try {
+      await clearanceService.deleteClearanceNote(record.id, noteId);
+      await loadData(currentUser ?? undefined);
+      toast({ title: 'Remark deleted', description: 'The requirement reminder was removed.', type: 'success' });
+    } catch (err) {
+      toast({ title: 'Delete failed', description: err instanceof Error ? err.message : 'Could not delete the remark.', type: 'error' });
+    }
+  };
+
   const { title: pageTitle, subtitle: pageSubtitle } = getClearancePageInfo(currentUser?.role);
 
   const getStatusClass = (status: Clearance['status']) => {
@@ -439,13 +491,14 @@ export default function ClearancePage() {
 
   let tableRows: React.ReactNode;
   let tableColumnCount = 3;
-  if (currentUser?.role === 'admin' || showActionColumn || showSubmitColumn) {
+  if (currentUser?.role === 'admin' || showActionColumn || showRemarkColumn || showSubmitColumn) {
     tableColumnCount = 4;
   }
   const adminRows = currentUser?.role === 'admin'
     ? adminFacultyProgress.filter((faculty) => faculty.name.toLowerCase().includes(searchTerm.toLowerCase()) || faculty.department.toLowerCase().includes(searchTerm.toLowerCase()))
     : [];
   const hasNoRows = currentUser?.role === 'admin' ? adminRows.length === 0 : filtered.length === 0;
+  const monitoredOfficeCount = offices.length > 0 ? offices.length : FACULTY_REQUIRED_OFFICES.length;
   if (loading) {
     tableRows = (
       <TableRow>
@@ -483,7 +536,7 @@ export default function ClearancePage() {
           <div className="font-medium text-slate-800">{faculty.name}</div>
           <div className="text-xs text-slate-500">{faculty.department || 'Department not assigned'}</div>
         </TableCell>
-        <TableCell className="text-sm text-slate-600">{faculty.submitted} / {FACULTY_REQUIRED_OFFICES.length} submitted</TableCell>
+        <TableCell className="text-sm text-slate-600">{faculty.submitted} / {monitoredOfficeCount} submitted</TableCell>
         <TableCell>
           <div className="flex min-w-40 items-center gap-3">
             <Progress value={faculty.completion} className="h-2" indicatorClassName={faculty.completion === 100 ? 'bg-emerald-500' : 'bg-[#D4A017]'} />
@@ -502,13 +555,13 @@ export default function ClearancePage() {
     tableRows = filtered.map((record: Clearance & { _hasRecord?: boolean; _isRequiredPlaceholder?: boolean }) => (
       <TableRow
         key={record.id}
-        className={isApprovalOfficer_ ? 'cursor-pointer hover:bg-slate-50' : ''}
+        className={canReviewFaculty ? 'cursor-pointer hover:bg-slate-50' : ''}
       >
         <TableCell>
           <div className="flex items-start justify-between gap-4">
             <div className="text-sm font-medium flex items-center gap-2">
               <FileText className="h-4 w-4 text-slate-400" />
-              {isApprovalOfficer_ ? (
+              {canReviewFaculty ? (
                 <span className="text-slate-800 font-semibold">{record.employeeName}</span>
               ) : (
                 <span className="text-slate-800">{record.requiredDocument}</span>
@@ -522,6 +575,16 @@ export default function ClearancePage() {
               <AlertTriangle className="h-3 w-3" /> Reason: {record.validationWarning}
             </div>
           )}
+          {record.notes?.map((note) => (
+            <div key={note.id} className="mt-2 flex items-start justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-900">
+              <span><span className="font-semibold">Requirement reminder:</span> {note.content}</span>
+              {canReviewFaculty && (
+                <Button type="button" size="icon-sm" variant="ghost" className="shrink-0 text-amber-800 hover:bg-amber-100" onClick={() => void handleDeleteRemark(record, note.id)} aria-label="Delete requirement reminder">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+          ))}
         </TableCell>
         <TableCell className="text-sm text-slate-600">{record.submissionDate || 'Not submitted'}</TableCell>
         <TableCell>
@@ -548,10 +611,23 @@ export default function ClearancePage() {
             </Button>
           </TableCell>
         )}
-        {showActionColumn && (
+        {showRemarkColumn && (
           <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
             <div className="inline-flex flex-col gap-1 sm:gap-2 sm:flex-row">
               <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={record._hasRecord === false || actionLoadingId === record.id}
+                onClick={() => {
+                  setRemarkRecord(record);
+                  setRemarkText('');
+                }}
+              >
+                <MessageSquare className="mr-1 h-3.5 w-3.5" />
+                Add remark
+              </Button>
+              {showActionColumn && <Button
                 type="button"
                 size="sm"
                 className="bg-emerald-600 hover:bg-emerald-700"
@@ -560,8 +636,8 @@ export default function ClearancePage() {
               >
                 {actionLoadingId === record.id ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />}
                 Approve
-              </Button>
-              <Button
+              </Button>}
+              {showActionColumn && <Button
                 type="button"
                 size="sm"
                 variant="destructive"
@@ -570,8 +646,8 @@ export default function ClearancePage() {
               >
                 <X className="mr-1 h-3.5 w-3.5" />
                 Reject
-              </Button>
-              <Button
+              </Button>}
+              {showActionColumn && <Button
                 type="button"
                 size="sm"
                 variant="outline"
@@ -580,7 +656,7 @@ export default function ClearancePage() {
               >
                 <Clock className="mr-1 h-3.5 w-3.5" />
                 Pending
-              </Button>
+              </Button>}
             </div>
           </TableCell>
         )}
@@ -596,7 +672,7 @@ export default function ClearancePage() {
           <p className="text-slate-500">{pageSubtitle}</p>
         </div>
 
-        {!isFacultyUser && !isApprovalOfficer_ && (
+        {currentUser?.role !== 'admin' && !isFacultyUser && !isApprovalOfficer_ && (
           <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
             <Button className="bg-red-600 hover:bg-red-700" onClick={() => setIsUploadOpen(true)}>
               <UploadCloud className="mr-2 h-4 w-4" /> Upload Document
@@ -630,6 +706,35 @@ export default function ClearancePage() {
                   </Button>
                 </div>
               </form>
+            </DialogContent>
+          </Dialog>
+        )}
+
+        {canReviewFaculty && (
+          <Dialog open={Boolean(remarkRecord)} onOpenChange={(open) => !open && setRemarkRecord(null)}>
+            <DialogContent className="sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Requirement reminder for {remarkRecord?.employeeName}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 pt-4">
+                <p className="text-sm text-slate-500">
+                  Add the specific requirement this faculty member must submit before approval.
+                </p>
+                <textarea
+                  className="min-h-28 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#D4A017]/40"
+                  value={remarkText}
+                  onChange={(event) => setRemarkText(event.target.value)}
+                  placeholder="Example: Submit the updated laboratory clearance certificate."
+                  aria-label="Requirement reminder"
+                />
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => setRemarkRecord(null)}>Cancel</Button>
+                  <Button type="button" onClick={() => void handleAddRemark()} disabled={remarkSaving || !remarkText.trim()}>
+                    {remarkSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Send reminder
+                  </Button>
+                </div>
+              </div>
             </DialogContent>
           </Dialog>
         )}
@@ -677,8 +782,6 @@ export default function ClearancePage() {
           </CardContent>
         </Card>
       )}
-
-      <ClearanceRequirementsPanel user={currentUser} offices={offices} />
 
       {currentUser?.role === 'admin' && (
         <>
@@ -731,7 +834,7 @@ export default function ClearancePage() {
                   </>
                 )}
                 {showSubmitColumn && <TableHead className="text-right">Action</TableHead>}
-                {showActionColumn && <TableHead className="text-right">Decision</TableHead>}
+                {showRemarkColumn && <TableHead className="text-right">{showActionColumn ? 'Decision' : 'Remark'}</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>

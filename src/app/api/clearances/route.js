@@ -144,7 +144,30 @@ export async function GET(request) {
     }
 
     console.log("[CLEARANCES GET SUCCESS] Fetched", scopedData.length, "clearances");
-    const formatted = scopedData.map(formatRow);
+    const clearanceIds = scopedData.map((row) => row.document_id).filter(Boolean);
+    let notesByClearance = new Map();
+    if (clearanceIds.length > 0) {
+      const { data: notes, error: notesError } = await supabase
+        .from("clearance_notes")
+        .select("id, clearance_id, content, author_id, author_name, note_type, created_at, updated_at")
+        .in("clearance_id", clearanceIds)
+        .order("created_at", { ascending: false });
+
+      if (notesError) {
+        console.warn("[CLEARANCES GET NOTES ERROR]", notesError);
+      } else {
+        notesByClearance = (notes || []).reduce((map, note) => {
+          const key = String(note.clearance_id);
+          map.set(key, [...(map.get(key) || []), note]);
+          return map;
+        }, new Map());
+      }
+    }
+
+    const formatted = scopedData.map((row) => ({
+      ...formatRow(row),
+      notes: notesByClearance.get(String(row.document_id)) || [],
+    }));
 
     return NextResponse.json({ data: formatted });
   } catch (err) {

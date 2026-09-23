@@ -53,7 +53,7 @@ export function Sidebar({ user, collapsed = false, onToggle }: Readonly<SidebarP
     { href: '/dashboard/admin/accounts', label: 'Account Creation', icon: UserPlus },
     { href: '/dashboard/admin/subjects', label: 'Subject Management', icon: BookOpen },
     { href: '/faculty', label: 'Faculty Management', icon: Users },
-    { href: '/attendance', label: 'Attendance Monitoring', icon: Clock },
+    { href: '/clearance', label: 'Requirements Management', icon: FileCheck2 },
     { href: '/reports', label: 'Reports', icon: BarChart3 },
     { href: '/dashboard/profile', label: 'My Profile', icon: UserSquare2 },
     { href: '/dashboard/changepassword', label: 'Change Password', icon: LockIcon },
@@ -109,7 +109,7 @@ export function Sidebar({ user, collapsed = false, onToggle }: Readonly<SidebarP
     links.push({ href: '/schedule-loading', label: 'Schedule Loading', icon: Calendar });
   }
 
-  if (user?.role === 'program_chair' || user?.role === 'dean' || user?.role === 'registrar') {
+  if (user?.role === 'program_chair') {
     links.push({ href: '/section-matrix', label: 'Section Matrix', icon: BookOpen });
   }
 

@@ -35,12 +35,12 @@ export async function GET(request, { params }) {
 export async function POST(request, { params }) {
   try {
     const supabase = createSupabaseAdminClient();
-    const { id } = params;
+    const { id } = await params;
     const { content, authorId, authorName, noteType = 'remark' } = await request.json();
 
-    if (!content || !authorId || !authorName) {
+    if (!id || !content || !authorId || !authorName) {
       return Response.json(
-        { error: 'Missing required fields: content, authorId, authorName' },
+        { error: 'Missing required fields: clearanceId, content, authorId, authorName' },
         { status: 400 }
       );
     }
@@ -64,6 +64,35 @@ export async function POST(request, { params }) {
       return Response.json({ error: error.message }, { status: 500 });
     }
 
+    const { data: clearance } = await supabase
+      .from('clearances')
+      .select('user_id, office:offices(name)')
+      .eq('document_id', id)
+      .maybeSingle();
+
+    if (clearance?.user_id) {
+      const { data: faculty } = await supabase
+        .from('users')
+        .select('user_id, supabase_id')
+        .or(`user_id.eq.${clearance.user_id},supabase_id.eq.${clearance.user_id}`)
+        .maybeSingle();
+      const notificationUserId = faculty?.supabase_id || faculty?.user_id || clearance.user_id;
+      const officeLabel = clearance.office?.name ? ' for ' + clearance.office.name : '';
+      const { error: notificationError } = await supabase.from('notifications').insert({
+        user_id: String(notificationUserId),
+        title: 'Clearance requirement reminder',
+        message: `${authorName} added a reminder${officeLabel}: ${content}`,
+        type: 'clearance_note_added',
+        related_id: String(id),
+        is_read: false,
+        created_at: new Date().toISOString(),
+      });
+
+      if (notificationError) {
+        console.warn('Could not create clearance note notification:', notificationError);
+      }
+    }
+
     return Response.json(
       { message: 'Note added successfully', note: data?.[0] },
       { status: 201 }
@@ -71,5 +100,36 @@ export async function POST(request, { params }) {
   } catch (error) {
     console.error('Error adding clearance note:', error);
     return Response.json({ error: 'Failed to add note' }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/clearances/[id]/notes
+ * Delete one officer remark from a clearance record
+ */
+export async function DELETE(request, { params }) {
+  try {
+    const supabase = createSupabaseAdminClient();
+    const { id } = await params;
+    const { noteId } = await request.json();
+
+    if (!id || !noteId) {
+      return Response.json({ error: 'clearanceId and noteId are required' }, { status: 400 });
+    }
+
+    const { error } = await supabase
+      .from('clearance_notes')
+      .delete()
+      .eq('id', noteId)
+      .eq('clearance_id', id);
+
+    if (error) {
+      return Response.json({ error: error.message }, { status: 500 });
+    }
+
+    return Response.json({ message: 'Note deleted successfully' }, { status: 200 });
+  } catch (error) {
+    console.error('Error deleting clearance note:', error);
+    return Response.json({ error: 'Failed to delete note' }, { status: 500 });
   }
 }
