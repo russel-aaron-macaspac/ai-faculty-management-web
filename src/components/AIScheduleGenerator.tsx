@@ -142,6 +142,8 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
   const [activeFacultyId, setActiveFacultyId] = useState('');
   const [subjectCode, setSubjectCode] = useState('');
   const [isMinimized, setIsMinimized] = useState(true);
+  const [activeFacultyAvailability, setActiveFacultyAvailability] = useState<Array<{ day: string; startTime: string; endTime: string }>>([]);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
 
   const filteredSubjects = useMemo(() => {
     const query = subjectCode.trim().toLowerCase();
@@ -191,6 +193,39 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
     void loadRoomSchedules();
     return () => { cancelled = true; };
   }, [createdBy, creatorRole, roomScheduleRefresh]);
+
+  useEffect(() => {
+    if (!activeFacultyId) {
+      setActiveFacultyAvailability([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadAvailability = async () => {
+      setAvailabilityLoading(true);
+      try {
+        const entries = await scheduleService.getFacultyAvailability(activeFacultyId);
+        if (!cancelled) {
+          const sortedAvailability = entries
+            .map((entry) => ({ day: entry.day, startTime: entry.startTime, endTime: entry.endTime }))
+            .sort((left, right) => {
+              const dayDifference = DAYS.indexOf(left.day) - DAYS.indexOf(right.day);
+              return dayDifference || left.startTime.localeCompare(right.startTime);
+            });
+          setActiveFacultyAvailability(sortedAvailability);
+        }
+      } catch {
+        if (!cancelled) setActiveFacultyAvailability([]);
+      } finally {
+        if (!cancelled) setAvailabilityLoading(false);
+      }
+    };
+
+    void loadAvailability();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeFacultyId]);
 
   const toggleMinimized = (event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation();
@@ -349,6 +384,13 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
       <div className="text-sm font-medium text-slate-700">2. Assign subjects by faculty</div>
       <div className="flex flex-wrap gap-2">{selectedFacultyIds.map((facultyId) => { const faculty = faculties.find((item) => item.id === facultyId); return <Button key={facultyId} type="button" size="sm" variant={activeFacultyId === facultyId ? 'default' : 'outline'} onClick={() => { setActiveFacultyId(facultyId); setSubjectCode(''); }}>{faculty?.name || facultyId}</Button>; })}</div>
       {activeFacultyId && <div className="grid gap-3 md:grid-cols-2">
+        <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 md:col-span-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-sm font-medium text-amber-950">Availability for {faculties.find((item) => item.id === activeFacultyId)?.name}</div>
+            {availabilityLoading && <Loader2 className="h-4 w-4 animate-spin text-amber-700" aria-label="Loading availability" />}
+          </div>
+          {availabilityLoading ? <div className="text-xs text-amber-800">Loading saved availability...</div> : activeFacultyAvailability.length === 0 ? <div className="text-xs text-amber-800">No saved availability. The generator may flag placements outside this faculty member&apos;s available hours.</div> : <div className="flex flex-wrap gap-2">{activeFacultyAvailability.map((entry, index) => <span key={`${entry.day}-${entry.startTime}-${entry.endTime}-${index}`} className="rounded-md border border-amber-300 bg-white px-2 py-1 text-xs text-amber-950"><span className="font-semibold">{entry.day}</span> {entry.startTime} - {entry.endTime}</span>)}</div>}
+        </div>
         <div className="space-y-2">
           <label htmlFor="ai-subject-code" className="text-sm font-medium text-slate-700">Subject code</label>
           <Input id="ai-subject-code" value={subjectCode} onChange={(event) => setSubjectCode(event.target.value)} placeholder="Search saved subjects" autoComplete="off" />
