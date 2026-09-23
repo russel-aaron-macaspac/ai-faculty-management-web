@@ -237,7 +237,7 @@ function SectionMatrixContent() {
 
 export default function SectionMatrixPage() {
   return (
-    <RouteGuard requiredRoles={['program_chair', 'dean', 'registrar']} fallbackPath="/login">
+    <RouteGuard requiredRoles={['program_chair']} fallbackPath="/login">
       <SectionMatrixContent />
     </RouteGuard>
   );

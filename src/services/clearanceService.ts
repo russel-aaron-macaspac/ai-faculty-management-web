@@ -186,6 +186,19 @@ export const clearanceService = {
     return notes || [];
   },
 
+  async deleteClearanceNote(clearanceId: string, noteId: string) {
+    const res = await fetch(`/api/clearances/${clearanceId}/notes`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ noteId }),
+    });
+    if (!res.ok) {
+      const { error } = await res.json();
+      throw new Error(error ?? 'Could not delete note.');
+    }
+    return res.json();
+  },
+
   async getNotifications(userId: string, unreadOnly: boolean = false) {
     if (!clearanceService.isUuid(userId)) {
       return [];

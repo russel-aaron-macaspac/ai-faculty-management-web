@@ -25,6 +25,8 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId }
         return <XCircle className="h-5 w-5 text-rose-600" />;
       case 'clearance_submitted':
         return <AlertCircle className="h-5 w-5 text-amber-600" />;
+      case 'clearance_note_added':
+        return <AlertCircle className="h-5 w-5 text-amber-700" />;
       case 'schedule_anomaly':
         return <AlertCircle className="h-5 w-5 text-amber-700" />;
       case 'unauthorized_access':
@@ -42,6 +44,8 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId }
         return 'bg-rose-50 border-rose-200';
       case 'clearance_submitted':
         return 'bg-amber-50 border-amber-200';
+      case 'clearance_note_added':
+        return 'bg-amber-50 border-amber-300';
       case 'schedule_anomaly':
         return 'bg-amber-50 border-amber-300';
       case 'unauthorized_access':
