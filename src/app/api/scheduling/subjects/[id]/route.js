@@ -49,6 +49,14 @@ export async function PUT(request, { params }) {
       payload.units = units;
     }
 
+    if (body?.requiredEquipmentType !== undefined) {
+      const value = body.requiredEquipmentType === null || body.requiredEquipmentType === "" ? null : String(body.requiredEquipmentType).trim().toLowerCase();
+      if (value !== null && value !== "computer") {
+        return NextResponse.json({ error: "requiredEquipmentType must be computer" }, { status: 400 });
+      }
+      payload.required_equipment_type = value;
+    }
+
     if (Object.keys(payload).length === 0) {
       return NextResponse.json({ error: "No fields provided to update" }, { status: 400 });
     }
@@ -58,7 +66,7 @@ export async function PUT(request, { params }) {
       .from("subjects")
       .update(payload)
       .eq("id", id)
-      .select("id, code, name, units, lecture_units, lab_units, hours")
+      .select("id, code, name, units, lecture_units, lab_units, hours, required_equipment_type")
       .single();
 
     if (error) {

@@ -4,6 +4,7 @@ import { RouteGuard } from '@/components/RouteGuard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from '@/lib/toast';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { BookOpen, CheckCircle2, Loader2, Plus } from 'lucide-react';
@@ -18,6 +19,7 @@ const subjectSchema = z.object({
   lectureUnits: z.coerce.number({ message: 'Enter lecture units.' }).min(0, 'Lecture units cannot be negative.'),
   labUnits: z.coerce.number({ message: 'Enter lab units.' }).min(0, 'Lab units cannot be negative.'),
   hours: z.coerce.number({ message: 'Enter the number of hours.' }).positive('Hours must be greater than zero.'),
+  requiresComputer: z.boolean().default(false),
 }).refine((values) => values.lectureUnits + values.labUnits <= values.units, {
   message: 'Lecture and lab units cannot exceed total units.',
   path: ['labUnits'],
@@ -25,7 +27,7 @@ const subjectSchema = z.object({
 
 type SubjectFormValues = z.infer<typeof subjectSchema>;
 type SubjectFormInput = z.input<typeof subjectSchema>;
-type Subject = { id: string; code: string; name: string; units?: number | null; lecture_units?: number | null; lab_units?: number | null; hours?: number | null };
+type Subject = { id: string; code: string; name: string; units?: number | null; lecture_units?: number | null; lab_units?: number | null; hours?: number | null; required_equipment_type?: string | null };
 
 export default function SubjectManagementPage() {
   return (
@@ -42,7 +44,7 @@ function SubjectManagementContent() {
   const [createdSubject, setCreatedSubject] = useState<Subject | null>(null);
   const form = useForm<SubjectFormInput, unknown, SubjectFormValues>({
     resolver: zodResolver(subjectSchema),
-    defaultValues: { code: '', name: '', units: undefined, lectureUnits: 0, labUnits: 0, hours: undefined },
+    defaultValues: { code: '', name: '', units: undefined, lectureUnits: 0, labUnits: 0, hours: undefined, requiresComputer: false },
   });
 
   const loadSubjects = async () => {
@@ -70,7 +72,7 @@ function SubjectManagementContent() {
       const response = await fetch('/api/scheduling/subjects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
+        body: JSON.stringify({ ...values, requiredEquipmentType: values.requiresComputer ? 'computer' : null }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.error || 'Unable to create the subject.');
@@ -136,6 +138,11 @@ function SubjectManagementContent() {
             </div>
           </div>
 
+          <label className="flex items-center gap-3 text-sm text-slate-700">
+            <Checkbox checked={form.watch('requiresComputer')} onCheckedChange={(checked) => form.setValue('requiresComputer', checked === true)} />
+            Requires a computer room
+          </label>
+
           <div className="flex justify-end border-t border-slate-200 pt-5">
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
@@ -153,7 +160,7 @@ function SubjectManagementContent() {
         </div>
         {isLoading ? <p className="text-sm text-slate-500">Loading subjects...</p> : subjects.length === 0 ? <p className="text-sm text-slate-500">No subjects have been added yet.</p> : (
           <div className="divide-y divide-slate-200 border-y border-slate-200">
-            {subjects.map((subject) => <div key={subject.id} className="grid gap-1 py-3 sm:grid-cols-[minmax(0,0.7fr)_minmax(0,1.5fr)_minmax(0,1.8fr)]"><span className="font-medium text-slate-900">{subject.code}</span><span className="text-slate-600">{subject.name}</span><span className="text-slate-500">{subject.units ?? '-'} units · Lec {subject.lecture_units ?? 0}u · Lab {subject.lab_units ?? 0}u · {subject.hours ?? '-'} hours</span></div>)}
+            {subjects.map((subject) => <div key={subject.id} className="grid gap-1 py-3 sm:grid-cols-[minmax(0,0.7fr)_minmax(0,1.5fr)_minmax(0,1.8fr)]"><span className="font-medium text-slate-900">{subject.code}</span><span className="text-slate-600">{subject.name}</span><span className="text-slate-500">{subject.units ?? '-'} units · Lec {subject.lecture_units ?? 0}u · Lab {subject.lab_units ?? 0}u · {subject.hours ?? '-'} hours · {subject.required_equipment_type === 'computer' ? 'Computer required' : 'No equipment requirement'}</span></div>)}
           </div>
         )}
       </section>

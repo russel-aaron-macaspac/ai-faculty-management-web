@@ -6,7 +6,7 @@ export async function GET() {
     const supabase = createSupabaseAdminClient();
     const { data, error } = await supabase
       .from("subjects")
-      .select("id, code, name, units, lecture_units, lab_units, hours")
+      .select("id, code, name, units, lecture_units, lab_units, hours, required_equipment_type")
       .order("code", { ascending: true });
 
     if (error) {
@@ -30,9 +30,14 @@ export async function POST(request) {
     const lectureUnits = body?.lectureUnits === undefined || body?.lectureUnits === "" ? 0 : Number(body.lectureUnits);
     const labUnits = body?.labUnits === undefined || body?.labUnits === "" ? 0 : Number(body.labUnits);
     const hours = body?.hours === undefined || body?.hours === null || body?.hours === "" ? null : Number(body.hours);
+    const requiredEquipmentType = body?.requiredEquipmentType === null || body?.requiredEquipmentType === undefined || body?.requiredEquipmentType === "" ? null : String(body.requiredEquipmentType).trim().toLowerCase();
 
     if (!code || !name) {
       return NextResponse.json({ error: "code and name are required" }, { status: 400 });
+    }
+
+    if (requiredEquipmentType !== null && requiredEquipmentType !== "computer") {
+      return NextResponse.json({ error: "requiredEquipmentType must be computer" }, { status: 400 });
     }
 
     if (units !== null && (!Number.isFinite(units) || units <= 0)) {
@@ -58,7 +63,7 @@ export async function POST(request) {
     // multiple subjects (e.g. IT301 -> "Networking 2", IT301 -> "Networking 3").
     const { data: existingSubject, error: existingSubjectError } = await supabase
       .from("subjects")
-      .select("id, code, name, units, lecture_units, lab_units, hours")
+      .select("id, code, name, units, lecture_units, lab_units, hours, required_equipment_type")
       .ilike("code", code)
       .ilike("name", name)
       .maybeSingle();
@@ -74,8 +79,8 @@ export async function POST(request) {
 
     const { data, error } = await supabase
       .from("subjects")
-      .insert({ code, name, units, lecture_units: lectureUnits, lab_units: labUnits, hours })
-      .select("id, code, name, units, lecture_units, lab_units, hours")
+      .insert({ code, name, units, lecture_units: lectureUnits, lab_units: labUnits, hours, required_equipment_type: requiredEquipmentType })
+      .select("id, code, name, units, lecture_units, lab_units, hours, required_equipment_type")
       .single();
 
     if (error) {

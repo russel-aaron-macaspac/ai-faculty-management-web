@@ -41,11 +41,13 @@ interface SubjectPayload {
   lectureUnits?: number;
   labUnits?: number;
   hours?: number;
+  requiredEquipmentType?: 'computer' | null;
 }
 
 interface RoomPayload {
   name: string;
   capacity: number;
+  equipmentType?: 'computer' | null;
 }
 
 interface SectionPayload {
@@ -84,8 +86,8 @@ export const scheduleService = {
 
   async getMetadata(actor?: { id: string; role: string }): Promise<{
     faculties: Array<{ id: string; name: string; role: string }>;
-    subjects: Array<{ id: string; code: string; name: string; year_level?: string | number | null; units?: number | null; lecture_units?: number | null; lab_units?: number | null; hours?: number | null }>;
-    rooms: Array<{ id: string; name: string; capacity: number }>;
+    subjects: Array<{ id: string; code: string; name: string; year_level?: string | number | null; units?: number | null; lecture_units?: number | null; lab_units?: number | null; hours?: number | null; required_equipment_type?: string | null }>;
+    rooms: Array<{ id: string; name: string; capacity: number; equipment_type?: string | null }>;
     sections: Array<{ id: string; name: string; year_level?: string | number | null }>;
   }> {
     const params = new URLSearchParams();
