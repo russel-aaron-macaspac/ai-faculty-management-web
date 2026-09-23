@@ -25,6 +25,24 @@ function isOnlineRoom(name) {
   return ONLINE_ROOM_PATTERN.test(String(name || ""));
 }
 
+function normalizeRoomName(value) {
+  const name = String(value || "").trim();
+  return /^(tba|tbd)(\s*[-: ].*)?$/i.test(name) ? "TBA" : name;
+}
+
+function isComputerLab(room) {
+  return /computer|comlab|comp\s*lab|ict\s*lab|it\s*lab/i.test(String(room?.name || ""));
+}
+
+function subjectNeedsComputerLab(subject) {
+  const text = `${subject.code || ""} ${subject.name || ""}`.toLowerCase();
+  return /computer|programming|coding|software|system|network|database|web|development|architecture|informatics|ict|computer servicing|computer systems/.test(text);
+}
+
+function isPartTimeStatus(value) {
+  return /part[\s-]*time/i.test(String(value || ""));
+}
+
 function normalizeSections(subject) {
   const sections = Array.isArray(subject.sections) ? subject.sections : [subject.section];
   return [...new Set(sections.map((value) => String(value || "").trim()).filter(Boolean))];
@@ -37,7 +55,30 @@ function scheduleSections(schedule) {
     .filter(Boolean);
 }
 
-async function addUnplacedSuggestions(unplaced, selectedRoom, requestedClassSize) {
+function findLegalPlacement({ requested, rooms, facultyWindows, facultyBookings, roomBookings, sectionBookings, requestedClassSize }) {
+  const roomCandidates = rooms
+    .filter((room) => !isOnlineRoom(room.name))
+    .filter((room) => requested.needsComputerLab ? isComputerLab(room) : true)
+    .filter((room) => requestedClassSize == null || Number(room.capacity) >= requestedClassSize)
+    .sort((left, right) => requested.needsComputerLab
+      ? Number(right.capacity) - Number(left.capacity)
+      : Number(isComputerLab(left)) - Number(isComputerLab(right)) || Number(left.capacity) - Number(right.capacity));
+  const candidates = [];
+  for (const room of roomCandidates) {
+    for (const window of facultyWindows) {
+      for (let start = window.start; start + requested.durationMinutes <= window.end; start += 30) {
+        const end = start + requested.durationMinutes;
+        if (hasFacultyTimeConflict(facultyBookings.get(requested.facultyId) || [], window.day, start, end)) continue;
+        if (roomBookings.some((booking) => booking.roomId === String(room.id) && booking.day === window.day && overlaps(start, end, booking.start, booking.end))) continue;
+        if (sectionBookings.some((booking) => booking.day === window.day && booking.sections.includes(requested.section) && overlaps(start, end, booking.start, booking.end))) continue;
+        candidates.push({ room, day: window.day, start, end });
+      }
+    }
+  }
+  return candidates[0] || null;
+}
+
+async function addUnplacedSuggestions(unplaced, rooms, requestedClassSize) {
   if (unplaced.length === 0) return { items: unplaced, available: true };
   const apiKey = process.env.MISTRAL_API_KEY;
   if (!apiKey) return { items: unplaced, available: false };
@@ -49,7 +90,7 @@ async function addUnplacedSuggestions(unplaced, selectedRoom, requestedClassSize
       "For each item, give one specific, actionable recommendation based only on its diagnostics.",
       "Do not claim that a specific room or time is conflict-free. Do not say to schedule a class in a room unless the diagnostics explicitly confirm that placement.",
       "Return JSON only as an array of objects with this shape: [{\"index\": number, \"suggestion\": string}].",
-      `Selected room: ${selectedRoom.name}; capacity: ${selectedRoom.capacity}; requested class size: ${requestedClassSize}.`,
+      `Available rooms: ${JSON.stringify(rooms)}; requested class size: ${requestedClassSize}.`,
       `Unplaced classes: ${JSON.stringify(unplaced.map((item, index) => ({ index, code: item.code, name: item.name, faculty: item.facultyName, durationMinutes: item.durationMinutes, validationReason: item.validationReason, availabilityWindowCount: item.availabilityWindowCount, roomTooSmall: item.roomTooSmall, roomConflictCount: item.roomConflictCount, sectionConflictCount: item.sectionConflictCount })))} `,
     ].join("\n");
     const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
@@ -74,25 +115,27 @@ async function addUnplacedSuggestions(unplaced, selectedRoom, requestedClassSize
   }
 }
 
-async function generateFullScheduleWithMistral({ assignments, facultyById, windowsByFaculty, rooms, selectedRoom, existingSchedules, requestedClassSize, loadType }) {
+async function generateFullScheduleWithMistral({ assignments, facultyById, windowsByFaculty, rooms, existingSchedules, requestedClassSize, loadType }) {
   const apiKey = process.env.MISTRAL_API_KEY;
   if (!apiKey) throw new Error("MISTRAL_API_KEY is not configured. Add it to .env.local and restart the server.");
 
   const model = process.env.MISTRAL_MODEL || "mistral-large-latest";
   const facultyAvailability = assignments.map((assignment) => ({
     facultyId: String(assignment.facultyId),
+    appointmentStatus: isPartTimeStatus(assignment.appointmentStatus) ? "part-time" : "full-time",
     facultyName: [facultyById.get(String(assignment.facultyId))?.first_name, facultyById.get(String(assignment.facultyId))?.middle_name, facultyById.get(String(assignment.facultyId))?.last_name].filter(Boolean).join(" "),
     windows: (windowsByFaculty.get(String(assignment.facultyId)) || []).map((window) => ({ day: window.day, startTime: toTime(window.start), endTime: toTime(window.end) })),
   }));
-  const requestedClasses = assignments.flatMap((assignment) => assignment.subjects.flatMap((subject) => normalizeSections(subject).map((section) => ({ facultyId: String(assignment.facultyId), subjectId: subject.subjectId ?? null, code: subject.code, name: subject.name, section, classType: subject.classType, durationMinutes: Number(subject.durationMinutes) > 0 ? Number(subject.durationMinutes) : 90 }))));
+  const requestedClasses = assignments.flatMap((assignment) => assignment.subjects.flatMap((subject) => normalizeSections(subject).map((section) => ({ facultyId: String(assignment.facultyId), subjectId: subject.subjectId ?? null, code: subject.code, name: subject.name, section, classType: subject.classType, needsComputerLab: subjectNeedsComputerLab(subject), durationMinutes: Number(subject.durationMinutes) > 0 ? Number(subject.durationMinutes) : 90 }))));
   const prompt = [
     "You are the primary university schedule generator. Generate the complete schedule for every requested class in one plan.",
-    "Choose rooms, days, and times yourself. Prefer the selected room when feasible, but use other rooms when that produces a valid complete schedule.",
+    "Choose from all available physical rooms, days, and times yourself.",
     "Never schedule outside the assigned faculty availability. Never overlap a faculty member, room, or section. Respect room capacity and existing schedules.",
+    "Schedule part-time faculty before full-time faculty so their more limited availability is protected. Within each faculty group, schedule every section.",
+    "A class that needs computers must use a computer laboratory. Give computer laboratories first priority to computer-dependent classes. Classes that do not need computers should use ordinary available rooms first and may use a computer laboratory only when no suitable ordinary room is available.",
     "A faculty member may teach multiple sections. Schedule every section as its own class at a different, non-overlapping time; do not omit a section just because its faculty member is already assigned another section.",
     "Return JSON only in exactly this shape: {\"schedule\":[{\"facultyId\":string,\"subjectId\":string|null,\"code\":string,\"name\":string,\"section\":string,\"day\":string,\"startTime\":\"HH:mm\",\"endTime\":\"HH:mm\",\"roomId\":string}]}. You must return exactly one row for every requested class. Never return fewer rows.",
-    `Selected room preference: ${JSON.stringify({ id: selectedRoom.id, name: selectedRoom.name, capacity: selectedRoom.capacity })}`,
-    `Requested class size: ${requestedClassSize}; load type: ${loadType}`,
+    `Requested class size: ${requestedClassSize ?? "not provided"}; load type: ${loadType}`,
     `Faculty availability: ${JSON.stringify(facultyAvailability)}`,
     `Rooms: ${JSON.stringify(rooms.filter((room) => !isOnlineRoom(room.name)))}`,
     `Existing schedules: ${JSON.stringify(existingSchedules)}`,
@@ -154,6 +197,7 @@ function validateMistralSchedule({ requestedClasses, proposals, rooms, windowsBy
     const proposal = proposalIndex >= 0 ? normalizedProposals[proposalIndex] : null;
     if (proposalIndex >= 0) used.add(proposalIndex);
     const room = proposal ? roomById.get(String(proposal.roomId)) : null;
+    const needsComputerLab = Boolean(requested.needsComputerLab);
     const start = proposal ? toMinutes(proposal.startTime) : Number.NaN;
     const end = proposal ? toMinutes(proposal.endTime) : Number.NaN;
     const facultyId = requested.facultyId;
@@ -166,7 +210,8 @@ function validateMistralSchedule({ requestedClasses, proposals, rooms, windowsBy
     if (!proposal) validationReasons.push("the AI did not return a matching placement");
     if (proposal && !room) validationReasons.push("the selected room was not found");
     if (room && isOnlineRoom(room.name)) validationReasons.push("the selected room is not a physical classroom");
-    if (room && Number(room.capacity) < requestedClassSize) validationReasons.push(`room capacity is ${room.capacity}, but ${requestedClassSize} seats are required`);
+    if (needsComputerLab && room && !isComputerLab(room)) validationReasons.push("this class requires a computer laboratory");
+    if (requestedClassSize != null && room && Number(room.capacity) < requestedClassSize) validationReasons.push(`room capacity is ${room.capacity}, but ${requestedClassSize} seats are required`);
     if (proposal && !DAYS.includes(proposal.day)) validationReasons.push("the returned day is invalid");
     if (proposal && (!Number.isFinite(start) || !Number.isFinite(end) || start >= end)) validationReasons.push("the returned time range is invalid");
     if (proposal && Number.isFinite(start) && Number.isFinite(end) && end - start !== requested.durationMinutes) validationReasons.push(`the class duration must be ${requested.durationMinutes} minutes`);
@@ -176,6 +221,16 @@ function validateMistralSchedule({ requestedClasses, proposals, rooms, windowsBy
     if (sectionConflict) validationReasons.push("the section already has a class at that time");
     const valid = validationReasons.length === 0;
     if (!valid) {
+      const repairedPlacement = findLegalPlacement({ requested, rooms, facultyWindows, facultyBookings, roomBookings, sectionBookings, requestedClassSize });
+      if (repairedPlacement) {
+        facultyBookings.get(facultyId)?.push({ day: repairedPlacement.day, start: repairedPlacement.start, end: repairedPlacement.end });
+        if (!facultyBookings.has(facultyId)) facultyBookings.set(facultyId, [{ day: repairedPlacement.day, start: repairedPlacement.start, end: repairedPlacement.end }]);
+        roomBookings.push({ roomId: String(repairedPlacement.room.id), day: repairedPlacement.day, start: repairedPlacement.start, end: repairedPlacement.end, sections: [requested.section] });
+        sectionBookings.push({ day: repairedPlacement.day, start: repairedPlacement.start, end: repairedPlacement.end, sections: [requested.section] });
+        const units = Number((requested.durationMinutes / 60).toFixed(2));
+        generated.push({ subjectId: requested.subjectId, facultyId, facultyName: requested.facultyName, code: requested.code, name: requested.name, day: repairedPlacement.day, startTime: toTime(repairedPlacement.start), endTime: toTime(repairedPlacement.end), section: requested.section, roomId: repairedPlacement.room.id, roomName: repairedPlacement.room.name, units, lectureContactHours: requested.classType === "lab" ? 0 : units, labContactHours: requested.classType === "lab" ? units : 0, classSize: requestedClassSize, loadType });
+        continue;
+      }
       unplaced.push({ subjectId: requested.subjectId, facultyId, facultyName: requested.facultyName, code: requested.code, name: requested.name, section: requested.section, durationMinutes: requested.durationMinutes, availabilityWindowCount: facultyWindows.length, roomTooSmall: Boolean(room && Number(room.capacity) < requestedClassSize), roomConflictCount: roomConflict ? 1 : 0, sectionConflictCount: sectionConflict ? 1 : 0, validationReason: validationReasons.join("; "), reason: `The AI's proposed placement was not accepted because ${validationReasons.join("; ")}.` });
       continue;
     }
@@ -192,7 +247,6 @@ function validateMistralSchedule({ requestedClasses, proposals, rooms, windowsBy
 export async function POST(request) {
   try {
     const body = await request.json();
-    const roomId = String(body.roomId || "").trim();
     let assignments = [];
     if (Array.isArray(body.assignments)) {
       assignments = body.assignments;
@@ -200,16 +254,17 @@ export async function POST(request) {
       assignments = [{ facultyId: body.facultyId, subjects: body.subjects }];
     }
     const durationMinutes = Number(body.durationMinutes) || 90;
-    const requestedClassSize = Number(body.classSize) || 0;
+    const parsedClassSize = Number(body.classSize);
+    const requestedClassSize = Number.isFinite(parsedClassSize) && parsedClassSize > 0 ? parsedClassSize : null;
     const loadType = body.loadType || "regular";
 
-    if (!roomId || assignments.length === 0) {
-      return NextResponse.json({ error: "roomId and at least one faculty assignment are required" }, { status: 400 });
+    if (assignments.length === 0) {
+      return NextResponse.json({ error: "At least one faculty assignment is required" }, { status: 400 });
     }
     if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) {
       return NextResponse.json({ error: "durationMinutes must be a positive integer" }, { status: 400 });
     }
-    if (!Number.isFinite(requestedClassSize) || requestedClassSize < 0) {
+    if (requestedClassSize !== null && (!Number.isFinite(requestedClassSize) || requestedClassSize < 0)) {
       return NextResponse.json({ error: "classSize must be a non-negative number" }, { status: 400 });
     }
     if (!["regular", "overload"].includes(loadType)) {
@@ -232,7 +287,7 @@ export async function POST(request) {
 
     const { data: assignedSchedules, error: assignedSchedulesError } = await supabase
       .from("schedules")
-      .select("subject_id, faculty_id, section")
+      .select("subject_id, faculty_id, section, room_id, day, start_time, end_time, room:rooms!schedules_room_id_fkey(name)")
       .neq("status", "rejected");
     if (assignedSchedulesError) throw assignedSchedulesError;
 
@@ -260,7 +315,8 @@ export async function POST(request) {
           if (assignedSchedule) {
             const faculty = assignedFacultyById.get(String(assignedSchedule.faculty_id));
             const facultyName = [faculty?.first_name, faculty?.middle_name, faculty?.last_name].filter(Boolean).join(" ") || `Faculty ID ${assignedSchedule.faculty_id}`;
-            unavailable.push({ subjectId: subject.subjectId ?? null, facultyId: String(assignment.facultyId), assignedFacultyName: facultyName, code: String(subject.code).trim(), name: String(subject.name).trim(), section, reason: "This section is already assigned to another faculty member." });
+            const assignedRoomName = normalizeRoomName(assignedSchedule.room?.name);
+            unavailable.push({ subjectId: subject.subjectId ?? null, facultyId: String(assignment.facultyId), assignedFacultyName: facultyName, code: String(subject.code).trim(), name: String(subject.name).trim(), section, roomId: assignedSchedule.room_id, roomName: assignedRoomName, hasPhysicalRoom: !isOnlineRoom(assignedRoomName), day: assignedSchedule.day || "Unknown day", startTime: assignedSchedule.start_time ? String(assignedSchedule.start_time).slice(0, 5) : "", endTime: assignedSchedule.end_time ? String(assignedSchedule.end_time).slice(0, 5) : "", reason: "This section is already assigned to another faculty member." });
             return false;
           }
           return true;
@@ -278,27 +334,40 @@ export async function POST(request) {
       existingSchedules = data || [];
     }
 
-    const { data: selectedRoom, error: roomError } = await supabase.from("rooms").select("id, name, capacity").eq("id", roomId).maybeSingle();
-    if (roomError) throw roomError;
-    if (!selectedRoom) return NextResponse.json({ error: "Selected room was not found" }, { status: 400 });
-    const { data: rooms, error: roomsError } = await supabase.from("rooms").select("id, name, capacity");
+    const { data: roomsData, error: roomsError } = await supabase.from("rooms").select("id, name, capacity");
     if (roomsError) throw roomsError;
+    const rooms = (roomsData || [])
+      .map((room) => ({ ...room, name: normalizeRoomName(room.name) }))
+      .filter((room) => !isOnlineRoom(room.name));
+    if (!rooms || rooms.length === 0) return NextResponse.json({ error: "No physical rooms are available for scheduling" }, { status: 400 });
 
     const facultyBookings = new Map(facultyIds.map((id) => [id, existingSchedules.filter((schedule) => String(schedule.faculty_id) === id).map((schedule) => ({ day: schedule.day, start: toMinutes(schedule.start_time), end: toMinutes(schedule.end_time) }))]));
     const roomBookings = existingSchedules.map((schedule) => ({ roomId: String(schedule.room_id), day: schedule.day, start: toMinutes(schedule.start_time), end: toMinutes(schedule.end_time), sections: scheduleSections(schedule) }));
     const sectionBookings = existingSchedules.map((schedule) => ({ day: schedule.day, start: toMinutes(schedule.start_time), end: toMinutes(schedule.end_time), sections: scheduleSections(schedule) }));
     const windowsByFaculty = new Map(facultyIds.map((id) => [id, campusAvailability.filter((row) => String(row.faculty_id) === String(facultyUuidById.get(id))).map((row) => ({ day: row.day, start: toMinutes(row.start_time), end: toMinutes(row.end_time) })).filter((window) => DAYS.includes(window.day) && Number.isFinite(window.start) && Number.isFinite(window.end) && window.start < window.end).sort((left, right) => DAYS.indexOf(left.day) - DAYS.indexOf(right.day) || left.start - right.start)]));
-    const aiAssignments = availableAssignments.map((assignment) => ({
+    const requestedSectionKeys = new Set();
+    const deduplicatedAssignments = [...availableAssignments].sort((left, right) => (isPartTimeStatus(facultyById.get(left.facultyId)?.status_of_appointment) ? 0 : 1) - (isPartTimeStatus(facultyById.get(right.facultyId)?.status_of_appointment) ? 0 : 1)).map((assignment) => ({
       ...assignment,
-      subjects: assignment.subjects.map((subject) => ({ ...subject, durationMinutes: Number(subject.durationMinutes) > 0 ? Number(subject.durationMinutes) : durationMinutes })),
+      appointmentStatus: facultyById.get(assignment.facultyId)?.status_of_appointment || "full-time",
+      subjects: assignment.subjects.map((subject) => ({
+        ...subject,
+        sections: normalizeSections(subject).filter((section) => {
+          const key = `${subject.subjectId || subject.code}::${section.toLowerCase()}`;
+          if (requestedSectionKeys.has(key)) return false;
+          requestedSectionKeys.add(key);
+          return true;
+        }),
+        durationMinutes: Number(subject.durationMinutes) > 0 ? Number(subject.durationMinutes) : durationMinutes,
+      })).filter((subject) => subject.sections.length > 0),
     }));
-    const aiSchedule = await generateFullScheduleWithMistral({ assignments: aiAssignments, facultyById, windowsByFaculty, rooms: rooms || [], selectedRoom, existingSchedules, requestedClassSize, loadType });
+    const aiAssignments = deduplicatedAssignments.filter((assignment) => assignment.subjects.length > 0);
+    const aiSchedule = await generateFullScheduleWithMistral({ assignments: aiAssignments, facultyById, windowsByFaculty, rooms: rooms || [], existingSchedules, requestedClassSize, loadType });
     const requestedWithNames = aiSchedule.requestedClasses.map((item) => ({ ...item, facultyName: [facultyById.get(item.facultyId)?.first_name, facultyById.get(item.facultyId)?.middle_name, facultyById.get(item.facultyId)?.last_name].filter(Boolean).join(" ") || item.facultyId }));
     const validatedSchedule = validateMistralSchedule({ requestedClasses: requestedWithNames, proposals: aiSchedule.proposals, rooms: rooms || [], windowsByFaculty, existingSchedules, requestedClassSize, loadType });
     const generated = validatedSchedule.generated;
     const unplaced = validatedSchedule.unplaced;
     const alternativePlacements = [];
-    const aiSuggestionResult = await addUnplacedSuggestions(unplaced, selectedRoom, requestedClassSize);
+    const aiSuggestionResult = await addUnplacedSuggestions(unplaced, rooms || [], requestedClassSize);
     return NextResponse.json({ generated, unplaced: aiSuggestionResult.items, alternativePlacements, aiSuggestionsAvailable: aiSuggestionResult.available, unavailable });
   } catch (error) {
     console.error("[AI SCHEDULING GENERATE ERROR]", error);

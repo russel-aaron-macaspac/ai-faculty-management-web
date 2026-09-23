@@ -1,6 +1,11 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { NextResponse } from "next/server";
 
+function normalizeRoomName(value) {
+  const name = String(value || "").trim();
+  return /^(tba|tbd)(\s*[-: ].*)?$/i.test(name) ? "TBA" : name;
+}
+
 export async function GET() {
   try {
     const supabase = createSupabaseAdminClient();
@@ -14,7 +19,7 @@ export async function GET() {
       return NextResponse.json({ error: "Failed to fetch rooms" }, { status: 500 });
     }
 
-    return NextResponse.json({ data: data || [] });
+    return NextResponse.json({ data: (data || []).map((room) => ({ ...room, name: normalizeRoomName(room.name) })) });
   } catch (err) {
     console.error("[ROOMS GET ERROR]", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -24,7 +29,7 @@ export async function GET() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const name = String(body?.name || "").trim();
+    const name = normalizeRoomName(body?.name);
     const capacity = Number(body?.capacity);
 
     if (!name || Number.isNaN(capacity) || capacity <= 0) {

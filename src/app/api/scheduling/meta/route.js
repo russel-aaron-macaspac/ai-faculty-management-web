@@ -16,6 +16,15 @@ function formatSectionName(name) {
   return /^\d[AB]$/i.test(value) ? `BSIT${value.toUpperCase()}` : value;
 }
 
+function normalizeRoomName(value) {
+  const name = String(value || "").trim();
+  return /^(tba|tbd)(\s*[-: ].*)?$/i.test(name) ? "TBA" : name;
+}
+
+function isAllocatableRoom(name) {
+  return !/\b(tba|tbd|online|virtual|remote)\b/i.test(String(name || ""));
+}
+
 const DEFAULT_BSIT_SECTIONS = ["BSIT1A", "BSIT1B", "BSIT2A", "BSIT2B", "BSIT3A", "BSIT3B", "BSIT4A", "BSIT4B"];
 
 export async function GET(request) {
@@ -80,7 +89,9 @@ export async function GET(request) {
         statusOfAppointment: f.status_of_appointment || null,
         })),
       subjects: subjects || [],
-      rooms: rooms || [],
+      rooms: (rooms || [])
+        .map((room) => ({ ...room, name: normalizeRoomName(room.name) }))
+        .filter((room) => isAllocatableRoom(room.name)),
       sections: normalizedSections,
     });
   } catch (err) {

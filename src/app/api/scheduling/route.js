@@ -6,6 +6,11 @@ import { getInitialStatusForCreator } from "@/lib/scheduling/approvalWorkflow";
 import { getDepartmentScope, hasDepartmentAccess } from "@/lib/scheduling/departmentAccess";
 import { recordAuditEvent } from "@/lib/auditLog";
 
+function normalizeRoomName(value) {
+  const name = String(value || "").trim();
+  return /^(tba|tbd)(\s*[-: ].*)?$/i.test(name) ? "TBA" : name;
+}
+
 /* SELECT fragments for GET */
 const BASE_SCHEDULE_SELECT = `
   id,
@@ -326,7 +331,7 @@ export async function GET(request) {
         remarks: row.remarks,
         facultyName,
         subject: row.subject,
-        room: row.room,
+        room: row.room ? { ...row.room, name: normalizeRoomName(row.room.name) } : row.room,
         employeeName: facultyName,
         dayOfWeek: row.day,
         subjectOrRole: row.subject?.name || "",

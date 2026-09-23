@@ -10,20 +10,17 @@ import { scheduleService } from '@/services/scheduleService';
 import { toast } from '@/lib/toast';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const isPhysicalRoom = (name?: string | null) => !/\b(tba|tbd|online|virtual|remote)\b/i.test(name || '');
 type LoadType = 'regular' | 'overload';
 type RowStatus = 'idle' | 'saving' | 'saved' | 'conflict' | 'error';
 type Subject = { id: string; code: string; name: string; year_level?: string | number | null; hours?: number | null; lecture_units?: number | null; lab_units?: number | null };
 type DeliveryMode = 'on-campus' | 'online';
 type SubjectAssignment = Subject & { deliveryMode: DeliveryMode; sectionIds: string[] };
 type Room = { id: string; name: string; capacity: number };
-type Faculty = { id: string; name: string; role: string };
+type Faculty = { id: string; name: string; role: string; statusOfAppointment?: string | null };
 type Section = { id: string; name: string; year_level?: string | number | null };
 type GeneratedRow = { localId: string; subjectId: string | null; facultyId: string; facultyName: string; code: string; name: string; day: string; startTime: string; endTime: string; section: string; roomId: string; roomName: string; units: string; lectureContactHours: string; labContactHours: string; classSize: string; loadType: LoadType; status: RowStatus; statusMessage?: string; isSaved?: boolean };
 type AISuggestedPlacement = Omit<GeneratedRow, 'localId' | 'status'>;
-
-const isGeneratorRoom = (room: Room) => {
-  return !/\b(tba|tbd|online|virtual|remote)\b/i.test(room.name);
-};
 
 const hasMatchingYearLevel = (subject: Subject, section: Section) => (
   subject.year_level != null
@@ -77,7 +74,7 @@ function boardMinutes(value: string) {
   return hours * 60 + minutes;
 }
 
-function ScheduleBoard({ rows, onUpdate, onDelete }: Readonly<{ rows: GeneratedRow[]; onUpdate: (localId: string, field: keyof GeneratedRow, value: string) => void; onDelete: (localId: string) => void }>) {
+function ScheduleRoomBoard({ rows, onUpdate, onDelete }: Readonly<{ rows: GeneratedRow[]; onUpdate: (localId: string, field: keyof GeneratedRow, value: string) => void; onDelete: (localId: string) => void }>) {
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-300 bg-white shadow-sm">
       <table className="w-full min-w-260 table-fixed border-collapse text-xs">
@@ -134,12 +131,11 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
   const [unplaced, setUnplaced] = useState<Array<{ code: string; name: string; reason: string; section?: string; facultyId?: string; suggestion?: string }>>([]);
   const [aiSuggestionsAvailable, setAiSuggestionsAvailable] = useState(true);
   const [aiSuggestedPlacements, setAiSuggestedPlacements] = useState<AISuggestedPlacement[]>([]);
-  const [unavailable, setUnavailable] = useState<Array<{ code: string; name: string; section?: string; reason: string; assignedFacultyName?: string }>>([]);
+  const [unavailable, setUnavailable] = useState<Array<{ code: string; name: string; section?: string; reason: string; assignedFacultyName?: string; roomName?: string; hasPhysicalRoom?: boolean; roomId?: string; day?: string; startTime?: string; endTime?: string }>>([]);
   const [generationMessage, setGenerationMessage] = useState('');
   const [suggestions, setSuggestions] = useState<Array<{ label: string; value: string }>>([]);
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [selectedRoomId, setSelectedRoomId] = useState('');
   const [roomScheduleRefresh, setRoomScheduleRefresh] = useState(0);
   const [selectedFacultyIds, setSelectedFacultyIds] = useState<string[]>([]);
   const [subjectsByFaculty, setSubjectsByFaculty] = useState<Record<string, SubjectAssignment[]>>({});
@@ -153,7 +149,6 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
     return subjects.filter((subject) => subject.code.toLowerCase().includes(query)).slice(0, 8);
   }, [subjectCode, subjects]);
 
-  const selectedRoom = rooms.find((room) => room.id === selectedRoomId);
   const onlineAssignments = selectedFacultyIds.flatMap((facultyId) => {
     const faculty = faculties.find((item) => item.id === facultyId);
     return (subjectsByFaculty[facultyId] || [])
@@ -163,16 +158,11 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
 
   useEffect(() => {
     let cancelled = false;
-    if (!selectedRoomId) {
-      setSavedRows([]);
-      return () => { cancelled = true; };
-    }
-
     const loadRoomSchedules = async () => {
       try {
         const schedules = await scheduleService.getSchedules(undefined, createdBy ? { id: createdBy, role: creatorRole } : undefined);
         if (cancelled) return;
-        setSavedRows(schedules.filter((schedule) => String(schedule.roomId) === String(selectedRoomId) && schedule.status !== 'rejected').map((schedule) => ({
+        setSavedRows(schedules.filter((schedule) => schedule.status !== 'rejected' && isPhysicalRoom(schedule.room?.name)).map((schedule) => ({
           localId: `saved-${schedule.id}`,
           subjectId: schedule.subjectId,
           facultyId: schedule.facultyId,
@@ -184,7 +174,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
           endTime: schedule.endTime,
           section: schedule.section || '',
           roomId: schedule.roomId,
-          roomName: schedule.room?.name || selectedRoom?.name || 'Selected room',
+          roomName: schedule.room?.name || 'Assigned room',
           units: String(schedule.units ?? ''),
           lectureContactHours: String(schedule.lectureContactHours ?? ''),
           labContactHours: String(schedule.labContactHours ?? ''),
@@ -200,20 +190,11 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
 
     void loadRoomSchedules();
     return () => { cancelled = true; };
-  }, [createdBy, creatorRole, roomScheduleRefresh, selectedRoom, selectedRoomId]);
+  }, [createdBy, creatorRole, roomScheduleRefresh]);
 
   const toggleMinimized = (event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation();
     setIsMinimized((current) => !current);
-  };
-
-  const handleRoomChange = (roomId: string | null) => {
-    setSelectedRoomId(roomId || '');
-    setRows([]);
-    setUnplaced([]);
-    setUnavailable([]);
-    setGenerationMessage('');
-    setSuggestions([]);
   };
 
   const updateRow = (localId: string, field: keyof GeneratedRow, value: string) => setRows((current) => current.map((row) => row.localId === localId ? { ...row, [field]: value, status: 'idle', statusMessage: undefined } : row));
@@ -254,11 +235,10 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
     const selectedAssignments = selectedFacultyIds.map((facultyId) => ({ facultyId, subjects: subjectsByFaculty[facultyId] || [] }));
     const hasMissingSections = selectedAssignments.some((assignment) => assignment.subjects.some((subject) => subject.sectionIds.length === 0));
     const assignments = selectedAssignments.map(({ facultyId, subjects: facultySubjects }) => ({ facultyId, subjects: facultySubjects.filter((subject) => subject.deliveryMode === 'on-campus').map((subject) => ({ subjectId: subject.id, code: subject.code, name: subject.name, sections: subject.sectionIds.map((sectionId) => sections.find((section) => section.id === sectionId)?.name || sectionId), classType: (subject.lab_units ?? 0) > 0 && (subject.lecture_units ?? 0) === 0 ? 'lab' : 'lecture', durationMinutes: Number(subject.hours) > 0 ? Number(subject.hours) * 60 : undefined })) })).filter((assignment) => assignment.subjects.length > 0);
-    if (!selectedRoomId || hasMissingSections || selectedAssignments.some((assignment) => assignment.subjects.length === 0)) {
-      toast({ title: 'A few details are missing', description: 'Choose a room, select at least one section for every subject, and assign at least one subject to each faculty member.', type: 'warning' });
+    if (hasMissingSections || selectedAssignments.some((assignment) => assignment.subjects.length === 0)) {
+      toast({ title: 'A few details are missing', description: 'Select at least one section for every subject and assign at least one subject to each faculty member.', type: 'warning' });
       return;
     }
-    const requestedClassSize = selectedRoom?.capacity || 0;
     if (assignments.length === 0) {
       setRows([]);
       setUnplaced([]);
@@ -275,14 +255,12 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          roomId: selectedRoomId,
-          classSize: requestedClassSize,
           assignments,
         }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not generate schedule.');
-      setRows((data.generated || []).map((row: Omit<GeneratedRow, 'localId' | 'status'>) => ({ ...row, localId: makeId(), units: String(row.units ?? ''), lectureContactHours: String(row.lectureContactHours ?? ''), labContactHours: String(row.labContactHours ?? ''), classSize: String(row.classSize ?? ''), status: 'idle' })));
+      setRows((data.generated || []).filter((row: Omit<GeneratedRow, 'localId' | 'status'>) => isPhysicalRoom(row.roomName)).map((row: Omit<GeneratedRow, 'localId' | 'status'>) => ({ ...row, localId: makeId(), units: String(row.units ?? ''), lectureContactHours: String(row.lectureContactHours ?? ''), labContactHours: String(row.labContactHours ?? ''), classSize: String(row.classSize ?? ''), status: 'idle' })));
       setUnplaced(data.unplaced || []);
       setAiSuggestionsAvailable(data.aiSuggestionsAvailable !== false);
       setAiSuggestedPlacements(data.alternativePlacements || []);
@@ -294,8 +272,13 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
         : `The AI could not place any classes this time. Review the details below, adjust the room or availability, and try again.`);
       toast({ title: 'Your schedule is ready', description: `${generatedCount} class${generatedCount === 1 ? '' : 'es'} added to the review matrix${onlineAssignments.length > 0 ? `. ${onlineAssignments.length} online subject${onlineAssignments.length === 1 ? '' : 's'} were left out of the room schedule` : ''}.`, type: generatedCount > 0 ? 'success' : 'warning' });
     } catch (error) {
-      setGenerationMessage('We could not finish the schedule because the AI service is temporarily unavailable. Please try again in a moment.');
-      toast({ title: 'Schedule could not be prepared', description: 'The AI service may be busy. Please try again shortly.', type: 'error' });
+      const message = error instanceof Error ? error.message : '';
+      const isServiceError = /MISTRAL|AI schedule generation|temporarily unavailable|failed \(/i.test(message);
+      const userMessage = isServiceError
+        ? 'The AI service is temporarily unavailable. Please try again in a moment.'
+        : message || 'Please review the selected faculty, subjects, sections, and room data, then try again.';
+      setGenerationMessage(`We could not finish the schedule. ${userMessage}`);
+      toast({ title: 'Schedule could not be prepared', description: userMessage, type: 'error' });
     } finally {
       setGenerating(false);
     }
@@ -357,17 +340,13 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
   };
 
   return <ExpandableGeneratorCard isMinimized={isMinimized} onExpand={() => setIsMinimized(false)}><CardHeader className="flex cursor-pointer flex-row items-center justify-between gap-3" onClick={toggleMinimized}><CardTitle>Automatic Schedule Generator</CardTitle><Button type="button" size="icon-sm" variant="ghost" onClick={toggleMinimized} aria-label={isMinimized ? 'Restore automatic schedule generator' : 'Minimize automatic schedule generator'} title={isMinimized ? 'Restore automatic schedule generator' : 'Minimize automatic schedule generator'}>{isMinimized ? <ChevronDown /> : <ChevronUp />}</Button></CardHeader>{!isMinimized && <CardContent className="space-y-5">
-    <p className="text-sm text-slate-500">Choose the room first, select the faculty members to load, then assign saved subjects to each faculty member. The generator uses each faculty member&apos;s availability and checks the selected room for overlaps.</p>
+    <p className="text-sm text-slate-500">Select the faculty members and assign their subjects and sections. The AI will distribute classes across all available rooms, schedule part-time faculty first, and reserve computer laboratories for computer-dependent subjects.</p>
     <div className="space-y-2">
-      <label htmlFor="ai-room" className="text-sm font-medium text-slate-700">1. Room</label>
-      <Select value={selectedRoomId} onValueChange={handleRoomChange}><SelectTrigger id="ai-room"><SelectValue placeholder="Select a room first">{selectedRoom ? `${selectedRoom.name} (${selectedRoom.capacity} seats)` : undefined}</SelectValue></SelectTrigger><SelectContent positionMethod="fixed">{rooms.filter(isGeneratorRoom).map((room) => <SelectItem key={room.id} value={room.id}>{room.name} ({room.capacity} seats)</SelectItem>)}</SelectContent></Select>
-    </div>
-    <div className="space-y-2">
-      <div className="text-sm font-medium text-slate-700">2. Faculty members</div>
+      <div className="text-sm font-medium text-slate-700">1. Faculty members</div>
       <div className="grid gap-2 md:grid-cols-2">{faculties.map((faculty) => <button key={faculty.id} type="button" onClick={() => toggleFaculty(faculty.id)} className={`rounded-lg border px-3 py-2 text-left text-sm ${selectedFacultyIds.includes(faculty.id) ? 'border-red-300 bg-red-50 text-red-900' : 'border-slate-200 hover:bg-slate-50'}`}><span className="font-medium">{faculty.name}</span><span className="block text-xs text-slate-500">{(subjectsByFaculty[faculty.id] || []).length} subject(s) assigned</span></button>)}</div>
     </div>
     {selectedFacultyIds.length > 0 && <div className="space-y-3">
-      <div className="text-sm font-medium text-slate-700">3. Assign subjects by faculty</div>
+      <div className="text-sm font-medium text-slate-700">2. Assign subjects by faculty</div>
       <div className="flex flex-wrap gap-2">{selectedFacultyIds.map((facultyId) => { const faculty = faculties.find((item) => item.id === facultyId); return <Button key={facultyId} type="button" size="sm" variant={activeFacultyId === facultyId ? 'default' : 'outline'} onClick={() => { setActiveFacultyId(facultyId); setSubjectCode(''); }}>{faculty?.name || facultyId}</Button>; })}</div>
       {activeFacultyId && <div className="grid gap-3 md:grid-cols-2">
         <div className="space-y-2">
@@ -390,13 +369,43 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
         </div>
       </div>}
     </div>}
-    {onlineAssignments.length > 0 && <div className="space-y-1 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900"><div className="font-semibold">Online subjects excluded from the matrix</div>{onlineAssignments.map((assignment) => <div key={`${assignment.facultyName}-${assignment.id}`}>{assignment.code} - {assignment.name} ({assignment.facultyName}) is online and will not use the selected room.</div>)}</div>}
-    <Button type="button" onClick={generate} disabled={generating || saving || !selectedRoomId || selectedFacultyIds.length === 0}>{generating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Generate Schedule Matrix</Button>
+    {onlineAssignments.length > 0 && <div className="space-y-1 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900"><div className="font-semibold">Online subjects excluded from the room schedule</div>{onlineAssignments.map((assignment) => <div key={`${assignment.facultyName}-${assignment.id}`}>{assignment.code} - {assignment.name} ({assignment.facultyName}) is online and will not use a physical room.</div>)}</div>}
+    <Button type="button" onClick={generate} disabled={generating || saving || selectedFacultyIds.length === 0}>{generating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Generate All-Room Schedule</Button>
     {generationMessage && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"><div className="font-semibold">Generation result</div><p className="mt-1">{generationMessage}</p></div>}
     {unplaced.length > 0 && <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-4"><div className="text-sm font-semibold text-amber-900">Classes needing attention</div><p className="text-xs text-amber-800">These classes were not added because the AI could not find a conflict-free placement.</p>{unplaced.map((item, index) => <div key={`unplaced-${item.facultyId || 'faculty'}-${item.code}-${item.section || 'section'}-${index}`} className="flex gap-2 text-sm text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span><strong>{item.code} - {item.name}:</strong> {item.reason}</span></div>)}</div>}
     {unplaced.length > 0 && <div className="space-y-3 rounded-lg border border-blue-200 bg-blue-50 p-4"><div className="text-sm font-semibold text-blue-900">AI help</div>{aiSuggestionsAvailable && unplaced.some((item) => item.suggestion) && unplaced.filter((item) => item.suggestion).map((item, index) => <div key={`suggestion-${item.facultyId || 'faculty'}-${item.code}-${item.section || 'section'}-${index}`} className="flex gap-2 text-sm text-blue-900"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /><span><strong>{item.code} - {item.name}:</strong> {item.suggestion}</span></div>)}{aiSuggestedPlacements.length > 0 ? <><p className="text-sm text-blue-800">The AI found alternative rooms and times that you can review before saving.</p><Button type="button" onClick={applyAISuggestions}>Apply AI alternatives ({aiSuggestedPlacements.length})</Button></> : !aiSuggestionsAvailable && <p className="text-sm text-blue-800">AI help is unavailable right now. Please try generating again later.</p>}</div>}
-    {unavailable.length > 0 && <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-700">Already assigned and excluded</div>{unavailable.map((item) => <div key={`${item.code}-${item.name}-${item.section || 'subject'}`} className="text-sm text-slate-600"><strong>{item.code} - {item.name}{item.section ? ` (${item.section})` : ''}</strong> is already assigned to {item.assignedFacultyName || 'another faculty member'} and was left out of this plan.</div>)}</div>}
+    {unavailable.length > 0 && <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-700">Existing assignments</div><p className="text-xs text-slate-500">These classes are already on the master schedule and are shown here even when they use another room.</p>{unavailable.map((item) => <div key={`${item.code}-${item.name}-${item.section || 'subject'}-${item.assignedFacultyName || 'faculty'}`} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600"><div><strong>{item.code} - {item.name}{item.section ? ` (${item.section})` : ''}</strong> is assigned to {item.assignedFacultyName || 'another faculty member'}.</div><div className="mt-1 text-xs text-slate-500">{item.day} {item.startTime && item.endTime ? `${item.startTime} - ${item.endTime}` : ''} · {item.hasPhysicalRoom ? item.roomName : 'No physical room assigned'}{item.roomId ? ` · Room ID: ${item.roomId}` : ''}</div></div>)}</div>}
     {suggestions.length > 0 && <div className="space-y-2 rounded-lg border border-blue-200 bg-blue-50 p-4"><div className="text-sm font-semibold text-blue-900">Conflict suggestions</div>{suggestions.map((suggestion, index) => <div key={`${suggestion.label}-${suggestion.value}-${index}`} className="text-sm text-blue-900"><strong>{suggestion.label}:</strong> {suggestion.value}</div>)}</div>}
-    <div className="space-y-2"><div className="text-sm font-semibold uppercase tracking-wide text-slate-500">Schedule Matrix</div>{selectedRoomId && savedRows.length > 0 && <div className="text-xs text-slate-500">Showing {savedRows.length} existing schedule{savedRows.length === 1 ? '' : 's'} already assigned to {selectedRoom?.name}.</div>}<ScheduleBoard rows={[...savedRows, ...rows]} onUpdate={updateRow} onDelete={(localId) => setRows((current) => current.filter((item) => item.localId !== localId))} />{rows.length > 0 && <div className="flex items-center gap-3"><Button type="button" onClick={saveAll} disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save All to Master Schedule</Button><div className="flex items-center gap-3 text-xs text-slate-500">{rows.map((row) => <RowStatusBadge key={row.localId} status={row.status} message={row.statusMessage} />)}</div></div>}</div>
+    <div className="space-y-2"><div className="text-sm font-semibold uppercase tracking-wide text-slate-500">All-Room Schedule Matrix</div>{savedRows.length > 0 && <div className="text-xs text-slate-500">Showing {savedRows.length} existing schedule{savedRows.length === 1 ? '' : 's'} across all rooms.</div>}<ScheduleBoard rows={[...savedRows, ...rows]} onUpdate={updateRow} onDelete={(localId) => setRows((current) => current.filter((item) => item.localId !== localId))} />{rows.length > 0 && <div className="flex items-center gap-3"><Button type="button" onClick={saveAll} disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save All to Master Schedule</Button><div className="flex items-center gap-3 text-xs text-slate-500">{rows.map((row) => <RowStatusBadge key={row.localId} status={row.status} message={row.statusMessage} />)}</div></div>}</div>
   </CardContent>}</ExpandableGeneratorCard>;
+}
+
+function ScheduleBoard({ rows, onUpdate, onDelete }: Readonly<{ rows: GeneratedRow[]; onUpdate: (localId: string, field: keyof GeneratedRow, value: string) => void; onDelete: (localId: string) => void }>) {
+  const physicalRows = rows.filter((row) => isPhysicalRoom(row.roomName));
+  const [collapsedRooms, setCollapsedRooms] = useState<Set<string>>(new Set());
+  const roomGroups = [...new Set(physicalRows.map((row) => `${row.roomId}::${row.roomName}`))].map((group) => {
+    const separator = group.indexOf('::');
+    const roomId = group.slice(0, separator);
+    const roomName = group.slice(separator + 2);
+    return { roomId, roomName, rows: physicalRows.filter((row) => `${row.roomId}::${row.roomName}` === group) };
+  });
+
+  const toggleRoom = (roomKey: string) => setCollapsedRooms((current) => {
+    const next = new Set(current);
+    if (next.has(roomKey)) next.delete(roomKey);
+    else next.add(roomKey);
+    return next;
+  });
+
+  return <div className="space-y-4">{roomGroups.map((group) => {
+    const roomKey = group.roomId || group.roomName;
+    const collapsed = collapsedRooms.has(roomKey);
+    return <div key={roomKey} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+      <button type="button" onClick={() => toggleRoom(roomKey)} className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-white" aria-expanded={!collapsed}>
+        <span>{group.roomName} <span className="ml-1 text-xs font-normal text-slate-500">({group.rows.length} schedule{group.rows.length === 1 ? '' : 's'})</span></span>
+        {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+      </button>
+      {!collapsed && <div className="mt-2"><ScheduleRoomBoard rows={group.rows} onUpdate={onUpdate} onDelete={onDelete} /></div>}
+    </div>;
+  })}</div>;
 }
