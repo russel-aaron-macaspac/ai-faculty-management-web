@@ -42,6 +42,10 @@ function roomSupportsRequirement(room, requirement) {
   return normalizeEquipmentType(room?.equipment_type || room?.equipmentType) === requiredEquipment;
 }
 
+function isComputerLab(room) {
+  return normalizeEquipmentType(room?.equipment_type || room?.equipmentType) === "computer";
+}
+
 function isPartTimeStatus(value) {
   return /part[\s-]*time/i.test(String(value || ""));
 }
@@ -283,7 +287,7 @@ export async function POST(request) {
 
     const supabase = createSupabaseAdminClient();
     const facultyIds = [...new Set(assignments.map((assignment) => String(assignment.facultyId)))];
-    const { data: faculties, error: facultyError } = await supabase.from("users").select("user_id, supabase_id, first_name, middle_name, last_name").in("user_id", facultyIds);
+    const { data: faculties, error: facultyError } = await supabase.from("users").select("user_id, supabase_id, first_name, middle_name, last_name, status_of_appointment").in("user_id", facultyIds);
     if (facultyError) throw facultyError;
     if (faculties?.length !== facultyIds.length) return NextResponse.json({ error: "One or more faculty members were not found or have no Supabase UUID" }, { status: 400 });
 
