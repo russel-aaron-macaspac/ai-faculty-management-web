@@ -29,7 +29,43 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     const client = getSupabaseBrowserClient();
-    client.auth.getSession().then((sessionResult: { data: { session: Session | null } }) => setReady(Boolean(sessionResult.data.session)));
+    const prepareRecoverySession = async () => {
+      const code = new URLSearchParams(window.location.search).get('code');
+      if (code) {
+        const { error } = await client.auth.exchangeCodeForSession(code);
+        if (error) {
+          form.setError('root', { message: 'This reset link is invalid or expired. Request a new one and try again.' });
+          return;
+        }
+      }
+
+      const query = new URLSearchParams(window.location.search);
+      const tokenHash = query.get('token_hash');
+      const recoveryType = query.get('type');
+      if (tokenHash && recoveryType === 'recovery') {
+        const { error } = await client.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' });
+        if (error) {
+          form.setError('root', { message: 'This reset link is invalid or expired. Request a new one and try again.' });
+          return;
+        }
+      }
+
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      const accessToken = hashParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token');
+      if (accessToken && refreshToken) {
+        const { error } = await client.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+        if (error) {
+          form.setError('root', { message: 'This reset link is invalid or expired. Request a new one and try again.' });
+          return;
+        }
+      }
+
+      const sessionResult = await client.auth.getSession();
+      setReady(Boolean(sessionResult.data.session));
+    };
+
+    void prepareRecoverySession();
     const { data: listener } = client.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
       if (event === 'PASSWORD_RECOVERY' || session) setReady(true);
     });

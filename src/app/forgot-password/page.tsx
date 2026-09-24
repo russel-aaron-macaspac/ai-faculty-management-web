@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { getSupabaseBrowserClient } from '@/lib/supabase/browser-client';
 
 const schema = z.object({ email: z.string().trim().email('Enter a valid school email address.') });
 
@@ -25,6 +26,15 @@ export default function ForgotPasswordPage() {
       });
       if (!response.ok) {
         form.setError('root', { message: 'We could not send the reset email. Please check the address and try again.' });
+        return;
+      }
+      const client = getSupabaseBrowserClient();
+      const { error } = await client.auth.resetPasswordForEmail(email.toLowerCase(), {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) {
+        console.error('[FORGOT PASSWORD EMAIL ERROR]', error);
+        form.setError('root', { message: 'We could not send the reset email. Please try again.' });
         return;
       }
       form.clearErrors('root');
