@@ -1,13 +1,15 @@
 'use client';
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Loader2, Trash2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Loader2, RotateCcw, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { scheduleService } from '@/services/scheduleService';
 import { toast } from '@/lib/toast';
+import { formatTimeToTwelveHour } from '@/lib/timeUtils';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const isPhysicalRoom = (name?: string | null) => !/\b(tba|tbd|online|virtual|remote)\b/i.test(name || '');
@@ -21,6 +23,7 @@ type Faculty = { id: string; name: string; role: string; statusOfAppointment?: s
 type Section = { id: string; name: string; year_level?: string | number | null };
 type GeneratedRow = { localId: string; subjectId: string | null; facultyId: string; facultyName: string; code: string; name: string; day: string; startTime: string; endTime: string; section: string; roomId: string; roomName: string; units: string; lectureContactHours: string; labContactHours: string; classSize: string; loadType: LoadType; status: RowStatus; statusMessage?: string; isSaved?: boolean };
 type AISuggestedPlacement = Omit<GeneratedRow, 'localId' | 'status'>;
+type Recommendation = { id: string; generated: Array<Omit<GeneratedRow, 'localId' | 'status'>>; unplaced: Array<{ code: string; name: string; reason: string; section?: string; facultyId?: string; suggestion?: string }>; summary: { conflicts: number; scheduled: number; total: number; workload: string; notes: string } };
 
 const hasMatchingYearLevel = (subject: Subject, section: Section) => (
   subject.year_level != null
@@ -74,9 +77,51 @@ function boardMinutes(value: string) {
   return hours * 60 + minutes;
 }
 
-function ScheduleRoomBoard({ rows, onUpdate, onDelete }: Readonly<{ rows: GeneratedRow[]; onUpdate: (localId: string, field: keyof GeneratedRow, value: string) => void; onDelete: (localId: string) => void }>) {
+function overlaps(start: number, end: number, otherStart: number, otherEnd: number) {
+  return start < otherEnd && end > otherStart;
+}
+
+function conflictTypes(row: GeneratedRow, rows: GeneratedRow[]) {
+  const types = new Set<string>();
+  rows.forEach((other) => {
+    if (row.localId === other.localId || row.day !== other.day || !overlaps(boardMinutes(row.startTime), boardMinutes(row.endTime), boardMinutes(other.startTime), boardMinutes(other.endTime))) return;
+    if (row.facultyId === other.facultyId) types.add('Faculty');
+    if (row.roomId === other.roomId) types.add('Room');
+    if (row.section && row.section === other.section) types.add('Section');
+  });
+  return [...types];
+}
+
+type SuggestedSlot = { day: string; startTime: string; endTime: string; label: string };
+
+function findSuggestedSlot(row: GeneratedRow, rows: GeneratedRow[], availability: Array<{ day: string; startTime: string; endTime: string }>): SuggestedSlot | null {
+  const duration = boardMinutes(row.endTime) - boardMinutes(row.startTime);
+  for (const window of availability) {
+    const windowStart = boardMinutes(window.startTime);
+    const windowEnd = boardMinutes(window.endTime);
+    for (let start = windowStart; start + duration <= windowEnd; start += 30) {
+      const end = start + duration;
+      const hasConflict = rows.some((other) => other.localId !== row.localId
+        && other.day === window.day
+        && overlaps(start, end, boardMinutes(other.startTime), boardMinutes(other.endTime))
+        && (other.facultyId === row.facultyId || other.roomId === row.roomId || (row.section && row.section === other.section)));
+      if (!hasConflict) return { day: window.day, startTime: `${String(Math.floor(start / 60)).padStart(2, '0')}:${String(start % 60).padStart(2, '0')}`, endTime: `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`, label: `${window.day} ${formatBoardTime(start)} - ${formatBoardTime(end)}` };
+    }
+  }
+  return null;
+}
+
+function ScheduleRoomBoard({ rows, allRows, onUpdate, onDelete, color, savedColor, readOnly, facultyAvailability }: Readonly<{ rows: GeneratedRow[]; allRows: GeneratedRow[]; onUpdate: (localId: string, field: keyof GeneratedRow, value: string) => void; onDelete: (localId: string) => void; color: string; savedColor: string; readOnly: boolean; facultyAvailability: Record<string, Array<{ day: string; startTime: string; endTime: string }>> }>) {
+  const conflictingRows = rows.filter((row) => allRows.some((other) => (
+    row.localId !== other.localId
+      && row.day === other.day
+      && overlaps(boardMinutes(row.startTime), boardMinutes(row.endTime), boardMinutes(other.startTime), boardMinutes(other.endTime))
+      && (row.facultyId === other.facultyId || row.roomId === other.roomId || (row.section && row.section === other.section))
+  )));
+
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-300 bg-white shadow-sm">
+      {conflictingRows.length > 0 && <div className="border-b border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800"><div className="font-semibold">Conflict preview</div>{[...new Map(conflictingRows.map((row) => [row.localId, row])).values()].map((row) => { const suggestion = findSuggestedSlot(row, allRows, facultyAvailability[row.facultyId] || []); const types = conflictTypes(row, allRows); return <div key={row.localId} className="py-0.5">{row.code}{row.section ? ` (${row.section})` : ''} on {row.day} {formatBoardTime(boardMinutes(row.startTime))}-{formatBoardTime(boardMinutes(row.endTime))}. <span className="font-semibold">Conflict type:</span> {types.join(', ') || 'Schedule'}{types.length > 0 && '. '}<span className="font-semibold">Suggested open slot:</span> {suggestion ? suggestion.label : 'No open slot found in this faculty availability.'}{suggestion && !readOnly && <Button type="button" size="sm" variant="outline" className="ml-2 h-6 px-2 text-[11px]" onClick={() => { onUpdate(row.localId, 'day', suggestion.day); onUpdate(row.localId, 'startTime', suggestion.startTime); onUpdate(row.localId, 'endTime', suggestion.endTime); }}>Apply slot</Button>}</div>; })}</div>}
       <table className="w-full min-w-260 table-fixed border-collapse text-xs">
         <thead>
           <tr className="bg-slate-100 text-slate-800">
@@ -89,27 +134,30 @@ function ScheduleRoomBoard({ rows, onUpdate, onDelete }: Readonly<{ rows: Genera
             <tr key={slot} className="h-10">
               <th className="border border-slate-300 bg-slate-50 px-2 text-center font-semibold text-slate-600">{formatBoardTime(slot)}</th>
               {DAYS.slice(0, 6).map((day) => {
-                const row = rows.find((candidate) => candidate.day === day && boardMinutes(candidate.startTime) === slot);
+                const row = rows
+                  .filter((candidate) => candidate.day === day && boardMinutes(candidate.startTime) === slot)
+                  .sort((left, right) => Number(Boolean(left.isSaved)) - Number(Boolean(right.isSaved)))[0];
                 const active = rows.some((candidate) => candidate.day === day && boardMinutes(candidate.startTime) < slot && boardMinutes(candidate.endTime) > slot);
-                if (active) return null;
+                if (active && !row) return null;
                 if (!row) return <td key={`${day}-${slot}`} className="border border-slate-300 bg-white" />;
                 const span = Math.max(1, Math.ceil((boardMinutes(row.endTime) - boardMinutes(row.startTime)) / 30));
                 const slotHeight = 40;
-                return <td key={`${day}-${slot}`} rowSpan={span} style={{ height: `${span * slotHeight}px` }} className="border border-slate-300 bg-slate-50 px-2 py-0 align-top text-slate-900">
-                  <div style={{ minHeight: `${span * slotHeight}px` }} className="flex h-full flex-col gap-2 rounded-lg border border-amber-500 bg-[#ffc000] p-2.5 text-left shadow-sm">
+                const hasConflict = conflictingRows.some((candidate) => candidate.localId === row.localId);
+                return <td key={`${day}-${slot}`} rowSpan={span} style={{ height: `${span * slotHeight}px` }} className={`border border-slate-300 px-2 py-0 align-top text-slate-900 ${hasConflict ? 'bg-rose-100' : 'bg-slate-50'}`}>
+                  <div style={{ minHeight: `${span * slotHeight}px`, backgroundColor: hasConflict ? '#fca5a5' : row.isSaved ? savedColor : color }} className={`flex h-full flex-col gap-2 rounded-lg border p-2.5 text-left shadow-sm ${hasConflict ? 'border-rose-700 ring-2 ring-rose-400' : 'border-slate-700/40'}`}>
                     <div className="flex items-start justify-between gap-1">
                       <div className="min-w-0 font-semibold leading-tight"><div className="text-[10px] font-medium uppercase tracking-wide">{row.facultyName}</div>{row.name}<div className="font-normal">{row.code}{row.section ? ` · ${row.section}` : ''}</div></div>
-                      {!row.isSaved && <button type="button" onClick={() => onDelete(row.localId)} className="shrink-0 p-1 text-slate-700 hover:text-rose-700" title="Delete generated row"><Trash2 className="h-3.5 w-3.5" /></button>}
+                      {!row.isSaved && !readOnly && <button type="button" onClick={() => onDelete(row.localId)} className="shrink-0 p-1 text-slate-700 hover:text-rose-700" title="Delete generated row"><Trash2 className="h-3.5 w-3.5" /></button>}
                     </div>
-                    <Select value={row.day} onValueChange={(value) => onUpdate(row.localId, 'day', value || 'Monday')} disabled={row.isSaved}>
+                    <Select value={row.day} onValueChange={(value) => onUpdate(row.localId, 'day', value || 'Monday')} disabled={row.isSaved || readOnly}>
                       <SelectTrigger className="h-7 rounded border-slate-700 bg-white/70 px-1.5 text-[11px]"><SelectValue /></SelectTrigger>
                       <SelectContent>{DAYS.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent>
                     </Select>
                     <div className="grid grid-cols-2 gap-1">
-                      <Input className="h-7 rounded border-slate-700 bg-white/70 px-1 text-[11px]" type="time" step="1800" value={row.startTime} onChange={(event) => onUpdate(row.localId, 'startTime', event.target.value)} disabled={row.isSaved} />
-                      <Input className="h-7 rounded border-slate-700 bg-white/70 px-1 text-[11px]" type="time" step="1800" value={row.endTime} onChange={(event) => onUpdate(row.localId, 'endTime', event.target.value)} disabled={row.isSaved} />
+                      <Input className="h-7 rounded border-slate-700 bg-white/70 px-1 text-[11px]" type="time" step="1800" value={row.startTime} onChange={(event) => onUpdate(row.localId, 'startTime', event.target.value)} disabled={row.isSaved || readOnly} />
+                      <Input className="h-7 rounded border-slate-700 bg-white/70 px-1 text-[11px]" type="time" step="1800" value={row.endTime} onChange={(event) => onUpdate(row.localId, 'endTime', event.target.value)} disabled={row.isSaved || readOnly} />
                     </div>
-                    <Input className="h-7 rounded border-slate-700 bg-white/70 px-1.5 text-[11px]" value={row.section} onChange={(event) => onUpdate(row.localId, 'section', event.target.value)} placeholder="Section" disabled={row.isSaved} />
+                    <Input className="h-7 rounded border-slate-700 bg-white/70 px-1.5 text-[11px]" value={row.section} onChange={(event) => onUpdate(row.localId, 'section', event.target.value)} placeholder="Section" disabled={row.isSaved || readOnly} />
                   </div>
                 </td>;
               })}
@@ -142,8 +190,16 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
   const [activeFacultyId, setActiveFacultyId] = useState('');
   const [subjectCode, setSubjectCode] = useState('');
   const [isMinimized, setIsMinimized] = useState(true);
-  const [activeFacultyAvailability, setActiveFacultyAvailability] = useState<Array<{ day: string; startTime: string; endTime: string }>>([]);
+  const [activeFacultyAvailability, setActiveFacultyAvailability] = useState<Array<{ day: string; startTime: string; endTime: string; deliveryMode: DeliveryMode }>>([]);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [facultyAvailability, setFacultyAvailability] = useState<Record<string, Array<{ day: string; startTime: string; endTime: string }>>>({});
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [selectedRecommendationId, setSelectedRecommendationId] = useState<string | null>(null);
+  const [originalRows, setOriginalRows] = useState<GeneratedRow[]>([]);
+  const [validationMessages, setValidationMessages] = useState<string[]>([]);
+  const [finalizationOpen, setFinalizationOpen] = useState(false);
+
+  const recommendationColors = ['#ffc000', '#7dd3fc', '#86efac'];
 
   const filteredSubjects = useMemo(() => {
     const query = subjectCode.trim().toLowerCase();
@@ -207,7 +263,8 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
         const entries = await scheduleService.getFacultyAvailability(activeFacultyId);
         if (!cancelled) {
           const sortedAvailability = entries
-            .map((entry) => ({ day: entry.day, startTime: entry.startTime, endTime: entry.endTime }))
+            .filter((entry) => entry.deliveryMode !== 'online')
+            .map((entry) => ({ day: entry.day, startTime: entry.startTime, endTime: entry.endTime, deliveryMode: entry.deliveryMode }))
             .sort((left, right) => {
               const dayDifference = DAYS.indexOf(left.day) - DAYS.indexOf(right.day);
               return dayDifference || left.startTime.localeCompare(right.startTime);
@@ -227,12 +284,63 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
     };
   }, [activeFacultyId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (selectedFacultyIds.length === 0) {
+      setFacultyAvailability({});
+      return () => { cancelled = true; };
+    }
+    void Promise.all(selectedFacultyIds.map(async (facultyId) => {
+      try {
+        const entries = await scheduleService.getFacultyAvailability(facultyId);
+        return [facultyId, entries.filter((entry) => entry.deliveryMode !== 'online').map((entry) => ({ day: entry.day, startTime: entry.startTime, endTime: entry.endTime }))] as const;
+      } catch {
+        return [facultyId, []] as const;
+      }
+    })).then((entries) => {
+      if (!cancelled) setFacultyAvailability(Object.fromEntries(entries));
+    });
+    return () => { cancelled = true; };
+  }, [selectedFacultyIds]);
+
   const toggleMinimized = (event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation();
     setIsMinimized((current) => !current);
   };
 
-  const updateRow = (localId: string, field: keyof GeneratedRow, value: string) => setRows((current) => current.map((row) => row.localId === localId ? { ...row, [field]: value, status: 'idle', statusMessage: undefined } : row));
+  const validateRows = (candidateRows: GeneratedRow[]) => {
+    const messages: string[] = [];
+    const rowsToCheck = [...savedRows, ...candidateRows];
+    rowsToCheck.forEach((row, index) => {
+      if (!isValidTimeRange(row)) messages.push(`${row.code} has an invalid time range.`);
+      const rowStart = boardMinutes(row.startTime);
+      const rowEnd = boardMinutes(row.endTime);
+      rowsToCheck.slice(index + 1).forEach((other) => {
+        if (row.isSaved && other.isSaved) return;
+        if (row.day !== other.day || !overlaps(rowStart, rowEnd, boardMinutes(other.startTime), boardMinutes(other.endTime))) return;
+        if (row.facultyId === other.facultyId) messages.push(`${row.facultyName} is double-booked on ${row.day}.`);
+        if (row.roomId === other.roomId) messages.push(`${row.roomName} is double-booked on ${row.day}.`);
+        if (row.section && row.section === other.section) messages.push(`Section ${row.section} has overlapping classes on ${row.day}.`);
+      });
+      const availability = facultyAvailability[row.facultyId] || [];
+      if (availability.length > 0 && !availability.some((window) => window.day === row.day && row.startTime >= window.startTime && row.endTime <= window.endTime)) {
+        messages.push(`${row.code} is outside ${row.facultyName}'s availability.`);
+      }
+    });
+    return [...new Set(messages)];
+  };
+
+  const updateRow = (localId: string, field: keyof GeneratedRow, value: string) => setRows((current) => {
+    const next = current.map((row) => row.localId === localId ? { ...row, [field]: value, status: 'idle' as RowStatus, statusMessage: undefined } : row);
+    setValidationMessages(validateRows(next));
+    return next;
+  });
+
+  const deleteRow = (localId: string) => setRows((current) => {
+    const next = current.filter((item) => item.localId !== localId);
+    setValidationMessages(validateRows(next));
+    return next;
+  });
 
   const toggleFaculty = (facultyId: string) => {
     setSelectedFacultyIds((current) => current.includes(facultyId) ? current.filter((id) => id !== facultyId) : [...current, facultyId]);
@@ -295,17 +403,22 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not generate schedule.');
-      setRows((data.generated || []).filter((row: Omit<GeneratedRow, 'localId' | 'status'>) => isPhysicalRoom(row.roomName)).map((row: Omit<GeneratedRow, 'localId' | 'status'>) => ({ ...row, localId: makeId(), units: String(row.units ?? ''), lectureContactHours: String(row.lectureContactHours ?? ''), labContactHours: String(row.labContactHours ?? ''), classSize: String(row.classSize ?? ''), status: 'idle' })));
-      setUnplaced(data.unplaced || []);
-      setAiSuggestionsAvailable(data.aiSuggestionsAvailable !== false);
-      setAiSuggestedPlacements(data.alternativePlacements || []);
+      const nextRecommendations = (data.recommendations || []).map((recommendation: Recommendation) => ({
+        ...recommendation,
+        generated: recommendation.generated.filter((row) => isPhysicalRoom(row.roomName)),
+      }));
+      setRecommendations(nextRecommendations);
+      setSelectedRecommendationId(null);
+      setRows([]);
+      setUnplaced([]);
+      setAiSuggestionsAvailable(false);
+      setAiSuggestedPlacements([]);
       setUnavailable(data.unavailable || []);
-      const generatedCount = data.generated?.length || 0;
-      const unplacedCount = data.unplaced?.length || 0;
-      setGenerationMessage(generatedCount > 0
-        ? `Your schedule is ready with ${generatedCount} class${generatedCount === 1 ? '' : 'es'}. The AI created the placements and they passed the availability and conflict checks.${unplacedCount > 0 ? ` ${unplacedCount} class${unplacedCount === 1 ? '' : 'es'} still need attention below.` : ''}`
+      const generatedCount = nextRecommendations[0]?.summary.scheduled || 0;
+      setGenerationMessage(nextRecommendations.length > 0
+        ? `The AI prepared ${nextRecommendations.length} complete schedule recommendations for review. Choose one to edit before finalizing.`
         : `The AI could not place any classes this time. Review the details below, adjust the room or availability, and try again.`);
-      toast({ title: 'Your schedule is ready', description: `${generatedCount} class${generatedCount === 1 ? '' : 'es'} added to the review matrix${onlineAssignments.length > 0 ? `. ${onlineAssignments.length} online subject${onlineAssignments.length === 1 ? '' : 's'} were left out of the room schedule` : ''}.`, type: generatedCount > 0 ? 'success' : 'warning' });
+      toast({ title: 'AI recommendations are ready', description: `${nextRecommendations.length} complete schedule${nextRecommendations.length === 1 ? '' : 's'} are ready for review${onlineAssignments.length > 0 ? `. ${onlineAssignments.length} online subject${onlineAssignments.length === 1 ? '' : 's'} were left out of the room schedule` : ''}.`, type: generatedCount > 0 ? 'success' : 'warning' });
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
       const isServiceError = /MISTRAL|AI schedule generation|temporarily unavailable|failed \(/i.test(message);
@@ -317,6 +430,39 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
     } finally {
       setGenerating(false);
     }
+  };
+
+  const chooseRecommendation = (recommendation: Recommendation) => {
+    const chosenRows = recommendation.generated.map((row) => ({
+      ...row,
+      localId: makeId(),
+      units: String(row.units ?? ''),
+      lectureContactHours: String(row.lectureContactHours ?? ''),
+      labContactHours: String(row.labContactHours ?? ''),
+      classSize: String(row.classSize ?? ''),
+      status: 'idle' as RowStatus,
+    }));
+    setSelectedRecommendationId(recommendation.id);
+    setRows(chosenRows);
+    setOriginalRows(chosenRows.map((row) => ({ ...row })));
+    setUnplaced(recommendation.unplaced);
+    setValidationMessages(validateRows(chosenRows));
+    toast({ title: `${recommendation.id.replace('-', ' ')} selected`, description: 'The schedule is now editable. Review any warnings before finalizing.', type: 'success' });
+  };
+
+  const resetRows = () => {
+    const reset = originalRows.map((row) => ({ ...row, status: 'idle' as RowStatus, statusMessage: undefined }));
+    setRows(reset);
+    setValidationMessages(validateRows(reset));
+    toast({ title: 'Changes reset', description: 'The selected recommendation has been restored.', type: 'success' });
+  };
+
+  const returnToRecommendations = () => {
+    setSelectedRecommendationId(null);
+    setRows([]);
+    setOriginalRows([]);
+    setUnplaced([]);
+    setValidationMessages([]);
   };
 
   const applyAISuggestions = () => {
@@ -360,8 +506,21 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
     }
   };
 
-  const saveAll = async () => {
+  const saveAll = () => {
     if (rows.length === 0) return;
+    if (validationMessages.length > 0) {
+      toast({ title: 'Resolve schedule warnings first', description: 'The selected schedule has conflicts or availability issues.', type: 'warning' });
+      return;
+    }
+    if (unplaced.length > 0) {
+      toast({ title: 'Schedule is incomplete', description: 'Resolve the classes needing attention before finalizing.', type: 'warning' });
+      return;
+    }
+    setFinalizationOpen(true);
+  };
+
+  const finalizeSchedule = async () => {
+    setFinalizationOpen(false);
     setSaving(true);
     let savedCount = 0;
     for (const row of rows) if (await saveRow(row)) savedCount += 1;
@@ -374,7 +533,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
     } else toast({ title: 'Save failed', description: 'No classes were saved. Check the row errors below.', type: 'error' });
   };
 
-  return <ExpandableGeneratorCard isMinimized={isMinimized} onExpand={() => setIsMinimized(false)}><CardHeader className="flex cursor-pointer flex-row items-center justify-between gap-3" onClick={toggleMinimized}><CardTitle>Automatic Schedule Generator</CardTitle><Button type="button" size="icon-sm" variant="ghost" onClick={toggleMinimized} aria-label={isMinimized ? 'Restore automatic schedule generator' : 'Minimize automatic schedule generator'} title={isMinimized ? 'Restore automatic schedule generator' : 'Minimize automatic schedule generator'}>{isMinimized ? <ChevronDown /> : <ChevronUp />}</Button></CardHeader>{!isMinimized && <CardContent className="space-y-5">
+  return <><ExpandableGeneratorCard isMinimized={isMinimized} onExpand={() => setIsMinimized(false)}><CardHeader className="flex cursor-pointer flex-row items-center justify-between gap-3" onClick={toggleMinimized}><CardTitle>Automatic Schedule Generator</CardTitle><Button type="button" size="icon-sm" variant="ghost" onClick={toggleMinimized} aria-label={isMinimized ? 'Restore automatic schedule generator' : 'Minimize automatic schedule generator'} title={isMinimized ? 'Restore automatic schedule generator' : 'Minimize automatic schedule generator'}>{isMinimized ? <ChevronDown /> : <ChevronUp />}</Button></CardHeader>{!isMinimized && <CardContent className="space-y-5">
     <p className="text-sm text-slate-500">Select the faculty members and assign their subjects and sections. The AI will distribute classes across all available rooms, schedule part-time faculty first, and reserve computer laboratories for computer-dependent subjects.</p>
     <div className="space-y-2">
       <div className="text-sm font-medium text-slate-700">1. Faculty members</div>
@@ -389,7 +548,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
             <div className="text-sm font-medium text-amber-950">Availability for {faculties.find((item) => item.id === activeFacultyId)?.name}</div>
             {availabilityLoading && <Loader2 className="h-4 w-4 animate-spin text-amber-700" aria-label="Loading availability" />}
           </div>
-          {availabilityLoading ? <div className="text-xs text-amber-800">Loading saved availability...</div> : activeFacultyAvailability.length === 0 ? <div className="text-xs text-amber-800">No saved availability. The generator may flag placements outside this faculty member&apos;s available hours.</div> : <div className="flex flex-wrap gap-2">{activeFacultyAvailability.map((entry, index) => <span key={`${entry.day}-${entry.startTime}-${entry.endTime}-${index}`} className="rounded-md border border-amber-300 bg-white px-2 py-1 text-xs text-amber-950"><span className="font-semibold">{entry.day}</span> {entry.startTime} - {entry.endTime}</span>)}</div>}
+          {availabilityLoading ? <div className="text-xs text-amber-800">Loading saved availability...</div> : activeFacultyAvailability.length === 0 ? <div className="text-xs text-amber-800">No saved on-campus availability. The generator may flag placements outside this faculty member&apos;s available hours.</div> : <div className="flex flex-wrap gap-2">{activeFacultyAvailability.map((entry, index) => <span key={`${entry.day}-${entry.startTime}-${entry.endTime}-${index}`} className="rounded-md border border-amber-300 bg-white px-2 py-1 text-xs text-amber-950"><span className="font-semibold">{entry.day}</span> {formatTimeToTwelveHour(entry.startTime)} - {formatTimeToTwelveHour(entry.endTime)}</span>)}</div>}
         </div>
         <div className="space-y-2">
           <label htmlFor="ai-subject-code" className="text-sm font-medium text-slate-700">Subject code</label>
@@ -418,11 +577,13 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
     {unplaced.length > 0 && <div className="space-y-3 rounded-lg border border-blue-200 bg-blue-50 p-4"><div className="text-sm font-semibold text-blue-900">AI help</div>{aiSuggestionsAvailable && unplaced.some((item) => item.suggestion) && unplaced.filter((item) => item.suggestion).map((item, index) => <div key={`suggestion-${item.facultyId || 'faculty'}-${item.code}-${item.section || 'section'}-${index}`} className="flex gap-2 text-sm text-blue-900"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /><span><strong>{item.code} - {item.name}:</strong> {item.suggestion}</span></div>)}{aiSuggestedPlacements.length > 0 ? <><p className="text-sm text-blue-800">The AI found alternative rooms and times that you can review before saving.</p><Button type="button" onClick={applyAISuggestions}>Apply AI alternatives ({aiSuggestedPlacements.length})</Button></> : !aiSuggestionsAvailable && <p className="text-sm text-blue-800">AI help is unavailable right now. Please try generating again later.</p>}</div>}
     {unavailable.length > 0 && <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-700">Existing assignments</div><p className="text-xs text-slate-500">These classes are already on the master schedule and are shown here even when they use another room.</p>{unavailable.map((item) => <div key={`${item.code}-${item.name}-${item.section || 'subject'}-${item.assignedFacultyName || 'faculty'}`} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600"><div><strong>{item.code} - {item.name}{item.section ? ` (${item.section})` : ''}</strong> is assigned to {item.assignedFacultyName || 'another faculty member'}.</div><div className="mt-1 text-xs text-slate-500">{item.day} {item.startTime && item.endTime ? `${item.startTime} - ${item.endTime}` : ''} · {item.hasPhysicalRoom ? item.roomName : 'No physical room assigned'}{item.roomId ? ` · Room ID: ${item.roomId}` : ''}</div></div>)}</div>}
     {suggestions.length > 0 && <div className="space-y-2 rounded-lg border border-blue-200 bg-blue-50 p-4"><div className="text-sm font-semibold text-blue-900">Conflict suggestions</div>{suggestions.map((suggestion, index) => <div key={`${suggestion.label}-${suggestion.value}-${index}`} className="text-sm text-blue-900"><strong>{suggestion.label}:</strong> {suggestion.value}</div>)}</div>}
-    <div className="space-y-2"><div className="text-sm font-semibold uppercase tracking-wide text-slate-500">All-Room Schedule Matrix</div>{savedRows.length > 0 && <div className="text-xs text-slate-500">Showing {savedRows.length} existing schedule{savedRows.length === 1 ? '' : 's'} across all rooms.</div>}<ScheduleBoard rows={[...savedRows, ...rows]} onUpdate={updateRow} onDelete={(localId) => setRows((current) => current.filter((item) => item.localId !== localId))} />{rows.length > 0 && <div className="flex items-center gap-3"><Button type="button" onClick={saveAll} disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save All to Master Schedule</Button><div className="flex items-center gap-3 text-xs text-slate-500">{rows.map((row) => <RowStatusBadge key={row.localId} status={row.status} message={row.statusMessage} />)}</div></div>}</div>
-  </CardContent>}</ExpandableGeneratorCard>;
+    {recommendations.length > 0 && !selectedRecommendationId && <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-4"><div><div className="text-lg font-semibold text-slate-900">AI Schedule Recommendations</div><p className="mt-1 text-sm text-slate-600">Based on the selected faculty, subjects, and scheduling constraints, here are possible schedule arrangements.</p><div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-600"><span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm border border-slate-400 bg-slate-300" /> Saved schedules</span><span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm border border-rose-500 bg-rose-400" /> Conflicts</span><span>Recommendation colors show proposed schedules.</span></div></div>{recommendations.map((recommendation, index) => <div key={recommendation.id} className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="text-base font-semibold text-slate-900">Recommendation {index + 1}</div><p className="text-sm text-slate-600">{recommendation.summary.notes}</p></div><div className="flex gap-3 text-xs text-slate-600"><span>{recommendation.summary.scheduled}/{recommendation.summary.total} subjects scheduled</span><span>{recommendation.summary.conflicts} conflicts</span></div></div><div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600"><span className="font-semibold text-slate-700">Faculty workload:</span> {recommendation.summary.workload}</div><ScheduleBoard rows={[...savedRows, ...recommendation.generated.filter((row) => isPhysicalRoom(row.roomName)).map((row) => ({ ...row, localId: `${recommendation.id}-${row.code}-${row.section}`, status: 'idle' as RowStatus, isSaved: false }))]} onUpdate={() => undefined} onDelete={() => undefined} color={recommendationColors[index % recommendationColors.length]} readOnly facultyAvailability={facultyAvailability} /><Button type="button" onClick={() => chooseRecommendation(recommendation)}>Choose This Schedule</Button></div>)}</div>}
+    {selectedRecommendationId && <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" onClick={returnToRecommendations}>Try Another Recommendation</Button><Button type="button" variant="outline" onClick={resetRows} disabled={rows.length === 0}><RotateCcw className="mr-2 h-4 w-4" />Reset Changes</Button></div>}
+    {selectedRecommendationId && <div className="space-y-2"><div className="flex flex-wrap items-center justify-between gap-2"><div><div className="text-sm font-semibold uppercase tracking-wide text-slate-500">Edit Schedule: {selectedRecommendationId.replace('-', ' ')}</div><p className="text-xs text-slate-500">The selected recommendation is editable and is not finalized until you confirm the finalization action.</p><div className="mt-2 text-xs text-slate-600"><span className="mr-1 inline-block h-3 w-3 rounded-sm border border-slate-400 bg-slate-300 align-[-1px]" /> Saved schedules are shown in gray.</div></div></div>{validationMessages.length > 0 && <div className="space-y-1 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800"><div className="font-semibold">Schedule validation warnings</div>{validationMessages.map((message) => <div key={message}>{message}</div>)}</div>}{savedRows.length > 0 && <div className="text-xs text-slate-500">Showing {savedRows.length} existing schedule{savedRows.length === 1 ? '' : 's'} across all rooms.</div>}<ScheduleBoard rows={[...savedRows, ...rows]} onUpdate={updateRow} onDelete={deleteRow} color={recommendationColors[Math.max(0, recommendations.findIndex((item) => item.id === selectedRecommendationId)) % recommendationColors.length]} facultyAvailability={facultyAvailability} />{rows.length > 0 && <div className="flex flex-wrap items-center gap-3"><Button type="button" onClick={saveAll} disabled={saving || validationMessages.length > 0}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Finalize Schedule</Button><div className="flex items-center gap-3 text-xs text-slate-500">{rows.map((row) => <RowStatusBadge key={row.localId} status={row.status} message={row.statusMessage} />)}</div></div>}</div>}
+  </CardContent>}</ExpandableGeneratorCard><Dialog open={finalizationOpen} onOpenChange={setFinalizationOpen}><DialogContent><DialogHeader><DialogTitle>Review Final Schedule</DialogTitle><DialogDescription>Confirm that this schedule is ready to submit to the existing approval workflow.</DialogDescription></DialogHeader><div className="space-y-3 text-sm text-slate-700"><div className="grid grid-cols-2 gap-2"><div className="rounded-md bg-slate-50 p-3"><div className="text-xs text-slate-500">Classes</div><div className="font-semibold">{rows.length}</div></div><div className={`rounded-md p-3 ${validationMessages.length > 0 ? 'bg-rose-50 text-rose-800' : 'bg-emerald-50 text-emerald-800'}`}><div className="text-xs">Warnings</div><div className="font-semibold">{validationMessages.length}</div></div></div><div><span className="font-semibold">Faculty workload:</span> {selectedRecommendationId ? recommendations.find((item) => item.id === selectedRecommendationId)?.summary.workload : 'Not selected'}</div><p className="text-xs text-slate-500">Finalizing will save these classes and submit them to the current schedule approval workflow. You can no longer review other AI recommendations from this selection.</p></div><DialogFooter><DialogClose render={<Button type="button" variant="outline" />} >Cancel</DialogClose><Button type="button" onClick={finalizeSchedule} disabled={saving || validationMessages.length > 0}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirm Finalization</Button></DialogFooter></DialogContent></Dialog></>;
 }
 
-function ScheduleBoard({ rows, onUpdate, onDelete }: Readonly<{ rows: GeneratedRow[]; onUpdate: (localId: string, field: keyof GeneratedRow, value: string) => void; onDelete: (localId: string) => void }>) {
+function ScheduleBoard({ rows, onUpdate, onDelete, color, readOnly = false, facultyAvailability }: Readonly<{ rows: GeneratedRow[]; onUpdate: (localId: string, field: keyof GeneratedRow, value: string) => void; onDelete: (localId: string) => void; color: string; readOnly?: boolean; facultyAvailability: Record<string, Array<{ day: string; startTime: string; endTime: string }>> }>) {
   const physicalRows = rows.filter((row) => isPhysicalRoom(row.roomName));
   const [collapsedRooms, setCollapsedRooms] = useState<Set<string>>(new Set());
   const roomGroups = [...new Set(physicalRows.map((row) => `${row.roomId}::${row.roomName}`))].map((group) => {
@@ -447,7 +608,7 @@ function ScheduleBoard({ rows, onUpdate, onDelete }: Readonly<{ rows: GeneratedR
         <span>{group.roomName} <span className="ml-1 text-xs font-normal text-slate-500">({group.rows.length} schedule{group.rows.length === 1 ? '' : 's'})</span></span>
         {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
       </button>
-      {!collapsed && <div className="mt-2"><ScheduleRoomBoard rows={group.rows} onUpdate={onUpdate} onDelete={onDelete} /></div>}
+          {!collapsed && <div className="mt-2"><ScheduleRoomBoard rows={group.rows} allRows={physicalRows} onUpdate={onUpdate} onDelete={onDelete} color={color} savedColor="#cbd5e1" readOnly={readOnly} facultyAvailability={facultyAvailability} /></div>}
     </div>;
   })}</div>;
 }

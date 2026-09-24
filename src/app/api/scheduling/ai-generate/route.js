@@ -122,7 +122,7 @@ async function addUnplacedSuggestions(unplaced, rooms, requestedClassSize) {
   }
 }
 
-async function generateFullScheduleWithMistral({ assignments, facultyById, windowsByFaculty, rooms, existingSchedules, requestedClassSize, loadType }) {
+async function generateFullScheduleWithMistral({ assignments, facultyById, windowsByFaculty, rooms, existingSchedules, requestedClassSize, loadType, recommendationIndex = 0 }) {
   const apiKey = process.env.MISTRAL_API_KEY;
   if (!apiKey) {
     const error = new Error("MISTRAL_API_KEY is not configured on the deployed server.");
@@ -141,6 +141,7 @@ async function generateFullScheduleWithMistral({ assignments, facultyById, windo
   const prompt = [
     "You are the primary university schedule generator. Generate the complete schedule for every requested class in one plan.",
     "Choose from all available physical rooms, days, and times yourself.",
+    `This is recommendation ${recommendationIndex + 1} of 3. Keep every constraint valid, but prefer a distinct arrangement from other recommendations: ${recommendationIndex === 0 ? "earlier available time slots and smaller suitable rooms" : recommendationIndex === 1 ? "balanced faculty workload across the available days and rooms" : "later available time slots and room diversity"}. This preference is secondary to availability, conflict, capacity, and equipment rules.`,
     "Never schedule outside the assigned faculty availability. Never overlap a faculty member, room, or section. Respect room capacity and existing schedules.",
     "Schedule part-time faculty before full-time faculty so their more limited availability is protected. Within each faculty group, schedule every section.",
     "Use the database equipment requirement exactly. A class requires a computer laboratory only when requiredEquipmentType is \"computer\". Do not infer equipment needs from the subject code or title. Give computer laboratories first priority to those classes; classes with no computer requirement should use ordinary rooms first.",
@@ -152,7 +153,7 @@ async function generateFullScheduleWithMistral({ assignments, facultyById, windo
     `Existing schedules: ${JSON.stringify(existingSchedules)}`,
     `Requested classes: ${JSON.stringify(requestedClasses)}`,
   ].join("\n");
-  const requestBody = JSON.stringify({ model, messages: [{ role: "user", content: prompt }], temperature: 0.2, response_format: { type: "json_object" } });
+  const requestBody = JSON.stringify({ model, messages: [{ role: "user", content: prompt }], temperature: 0.15 + (recommendationIndex * 0.2), response_format: { type: "json_object" } });
   const maxAttempts = 4;
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -372,14 +373,37 @@ export async function POST(request) {
       })).filter((subject) => subject.sections.length > 0),
     }));
     const aiAssignments = deduplicatedAssignments.filter((assignment) => assignment.subjects.length > 0);
-    const aiSchedule = await generateFullScheduleWithMistral({ assignments: aiAssignments, facultyById, windowsByFaculty, rooms: rooms || [], existingSchedules, requestedClassSize, loadType });
-    const requestedWithNames = aiSchedule.requestedClasses.map((item) => ({ ...item, facultyName: [facultyById.get(item.facultyId)?.first_name, facultyById.get(item.facultyId)?.middle_name, facultyById.get(item.facultyId)?.last_name].filter(Boolean).join(" ") || item.facultyId }));
-    const validatedSchedule = validateMistralSchedule({ requestedClasses: requestedWithNames, proposals: aiSchedule.proposals, rooms: rooms || [], windowsByFaculty, existingSchedules, requestedClassSize, loadType });
-    const generated = validatedSchedule.generated;
-    const unplaced = validatedSchedule.unplaced;
-    const alternativePlacements = [];
-    const aiSuggestionResult = await addUnplacedSuggestions(unplaced, rooms || [], requestedClassSize);
-    return NextResponse.json({ generated, unplaced: aiSuggestionResult.items, alternativePlacements, aiSuggestionsAvailable: aiSuggestionResult.available, unavailable });
+    const recommendations = [];
+    for (let recommendationIndex = 0; recommendationIndex < 3; recommendationIndex += 1) {
+      const aiSchedule = await generateFullScheduleWithMistral({ assignments: aiAssignments, facultyById, windowsByFaculty, rooms: rooms || [], existingSchedules, requestedClassSize, loadType, recommendationIndex });
+      const requestedWithNames = aiSchedule.requestedClasses.map((item) => ({ ...item, facultyName: [facultyById.get(item.facultyId)?.first_name, facultyById.get(item.facultyId)?.middle_name, facultyById.get(item.facultyId)?.last_name].filter(Boolean).join(" ") || item.facultyId }));
+      const validatedSchedule = validateMistralSchedule({ requestedClasses: requestedWithNames, proposals: aiSchedule.proposals, rooms: rooms || [], windowsByFaculty, existingSchedules, requestedClassSize, loadType });
+      const aiSuggestionResult = await addUnplacedSuggestions(validatedSchedule.unplaced, rooms || [], requestedClassSize);
+      const workloadByFaculty = validatedSchedule.generated.reduce((workload, row) => {
+        const facultyName = row.facultyName || row.facultyId;
+        const current = workload.get(facultyName) || { classes: 0, contactHours: 0 };
+        current.classes += 1;
+        current.contactHours += Number(row.lectureContactHours || 0) + Number(row.labContactHours || 0);
+        workload.set(facultyName, current);
+        return workload;
+      }, new Map());
+      const workloadSummary = [...workloadByFaculty.entries()]
+        .map(([facultyName, workload]) => `${facultyName}: ${workload.classes} class${workload.classes === 1 ? "" : "es"} / ${workload.contactHours} contact hour${workload.contactHours === 1 ? "" : "s"}`)
+        .join("; ") || "No faculty workload was scheduled.";
+      recommendations.push({
+        id: `recommendation-${recommendationIndex + 1}`,
+        generated: validatedSchedule.generated,
+        unplaced: aiSuggestionResult.items,
+        summary: {
+          conflicts: validatedSchedule.unplaced.length,
+          scheduled: validatedSchedule.generated.length,
+          total: aiSchedule.requestedClasses.length,
+          workload: workloadSummary,
+          notes: validatedSchedule.unplaced.length === 0 ? "All selected classes passed the availability and conflict checks." : "Some classes need attention before this schedule can be finalized.",
+        },
+      });
+    }
+    return NextResponse.json({ recommendations, unavailable });
   } catch (error) {
     console.error("[AI SCHEDULING GENERATE ERROR]", error);
     const status = Number.isInteger(error?.status) ? error.status : 500;
