@@ -110,7 +110,7 @@ export function Sidebar({ user, collapsed = false, onToggle }: Readonly<SidebarP
   }
 
   if (user?.role === 'program_chair') {
-    links.push({ href: '/section-matrix', label: 'Section Matrix', icon: BookOpen });
+    links.push({ href: '/section-matrix', label: 'Master Schedules', icon: BookOpen });
   }
 
   // Split into primary nav vs. account-related items so the list gets a
