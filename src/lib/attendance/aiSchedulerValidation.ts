@@ -93,6 +93,7 @@ const EARLY_THRESHOLD_MINUTES = 20;
 const MIN_ANOMALY_DEVIATION_MINUTES = 45;
 const HISTORY_WINDOW_DAYS = 30;
 const RECENT_SCAN_WINDOW_DAYS = 7;
+const MANILA_OFFSET_MINUTES = 8 * 60; // UTC+8, Philippines has no DST
 
 const normalizeText = (v?: string | null) => (v || '').trim().toLowerCase();
 const normalizeRoomLabel = (v?: string | null) =>
@@ -142,7 +143,8 @@ const toMinutesFromTimestamp = (value?: string | null) => {
   if (!value) return null;
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return null;
-  return d.getHours() * 60 + d.getMinutes();
+  const utcMinutes = d.getUTCHours() * 60 + d.getUTCMinutes();
+  return (utcMinutes + MANILA_OFFSET_MINUTES) % (24 * 60);
 };
 
 const plusMinutes = (iso: string, mins: number) => {
@@ -300,7 +302,10 @@ export async function getTodaySchedule(
   scanTimestamp: string
 ): Promise<ScheduleInfo | null> {
   const scanDate = new Date(scanTimestamp);
-  const dayName = scanDate.toLocaleDateString('en-US', { weekday: 'long' });
+  const dayName = scanDate.toLocaleDateString('en-US', {
+  weekday: 'long',
+  timeZone: 'Asia/Manila',
+});
   const scanMinutes = toMinutesFromTimestamp(scanTimestamp) ?? 0;
 
   const { data: facultyRecord } = await supabase
