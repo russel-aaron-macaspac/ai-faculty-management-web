@@ -612,18 +612,6 @@ export default function AttendancePage() {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div>
-            <div className="flex items-center gap-2 text-slate-900 font-semibold">
-              <Sparkles className="h-4 w-4 text-[#D4A017]" />
-              AI Scheduler & Recommendations
-            </div>
-            <p className="text-xs text-slate-500 mt-1">Rule-based insights from attendance logs and recent scans.</p>
-          </div>
-          <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
-            {scopeUserId ? 'Scoped view' : 'All logs'}
-          </span>
-        </div>
 
         <div className="grid gap-2 md:grid-cols-2">
           {schedulerInsights.map((insight) => (
