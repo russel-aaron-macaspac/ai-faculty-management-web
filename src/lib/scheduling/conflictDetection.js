@@ -112,7 +112,7 @@ export async function detectScheduleConflicts(supabase, payload) {
     throw schedulesError;
   }
 
-  const { data: selectedRoom, error: roomError } = await supabase
+  const { data: selectedRoomRecord, error: roomError } = await supabase
     .from("rooms")
     .select("name")
     .eq("id", roomId)
@@ -121,6 +121,8 @@ export async function detectScheduleConflicts(supabase, payload) {
   if (roomError) {
     throw roomError;
   }
+
+  const selectedRoom = roomId === "online" ? { name: "Online" } : selectedRoomRecord;
 
   const overlappingRows = (daySchedules || []).filter((row) =>
     overlaps(startTime, endTime, String(row.start_time).slice(0, 5), String(row.end_time).slice(0, 5))
@@ -141,12 +143,15 @@ export async function detectScheduleConflicts(supabase, payload) {
     if (resolvedUuid) {
       const { data: availData, error: availabilityError } = await supabase
         .from("faculty_availability")
-        .select("id, day, start_time, end_time")
+        .select("id, day, start_time, end_time, delivery_mode")
         .eq("faculty_id", resolvedUuid)
         .eq("day", day);
 
       if (availabilityError) throw availabilityError;
-      availabilityRows = availData || [];
+      const requiredDeliveryMode = isOnlineRoom(selectedRoom?.name) ? "online" : "on-campus";
+      availabilityRows = (availData || []).filter((row) => requiredDeliveryMode === "online"
+        ? row.delivery_mode === "online"
+        : row.delivery_mode !== "online");
     } else {
       // No uuid available: treat as no availability rows (will mark as conflict)
       availabilityRows = [];

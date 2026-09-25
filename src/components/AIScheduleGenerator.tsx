@@ -21,15 +21,52 @@ type SubjectAssignment = Subject & { deliveryMode: DeliveryMode; sectionIds: str
 type Room = { id: string; name: string; capacity: number; equipment_type?: string | null };
 type Faculty = { id: string; name: string; role: string; statusOfAppointment?: string | null };
 type Section = { id: string; name: string; year_level?: string | number | null };
-type GeneratedRow = { localId: string; subjectId: string | null; facultyId: string; facultyName: string; code: string; name: string; day: string; startTime: string; endTime: string; section: string; roomId: string; roomName: string; units: string; lectureContactHours: string; labContactHours: string; classSize: string; loadType: LoadType; status: RowStatus; statusMessage?: string; isSaved?: boolean };
+type GeneratedRow = { localId: string; subjectId: string | null; facultyId: string; facultyName: string; code: string; name: string; day: string; startTime: string; endTime: string; section: string; roomId: string; roomName: string; units: string; lectureContactHours: string; labContactHours: string; classSize: string; loadType: LoadType; status: RowStatus; statusMessage?: string; isSaved?: boolean; deliveryMode?: DeliveryMode };
 type AISuggestedPlacement = Omit<GeneratedRow, 'localId' | 'status'>;
-type Recommendation = { id: string; generated: Array<Omit<GeneratedRow, 'localId' | 'status'>>; unplaced: Array<{ code: string; name: string; reason: string; section?: string; facultyId?: string; suggestion?: string }>; summary: { conflicts: number; scheduled: number; total: number; workload: string; notes: string } };
+type Recommendation = { id: string; generated: Array<Omit<GeneratedRow, 'localId' | 'status'>>; onlineGenerated?: Array<Omit<GeneratedRow, 'localId' | 'status'>>; unplaced: Array<{ code: string; name: string; reason: string; section?: string; facultyId?: string; suggestion?: string }>; summary: { conflicts: number; scheduled: number; total: number; workload: string; notes: string } };
 
 const hasMatchingYearLevel = (subject: Subject, section: Section) => (
   subject.year_level != null
   && section.year_level != null
   && String(subject.year_level).trim().toLowerCase() === String(section.year_level).trim().toLowerCase()
 );
+
+function buildOnlinePlacements(assignments: Array<SubjectAssignment & { facultyId: string; facultyName: string }>, sections: Section[], availability: Record<string, Array<{ day: string; startTime: string; endTime: string; deliveryMode: DeliveryMode }>>, existingRows: GeneratedRow[], onlineRoom: Room | undefined) {
+  const generated: Array<Omit<GeneratedRow, 'localId' | 'status'>> = [];
+  const unplaced: Recommendation['unplaced'] = [];
+  if (!onlineRoom) return { generated, unplaced };
+
+  const occupied = existingRows.filter((row) => !isPhysicalRoom(row.roomName));
+  assignments.forEach((assignment) => {
+    const duration = Number(assignment.hours) > 0 ? Number(assignment.hours) * 60 : 90;
+    assignment.sectionIds.forEach((sectionId) => {
+      const sectionName = sections.find((item) => item.id === sectionId)?.name || sectionId;
+      const windows = (availability[assignment.facultyId] || []).filter((window) => window.deliveryMode === 'online');
+      let placement: { day: string; startTime: string; endTime: string } | null = null;
+      for (const window of windows) {
+        const windowStart = boardMinutes(window.startTime);
+        const windowEnd = boardMinutes(window.endTime);
+        for (let start = windowStart; start + duration <= windowEnd; start += 30) {
+          const end = start + duration;
+          const blocked = [...occupied, ...generated].some((row) => row.day === window.day
+            && overlaps(start, end, boardMinutes(row.startTime), boardMinutes(row.endTime))
+            && (row.facultyId === assignment.facultyId || (row.section && row.section === sectionName)));
+          if (!blocked) {
+            placement = { day: window.day, startTime: `${String(Math.floor(start / 60)).padStart(2, '0')}:${String(start % 60).padStart(2, '0')}`, endTime: `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}` };
+            break;
+          }
+        }
+        if (placement) break;
+      }
+      if (!placement) {
+        unplaced.push({ code: assignment.code, name: assignment.name, section: sectionName, facultyId: assignment.facultyId, reason: 'No non-overlapping online timeslot was found within this faculty member\'s online availability.' });
+        return;
+      }
+      generated.push({ subjectId: assignment.id, facultyId: assignment.facultyId, facultyName: assignment.facultyName, code: assignment.code, name: assignment.name, ...placement, section: sectionName, roomId: onlineRoom.id, roomName: onlineRoom.name, units: '', lectureContactHours: '', labContactHours: '', classSize: '', loadType: 'regular', deliveryMode: 'online' });
+    });
+  });
+  return { generated, unplaced };
+}
 
 interface AIScheduleGeneratorProps {
   faculties: Faculty[];
@@ -121,7 +158,7 @@ function ScheduleRoomBoard({ rows, allRows, onUpdate, onDelete, color, savedColo
 
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-300 bg-white shadow-sm">
-      {conflictingRows.length > 0 && <div className="border-b border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800"><div className="font-semibold">Conflict preview</div>{[...new Map(conflictingRows.map((row) => [row.localId, row])).values()].map((row) => { const suggestion = findSuggestedSlot(row, allRows, facultyAvailability[row.facultyId] || []); const types = conflictTypes(row, allRows); return <div key={row.localId} className="py-0.5">{row.code}{row.section ? ` (${row.section})` : ''} on {row.day} {formatBoardTime(boardMinutes(row.startTime))}-{formatBoardTime(boardMinutes(row.endTime))}. <span className="font-semibold">Conflict type:</span> {types.join(', ') || 'Schedule'}{types.length > 0 && '. '}<span className="font-semibold">Suggested open slot:</span> {suggestion ? suggestion.label : 'No open slot found in this faculty availability.'}{suggestion && !readOnly && <Button type="button" size="sm" variant="outline" className="ml-2 h-6 px-2 text-[11px]" onClick={() => { onUpdate(row.localId, 'day', suggestion.day); onUpdate(row.localId, 'startTime', suggestion.startTime); onUpdate(row.localId, 'endTime', suggestion.endTime); }}>Apply slot</Button>}</div>; })}</div>}
+        {conflictingRows.length > 0 && <div className="border-b border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800"><div className="font-semibold">Conflict preview</div>{[...new Map(conflictingRows.map((row) => [row.localId, row])).values()].map((row) => { const suggestion = findSuggestedSlot(row, allRows, facultyAvailability[row.facultyId] || []); const types = conflictTypes(row, allRows); return <div key={row.localId} className="py-0.5">{row.code}{row.section ? ` (${row.section})` : ''} on {row.day} {formatBoardTime(boardMinutes(row.startTime))}-{formatBoardTime(boardMinutes(row.endTime))}. <span className="font-semibold">Conflict type:</span> {types.join(', ') || 'Schedule'}{types.length > 0 && '. '}<span className="font-semibold">Suggested open slot:</span> {suggestion ? suggestion.label : 'No open slot found in this faculty availability.'}{suggestion && !readOnly && <Button type="button" size="sm" variant="outline" className="ml-2 h-6 px-2 text-[11px]" onClick={() => { onUpdate(row.localId, 'day', suggestion.day); onUpdate(row.localId, 'startTime', suggestion.startTime); onUpdate(row.localId, 'endTime', suggestion.endTime); }}>Apply slot</Button>}</div>; })}</div>}
       <table className="w-full min-w-260 table-fixed border-collapse text-xs">
         <thead>
           <tr className="bg-slate-100 text-slate-800">
@@ -193,6 +230,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
   const [activeFacultyAvailability, setActiveFacultyAvailability] = useState<Array<{ day: string; startTime: string; endTime: string; deliveryMode: DeliveryMode }>>([]);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [facultyAvailability, setFacultyAvailability] = useState<Record<string, Array<{ day: string; startTime: string; endTime: string }>>>({});
+  const [onlineFacultyAvailability, setOnlineFacultyAvailability] = useState<Record<string, Array<{ day: string; startTime: string; endTime: string; deliveryMode: DeliveryMode }>>>({});
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [selectedRecommendationId, setSelectedRecommendationId] = useState<string | null>(null);
   const [originalRows, setOriginalRows] = useState<GeneratedRow[]>([]);
@@ -211,7 +249,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
     const faculty = faculties.find((item) => item.id === facultyId);
     return (subjectsByFaculty[facultyId] || [])
       .filter((assignment) => assignment.deliveryMode === 'online')
-      .map((assignment) => ({ ...assignment, facultyName: faculty?.name || facultyId }));
+      .map((assignment) => ({ ...assignment, facultyId, facultyName: faculty?.name || facultyId }));
   });
 
   useEffect(() => {
@@ -220,7 +258,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
       try {
         const schedules = await scheduleService.getSchedules(undefined, createdBy ? { id: createdBy, role: creatorRole } : undefined);
         if (cancelled) return;
-        setSavedRows(schedules.filter((schedule) => schedule.status !== 'rejected' && isPhysicalRoom(schedule.room?.name)).map((schedule) => ({
+        setSavedRows(schedules.filter((schedule) => schedule.status !== 'rejected').map((schedule) => ({
           localId: `saved-${schedule.id}`,
           subjectId: schedule.subjectId,
           facultyId: schedule.facultyId,
@@ -240,6 +278,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
           loadType: schedule.loadType || 'regular',
           status: 'saved',
           isSaved: true,
+          deliveryMode: isPhysicalRoom(schedule.room?.name) ? 'on-campus' : 'online',
         })));
       } catch {
         if (!cancelled) setSavedRows([]);
@@ -263,7 +302,6 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
         const entries = await scheduleService.getFacultyAvailability(activeFacultyId);
         if (!cancelled) {
           const sortedAvailability = entries
-            .filter((entry) => entry.deliveryMode !== 'online')
             .map((entry) => ({ day: entry.day, startTime: entry.startTime, endTime: entry.endTime, deliveryMode: entry.deliveryMode }))
             .sort((left, right) => {
               const dayDifference = DAYS.indexOf(left.day) - DAYS.indexOf(right.day);
@@ -288,17 +326,21 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
     let cancelled = false;
     if (selectedFacultyIds.length === 0) {
       setFacultyAvailability({});
+      setOnlineFacultyAvailability({});
       return () => { cancelled = true; };
     }
     void Promise.all(selectedFacultyIds.map(async (facultyId) => {
       try {
         const entries = await scheduleService.getFacultyAvailability(facultyId);
-        return [facultyId, entries.filter((entry) => entry.deliveryMode !== 'online').map((entry) => ({ day: entry.day, startTime: entry.startTime, endTime: entry.endTime }))] as const;
+        return [facultyId, entries.map((entry) => ({ day: entry.day, startTime: entry.startTime, endTime: entry.endTime, deliveryMode: entry.deliveryMode }))] as const;
       } catch {
         return [facultyId, []] as const;
       }
     })).then((entries) => {
-      if (!cancelled) setFacultyAvailability(Object.fromEntries(entries));
+      if (!cancelled) {
+        setFacultyAvailability(Object.fromEntries(entries.map(([facultyId, rows]) => [facultyId, rows.filter((entry) => entry.deliveryMode !== 'online').map(({ day, startTime, endTime }) => ({ day, startTime, endTime }))])));
+        setOnlineFacultyAvailability(Object.fromEntries(entries));
+      }
     });
     return () => { cancelled = true; };
   }, [selectedFacultyIds]);
@@ -319,10 +361,12 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
         if (row.isSaved && other.isSaved) return;
         if (row.day !== other.day || !overlaps(rowStart, rowEnd, boardMinutes(other.startTime), boardMinutes(other.endTime))) return;
         if (row.facultyId === other.facultyId) messages.push(`${row.facultyName} is double-booked on ${row.day}.`);
-        if (row.roomId === other.roomId) messages.push(`${row.roomName} is double-booked on ${row.day}.`);
+        if (isPhysicalRoom(row.roomName) && isPhysicalRoom(other.roomName) && row.roomId === other.roomId) messages.push(`${row.roomName} is double-booked on ${row.day}.`);
         if (row.section && row.section === other.section) messages.push(`Section ${row.section} has overlapping classes on ${row.day}.`);
       });
-      const availability = facultyAvailability[row.facultyId] || [];
+      const availability = isPhysicalRoom(row.roomName)
+        ? facultyAvailability[row.facultyId] || []
+        : (onlineFacultyAvailability[row.facultyId] || []).map(({ day, startTime, endTime }) => ({ day, startTime, endTime }));
       if (availability.length > 0 && !availability.some((window) => window.day === row.day && row.startTime >= window.startTime && row.endTime <= window.endTime)) {
         messages.push(`${row.code} is outside ${row.facultyName}'s availability.`);
       }
@@ -377,17 +421,25 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
   const generate = async () => {
     const selectedAssignments = selectedFacultyIds.map((facultyId) => ({ facultyId, subjects: subjectsByFaculty[facultyId] || [] }));
     const hasMissingSections = selectedAssignments.some((assignment) => assignment.subjects.some((subject) => subject.sectionIds.length === 0));
+    const onlineRoom = rooms.find((room) => !isPhysicalRoom(room.name)) || { id: 'online', name: 'Online', capacity: 0 };
+    const onlinePlacement = buildOnlinePlacements(onlineAssignments, sections, onlineFacultyAvailability, savedRows, onlineRoom);
     const assignments = selectedAssignments.map(({ facultyId, subjects: facultySubjects }) => ({ facultyId, subjects: facultySubjects.filter((subject) => subject.deliveryMode === 'on-campus').map((subject) => ({ subjectId: subject.id, code: subject.code, name: subject.name, requiredEquipmentType: subject.required_equipment_type || null, sections: subject.sectionIds.map((sectionId) => sections.find((section) => section.id === sectionId)?.name || sectionId), classType: (subject.lab_units ?? 0) > 0 && (subject.lecture_units ?? 0) === 0 ? 'lab' : 'lecture', durationMinutes: Number(subject.hours) > 0 ? Number(subject.hours) * 60 : undefined })) })).filter((assignment) => assignment.subjects.length > 0);
     if (hasMissingSections || selectedAssignments.some((assignment) => assignment.subjects.length === 0)) {
       toast({ title: 'A few details are missing', description: 'Select at least one section for every subject and assign at least one subject to each faculty member.', type: 'warning' });
       return;
     }
     if (assignments.length === 0) {
-      setRows([]);
-      setUnplaced([]);
+      const onlineRecommendation: Recommendation = { id: 'online-schedule', generated: [], onlineGenerated: onlinePlacement.generated, unplaced: onlinePlacement.unplaced, summary: { conflicts: 0, scheduled: onlinePlacement.generated.length, total: onlinePlacement.generated.length + onlinePlacement.unplaced.length, workload: 'Online classes use no physical room capacity.', notes: 'Online classes were placed within online faculty availability.' } };
+      setRecommendations(onlinePlacement.generated.length > 0 ? [onlineRecommendation] : []);
+      setSelectedRecommendationId(onlinePlacement.generated.length > 0 ? onlineRecommendation.id : null);
+      const nextRows = onlinePlacement.generated.map((row) => ({ ...row, localId: makeId(), status: 'idle' as RowStatus }));
+      setRows(nextRows);
+      setOriginalRows(nextRows.map((row) => ({ ...row })));
+      setUnplaced(onlinePlacement.unplaced);
       setUnavailable([]);
       setSuggestions([]);
-      toast({ title: 'Online subjects noted', description: 'All selected subjects are online and were excluded from the room matrix.', type: 'success' });
+      setGenerationMessage(onlinePlacement.generated.length > 0 ? 'Online subjects were placed in the online matrix.' : 'No online subjects could be placed within the saved online availability.');
+      toast({ title: 'Online matrix ready', description: `${onlinePlacement.generated.length} online class${onlinePlacement.generated.length === 1 ? '' : 'es'} placed.`, type: onlinePlacement.generated.length > 0 ? 'success' : 'warning' });
       return;
     }
     setGenerating(true);
@@ -406,6 +458,9 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
       const nextRecommendations = (data.recommendations || []).map((recommendation: Recommendation) => ({
         ...recommendation,
         generated: recommendation.generated.filter((row) => isPhysicalRoom(row.roomName)),
+        onlineGenerated: onlinePlacement.generated,
+        unplaced: [...recommendation.unplaced, ...onlinePlacement.unplaced],
+        summary: { ...recommendation.summary, scheduled: recommendation.summary.scheduled + onlinePlacement.generated.length, total: recommendation.summary.total + onlinePlacement.generated.length + onlinePlacement.unplaced.length },
       }));
       setRecommendations(nextRecommendations);
       setSelectedRecommendationId(null);
@@ -433,7 +488,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
   };
 
   const chooseRecommendation = (recommendation: Recommendation) => {
-    const chosenRows = recommendation.generated.map((row) => ({
+    const chosenRows = [...recommendation.generated, ...(recommendation.onlineGenerated || [])].map((row) => ({
       ...row,
       localId: makeId(),
       units: String(row.units ?? ''),
@@ -570,7 +625,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
         </div>
       </div>}
     </div>}
-    {onlineAssignments.length > 0 && <div className="space-y-1 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900"><div className="font-semibold">Online subjects excluded from the room schedule</div>{onlineAssignments.map((assignment) => <div key={`${assignment.facultyName}-${assignment.id}`}>{assignment.code} - {assignment.name} ({assignment.facultyName}) is online and will not use a physical room.</div>)}</div>}
+    {onlineAssignments.length > 0 && <div className="space-y-1 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900"><div className="font-semibold">Online subjects will use the online matrix</div>{onlineAssignments.map((assignment) => <div key={`${assignment.facultyName}-${assignment.id}`}>{assignment.code} - {assignment.name} ({assignment.facultyName}) will be placed using online availability and will not use a physical room.</div>)}</div>}
     <Button type="button" onClick={generate} disabled={generating || saving || selectedFacultyIds.length === 0}>{generating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Generate All-Room Schedule</Button>
     {generationMessage && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"><div className="font-semibold">Generation result</div><p className="mt-1">{generationMessage}</p></div>}
     {unplaced.length > 0 && <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-4"><div className="text-sm font-semibold text-amber-900">Classes needing attention</div><p className="text-xs text-amber-800">These classes were not added because the AI could not find a conflict-free placement.</p>{unplaced.map((item, index) => <div key={`unplaced-${item.facultyId || 'faculty'}-${item.code}-${item.section || 'section'}-${index}`} className="flex gap-2 text-sm text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span><strong>{item.code} - {item.name}:</strong> {item.reason}</span></div>)}</div>}
@@ -583,8 +638,14 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
   </CardContent>}</ExpandableGeneratorCard><Dialog open={finalizationOpen} onOpenChange={setFinalizationOpen}><DialogContent><DialogHeader><DialogTitle>Review Final Schedule</DialogTitle><DialogDescription>Confirm that this schedule is ready to submit to the existing approval workflow.</DialogDescription></DialogHeader><div className="space-y-3 text-sm text-slate-700"><div className="grid grid-cols-2 gap-2"><div className="rounded-md bg-slate-50 p-3"><div className="text-xs text-slate-500">Classes</div><div className="font-semibold">{rows.length}</div></div><div className={`rounded-md p-3 ${validationMessages.length > 0 ? 'bg-rose-50 text-rose-800' : 'bg-emerald-50 text-emerald-800'}`}><div className="text-xs">Warnings</div><div className="font-semibold">{validationMessages.length}</div></div></div><div><span className="font-semibold">Faculty workload:</span> {selectedRecommendationId ? recommendations.find((item) => item.id === selectedRecommendationId)?.summary.workload : 'Not selected'}</div><p className="text-xs text-slate-500">Finalizing will save these classes and submit them to the current schedule approval workflow. You can no longer review other AI recommendations from this selection.</p></div><DialogFooter><DialogClose render={<Button type="button" variant="outline" />} >Cancel</DialogClose><Button type="button" onClick={finalizeSchedule} disabled={saving || validationMessages.length > 0}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirm Finalization</Button></DialogFooter></DialogContent></Dialog></>;
 }
 
+function ScheduleOnlineBoard({ rows, onUpdate, onDelete, color, readOnly }: Readonly<{ rows: GeneratedRow[]; onUpdate: (localId: string, field: keyof GeneratedRow, value: string) => void; onDelete: (localId: string) => void; color: string; readOnly: boolean }>) {
+  const conflictingRows = rows.filter((row) => rows.some((other) => row.localId !== other.localId && row.day === other.day && overlaps(boardMinutes(row.startTime), boardMinutes(row.endTime), boardMinutes(other.startTime), boardMinutes(other.endTime)) && (row.facultyId === other.facultyId || (row.section && row.section === other.section))));
+  return <div className="overflow-x-auto rounded-lg border border-sky-300 bg-white shadow-sm"><div className="border-b border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">Online classes may share a cell, but the same faculty member or section cannot overlap.</div><table className="w-full min-w-260 table-fixed border-collapse text-xs"><thead><tr className="bg-sky-100 text-slate-800"><th className="w-32 border border-slate-300 px-2 py-3 text-center font-bold uppercase">Time</th>{DAYS.slice(0, 6).map((day) => <th key={day} className="border border-slate-300 px-2 py-3 text-center font-bold uppercase">{day}</th>)}</tr></thead><tbody>{BOARD_SLOTS.map((slot) => <tr key={slot} className="min-h-10"><th className="border border-slate-300 bg-slate-50 px-2 text-center font-semibold text-slate-600">{formatBoardTime(slot)}</th>{DAYS.slice(0, 6).map((day) => { const cellRows = rows.filter((row) => row.day === day && boardMinutes(row.startTime) === slot); return <td key={`${day}-${slot}`} className="border border-slate-300 p-1 align-top"><div className="space-y-1">{cellRows.map((row) => { const hasConflict = conflictingRows.some((candidate) => candidate.localId === row.localId); return <div key={row.localId} className={`rounded border p-2 text-left ${hasConflict ? 'border-rose-700 bg-rose-200 ring-1 ring-rose-400' : 'border-sky-700/40'}`} style={{ backgroundColor: hasConflict ? '#fecaca' : row.isSaved ? '#cbd5e1' : color }}><div className="flex items-start justify-between gap-1"><div className="min-w-0 font-semibold leading-tight"><div className="text-[10px] font-medium uppercase tracking-wide">{row.facultyName}</div>{row.name}<div className="font-normal">{row.code}{row.section ? ` · ${row.section}` : ''}</div></div>{!row.isSaved && !readOnly && <button type="button" onClick={() => onDelete(row.localId)} className="shrink-0 p-1 text-slate-700 hover:text-rose-700" title="Delete generated row"><Trash2 className="h-3.5 w-3.5" /></button>}</div><div className="mt-1 grid grid-cols-2 gap-1"><Select value={row.day} onValueChange={(value) => onUpdate(row.localId, 'day', value || 'Monday')} disabled={row.isSaved || readOnly}><SelectTrigger className="h-7 rounded border-slate-700 bg-white/70 px-1.5 text-[11px]"><SelectValue /></SelectTrigger><SelectContent>{DAYS.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent></Select><Input className="h-7 rounded border-slate-700 bg-white/70 px-1 text-[11px]" type="time" step="1800" value={row.startTime} onChange={(event) => onUpdate(row.localId, 'startTime', event.target.value)} disabled={row.isSaved || readOnly} /></div><div className="mt-1 grid grid-cols-2 gap-1"><Input className="h-7 rounded border-slate-700 bg-white/70 px-1 text-[11px]" type="time" step="1800" value={row.endTime} onChange={(event) => onUpdate(row.localId, 'endTime', event.target.value)} disabled={row.isSaved || readOnly} /><Input className="h-7 rounded border-slate-700 bg-white/70 px-1.5 text-[11px]" value={row.section} onChange={(event) => onUpdate(row.localId, 'section', event.target.value)} placeholder="Section" disabled={row.isSaved || readOnly} /></div></div>; })}</div></td>; })}</tr>)}</tbody></table></div>;
+}
+
 function ScheduleBoard({ rows, onUpdate, onDelete, color, readOnly = false, facultyAvailability }: Readonly<{ rows: GeneratedRow[]; onUpdate: (localId: string, field: keyof GeneratedRow, value: string) => void; onDelete: (localId: string) => void; color: string; readOnly?: boolean; facultyAvailability: Record<string, Array<{ day: string; startTime: string; endTime: string }>> }>) {
   const physicalRows = rows.filter((row) => isPhysicalRoom(row.roomName));
+  const onlineRows = rows.filter((row) => !isPhysicalRoom(row.roomName));
   const [collapsedRooms, setCollapsedRooms] = useState<Set<string>>(new Set());
   const roomGroups = [...new Set(physicalRows.map((row) => `${row.roomId}::${row.roomName}`))].map((group) => {
     const separator = group.indexOf('::');
@@ -600,7 +661,7 @@ function ScheduleBoard({ rows, onUpdate, onDelete, color, readOnly = false, facu
     return next;
   });
 
-  return <div className="space-y-4">{roomGroups.map((group) => {
+  return <div className="space-y-4">{onlineRows.length > 0 && <div className="rounded-lg border border-sky-200 bg-sky-50 p-2"><div className="px-2 py-2 text-sm font-semibold text-sky-900">Online Matrix <span className="ml-1 text-xs font-normal text-sky-700">({onlineRows.length} schedule{onlineRows.length === 1 ? '' : 's'})</span></div><ScheduleOnlineBoard rows={onlineRows} onUpdate={onUpdate} onDelete={onDelete} color={color} readOnly={readOnly} /></div>}{roomGroups.map((group) => {
     const roomKey = group.roomId || group.roomName;
     const collapsed = collapsedRooms.has(roomKey);
     return <div key={roomKey} className="rounded-lg border border-slate-200 bg-slate-50 p-2">

@@ -1,6 +1,62 @@
 @import "tailwindcss";
+
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+
+/* Keep the shared online schedule cells readable when several classes share a slot. */
+div.overflow-x-auto.rounded-lg.border-sky-300 tbody tr {
+  height: 6.5rem;
+}
+
+div.overflow-x-auto.rounded-lg.border-sky-300 tbody td {
+  min-width: 10rem;
+  padding: 0.4rem;
+  vertical-align: top;
+  background: #f8fafc;
+}
+
+div.overflow-x-auto.rounded-lg.border-sky-300 tbody td:empty {
+  background: #ffffff;
+}
+
+div.overflow-x-auto.rounded-lg.border-sky-300 tbody td > div {
+  display: flex;
+  min-height: 5.7rem;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+div.overflow-x-auto.rounded-lg.border-sky-300 tbody td > div > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-content: start;
+}
+
+div.overflow-x-auto.rounded-lg.border-sky-300 tbody td > div > div:first-child {
+  grid-column: 1 / -1;
+}
+
+div.overflow-x-auto.rounded-lg.border-sky-300 tbody td > div > div > div:nth-child(2),
+div.overflow-x-auto.rounded-lg.border-sky-300 tbody td > div > div > div:nth-child(3) {
+  display: contents;
+}
+
+div.overflow-x-auto.rounded-lg.border-sky-300 tbody td > div > div > div:nth-child(2) button {
+  grid-column: 1 / -1;
+}
+
+div.overflow-x-auto.rounded-lg.border-sky-300 tbody td > div > div > div:nth-child(2) input {
+  grid-column: 1;
+}
+
+div.overflow-x-auto.rounded-lg.border-sky-300 tbody td > div > div > div:nth-child(3) input:first-child {
+  grid-column: 2;
+}
+
+div.overflow-x-auto.rounded-lg.border-sky-300 tbody td > div > div > div:nth-child(3) input:last-child {
+  grid-column: 1 / -1;
+}
 
 @custom-variant dark (&:is(.dark *));
 

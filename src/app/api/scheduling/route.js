@@ -484,12 +484,13 @@ export async function POST(request) {
     console.info("[SCHEDULING POST] resolvedFaculty:", resolvedFaculty);
     console.info("[SCHEDULING POST] resolvedCreator:", resolvedCreator);
 
-    const { data: selectedRoom, error: roomError } = await supabase
+    const { data: selectedRoomRecord, error: roomError } = await supabase
       .from("rooms")
       .select("name")
       .eq("id", roomId)
       .maybeSingle();
 
+    const selectedRoom = roomId === "online" ? { name: "Online" } : selectedRoomRecord;
     if (roomError || !selectedRoom) {
       return NextResponse.json({ error: "Room not found" }, { status: 400 });
     }
