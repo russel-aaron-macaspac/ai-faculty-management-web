@@ -164,9 +164,36 @@ export async function GET(request) {
       }
     }
 
+    let attachmentsByClearance = new Map();
+    if (clearanceIds.length > 0) {
+      const { data: attachments, error: attachmentsError } = await supabase
+        .from("clearance_attachments")
+        .select("attachment_id, clearance_id, original_filename, file_path, uploaded_at")
+        .in("clearance_id", clearanceIds)
+        .order("uploaded_at", { ascending: true });
+
+      if (attachmentsError) {
+        console.warn("[CLEARANCES GET ATTACHMENTS ERROR]", attachmentsError);
+      } else {
+        attachmentsByClearance = (attachments || []).reduce((map, attachment) => {
+          const key = String(attachment.clearance_id);
+          const item = {
+            id: String(attachment.attachment_id),
+            clearanceId: key,
+            originalFilename: attachment.original_filename,
+            filePath: attachment.file_path,
+            uploadedAt: attachment.uploaded_at,
+          };
+          map.set(key, [...(map.get(key) || []), item]);
+          return map;
+        }, new Map());
+      }
+    }
+
     const formatted = scopedData.map((row) => ({
       ...formatRow(row),
       notes: notesByClearance.get(String(row.document_id)) || [],
+      attachments: attachmentsByClearance.get(String(row.document_id)) || [],
     }));
 
     return NextResponse.json({ data: formatted });
@@ -395,8 +422,15 @@ export async function POST(req) {
               actorRole
             );
 
-            // If the error handler returned a response, push that as result
-            results.push({ success: resp?.data ? true : false, data: resp?.data ?? null, error: resp?.error ?? null });
+            const responseBody = await resp.json();
+            if (!resp.ok) {
+              await supabase.storage.from('clearance-files').remove([destPath]);
+            }
+            results.push({
+              success: resp.ok,
+              data: responseBody?.data ?? null,
+              error: resp.ok ? null : responseBody?.error ?? 'Could not save the clearance file.',
+            });
             continue;
           }
 

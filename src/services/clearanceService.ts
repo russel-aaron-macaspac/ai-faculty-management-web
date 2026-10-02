@@ -70,8 +70,30 @@ export const clearanceService = {
     officeId: number,
     originalFilename?: string,
     filePath?: string,
-    actor?: { name?: string; role?: string }
+    actor?: { name?: string; role?: string },
+    file?: File
   ) {
+    if (file) {
+      const formData = new FormData();
+      formData.append('user_id', userId);
+      formData.append('office_id', String(officeId));
+      formData.append('actor_name', actor?.name ?? '');
+      formData.append('actor_role', actor?.role ?? '');
+      formData.append('files', file);
+
+      const res = await fetch('/api/clearances', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const json = await res.json();
+      const failedResult = json?.results?.find((result: { success?: boolean }) => !result.success);
+      if (!res.ok || failedResult) {
+        throw new Error(failedResult?.error ?? json?.error ?? `Failed to upload document (${res.status})`);
+      }
+      return json;
+    }
+
     const res = await fetch('/api/clearances', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -105,6 +127,37 @@ export const clearanceService = {
     const json = await res.json();
     if (!res.ok) throw new Error(json.error ?? 'Could not get file.');
     return json.url;
+  },
+
+  async addAttachments(clearanceId: string, files: File[]) {
+    const formData = new FormData();
+    files.forEach((file) => formData.append('files', file));
+    const res = await fetch(`/api/clearances/${clearanceId}/attachments`, { method: 'POST', body: formData });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error ?? 'Could not upload attachments.');
+    return json.data || [];
+  },
+
+  async deleteAttachment(clearanceId: string, attachmentId: string) {
+    const res = await fetch(`/api/clearances/${clearanceId}/attachments`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ attachmentId }),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error ?? 'Could not remove attachment.');
+    return json;
+  },
+
+  async deletePrimaryFile(clearanceId: string) {
+    const res = await fetch(`/api/clearances/${clearanceId}/attachments`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ primary: true }),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error ?? 'Could not remove the file.');
+    return json;
   },
 
   async deleteDocument(id: string) {

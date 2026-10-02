@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { clearanceService } from '@/services/clearanceService';
 import { Clearance } from '@/types/clearance';
 import { Faculty } from '@/types/faculty';
@@ -62,6 +63,7 @@ export default function ClearancePage() {
   const [docName, setDocName] = useState('Safety Training Certificate');
   const [uploadError, setUploadError] = useState('');
   const [remarkRecord, setRemarkRecord] = useState<Clearance | null>(null);
+  const [documentRecord, setDocumentRecord] = useState<Clearance | null>(null);
   const [remarkText, setRemarkText] = useState('');
   const [remarkSaving, setRemarkSaving] = useState(false);
 
@@ -187,25 +189,22 @@ export default function ClearancePage() {
     if (!currentUser) return;
 
     const employeeId = currentUser.supabase_id ?? '';
-    if (!employeeId) {
-      toast({ title: 'Submission Failed', description: 'Please sign in again.', type: 'error' });
-      return;
-    }
-
     const officeId = officeIdMap.get(normalize(officeName));
-    if (!officeId) {
-      toast({ title: 'Submission Failed', description: 'Office not found.', type: 'error' });
+    if (!employeeId || !officeId) {
+      toast({ title: 'Submission Failed', description: 'Please sign in again or select a valid office.', type: 'error' });
       return;
     }
 
     setSubmittingOfficeId(officeId);
     try {
-      await clearanceService.uploadDocument(employeeId, Number(officeId), officeName, undefined, { name: currentUser.name ?? currentUser.full_name, role: currentUser.role });
+      await clearanceService.uploadDocument(employeeId, Number(officeId), officeName, undefined, {
+        name: currentUser.name ?? currentUser.full_name,
+        role: currentUser.role,
+      });
       await loadData(currentUser);
       toast({ title: 'Clearance Submitted', description: `${officeName} has been submitted for review.`, type: 'success' });
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Submission failed. Please try again.';
-      toast({ title: 'Submission Failed', description: msg, type: 'error' });
+      toast({ title: 'Submission Failed', description: error instanceof Error ? error.message : 'Submission failed. Please try again.', type: 'error' });
     } finally {
       setSubmittingOfficeId(null);
     }
@@ -470,23 +469,31 @@ export default function ClearancePage() {
     }
   };
 
+  const handleOpenFile = async (filePath: string, filename: string) => {
+    try {
+      const url = await clearanceService.getFileUrl(filePath);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      toast({ title: 'Document unavailable', description: `${filename}: ${error instanceof Error ? error.message : 'Could not open the document.'}`, type: 'error' });
+    }
+  };
+
   const { title: pageTitle, subtitle: pageSubtitle } = getClearancePageInfo(currentUser?.role);
 
   const getStatusClass = (status: Clearance['status']) => {
     if (status === 'approved') return 'bg-emerald-100 text-emerald-800';
-    if (status === 'submitted') return 'bg-red-100 text-red-800';
+    if (status === 'pending' || status === 'submitted') return 'bg-amber-100 text-amber-800';
     if (status === 'rejected') return 'bg-rose-100 text-rose-800';
     return 'bg-slate-100 text-slate-800';
   };
 
+  const getStatusLabel = (status: Clearance['status']) => status === 'submitted' ? 'pending' : status;
+
   const getFacultySubmitLabel = (record: Clearance & { _isRequiredPlaceholder?: boolean }) => {
-    if (!record._isRequiredPlaceholder && record.status !== 'rejected') {
-      return 'Submitted';
-    }
     if (record.status === 'rejected') {
-      return 'Resubmit Clearance';
+      return 'Re-request';
     }
-    return 'Submit Clearance';
+    return record._isRequiredPlaceholder ? 'Request' : 'Requested';
   };
 
   let tableRows: React.ReactNode;
@@ -575,6 +582,12 @@ export default function ClearancePage() {
               <AlertTriangle className="h-3 w-3" /> Reason: {record.validationWarning}
             </div>
           )}
+          {(record.filePath || record.attachments?.length) && (
+            <Button type="button" variant="link" className="h-auto px-0 text-xs text-red-700" onClick={() => setDocumentRecord(record)}>
+              <FileText className="mr-1 h-3.5 w-3.5" />
+              View documents ({(record.filePath ? 1 : 0) + (record.attachments?.length ?? 0)})
+            </Button>
+          )}
           {record.notes?.map((note) => (
             <div key={note.id} className="mt-2 flex items-start justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-900">
               <span><span className="font-semibold">Requirement reminder:</span> {note.content}</span>
@@ -590,25 +603,33 @@ export default function ClearancePage() {
         <TableCell>
           <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getStatusClass(record.status)}`}>
             {record.status === 'approved' && <CheckCircle2 className="h-3 w-3" />}
-            {record.status}
+            {getStatusLabel(record.status)}
           </span>
         </TableCell>
         {showSubmitColumn && (
           <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-            <Button
-              type="button"
-              size="sm"
-              className="bg-red-600 hover:bg-red-700"
-              disabled={!currentUser?.supabase_id || actionLoadingId === record.id || submittingOfficeId === officeIdMap.get(normalize(record.requiredDocument)) || (!record._isRequiredPlaceholder && record.status !== 'rejected')}
-              onClick={() => void handleFacultySubmit(record.requiredDocument)}
-            >
-              {submittingOfficeId === officeIdMap.get(normalize(record.requiredDocument)) ? (
-                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <UploadCloud className="mr-1 h-3.5 w-3.5" />
-              )}
-              {getFacultySubmitLabel(record)}
-            </Button>
+            {record.status !== 'approved' && (() => {
+              const officeId = officeIdMap.get(normalize(record.requiredDocument));
+              if (!officeId) return null;
+              return (
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={record.status === 'rejected' || record._isRequiredPlaceholder ? 'default' : 'secondary'}
+                    className={record.status === 'rejected' || record._isRequiredPlaceholder ? '' : 'bg-slate-200 text-slate-500 hover:bg-slate-200 hover:text-slate-500'}
+                    disabled={!currentUser?.supabase_id || submittingOfficeId === officeId || (!record._isRequiredPlaceholder && record.status !== 'rejected')}
+                    onClick={() => void handleFacultySubmit(record.requiredDocument)}
+                  >
+                    {submittingOfficeId === officeId ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <UploadCloud className="mr-1 h-3.5 w-3.5" />}
+                    {getFacultySubmitLabel(record)}
+                  </Button>
+                  <Link href={`/clearance/upload/${officeId}`} className="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50">
+                    {record.filePath ? 'Manage file' : 'Upload file'}
+                  </Link>
+                </div>
+              );
+            })()}
           </TableCell>
         )}
         {showRemarkColumn && (
@@ -738,6 +759,28 @@ export default function ClearancePage() {
             </DialogContent>
           </Dialog>
         )}
+
+        <Dialog open={Boolean(documentRecord)} onOpenChange={(open) => !open && setDocumentRecord(null)}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Uploaded documents for {documentRecord?.employeeName}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-2 pt-4">
+              {documentRecord?.filePath && (
+                <Button type="button" variant="outline" className="w-full justify-start" onClick={() => void handleOpenFile(documentRecord.filePath!, documentRecord.originalFilename || 'submitted document')}>
+                  <FileText className="mr-2 h-4 w-4 text-red-600" />
+                  {documentRecord.originalFilename || 'Submitted document'}
+                </Button>
+              )}
+              {documentRecord?.attachments?.map((attachment) => (
+                <Button key={attachment.id} type="button" variant="outline" className="w-full justify-start" onClick={() => void handleOpenFile(attachment.filePath, attachment.originalFilename)}>
+                  <FileText className="mr-2 h-4 w-4 text-red-600" />
+                  {attachment.originalFilename}
+                </Button>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {isFacultyUser && facultyProgress && (

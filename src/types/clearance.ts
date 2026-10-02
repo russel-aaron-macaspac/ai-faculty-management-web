@@ -15,8 +15,18 @@ export interface Clearance {
   documentType?: string;
   officeCategory?: string;
   officeId?: string;
+  originalFilename?: string;
   filePath?: string;
+  attachments?: ClearanceAttachment[];
   notes?: ClearanceNote[];
+}
+
+export interface ClearanceAttachment {
+  id: string;
+  clearanceId: string;
+  originalFilename: string;
+  filePath: string;
+  uploadedAt?: string;
 }
 
 export interface ClearanceNote {
