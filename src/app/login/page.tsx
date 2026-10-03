@@ -64,8 +64,9 @@ export default function LoginPage() {
     try {
       const response = await authService.login(values.email, values.password);
       localStorage.setItem('user', JSON.stringify(response.user));
-  toast({ title: 'Signed In', description: `Welcome back, ${response.user.full_name}`, type: 'success' });
-      router.push(getDashboardPathForRole(response.user.role));
+      const dashboardPath = getDashboardPathForRole(response.user.role);
+      toast({ title: 'Signed In', description: `Welcome back, ${response.user.full_name}`, type: 'success' });
+      router.replace(dashboardPath);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '';
       let nextError = 'Sign-in failed. Please try again.';

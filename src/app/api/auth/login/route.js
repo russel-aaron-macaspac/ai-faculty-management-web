@@ -44,17 +44,24 @@ export async function POST(request) {
       .update({ last_login: new Date().toISOString() })
       .eq("user_id", user.user_id);
 
-    // If the DB role is 'staff' but the email belongs to a configured approval officer,
-    // map the frontend role to the approval officer id so the UI shows approval features.
+    // Approval officers are stored as staff (or an office-specific role) in the
+    // database. Resolve configured officer emails first so the frontend always
+    // receives the role id used by navigation and redirects.
     let frontendRole = user.role;
-    if (user.role === 'staff' && user.email) {
+    if (user.email) {
       const match = APPROVAL_OFFICERS.find((o) => o.email.toLowerCase() === String(user.email).toLowerCase());
       if (match) {
         frontendRole = match.id;
       }
     }
+    if (frontendRole === 'accounting' || frontendRole === 'accounting_office') {
+      frontendRole = 'account';
+    }
 
     const fullName = [user.first_name, user.middle_name, user.last_name].filter(Boolean).join(' ');
+    const { data: department } = user.department_id
+      ? await supabase.from('departments').select('name').eq('department_id', user.department_id).maybeSingle()
+      : { data: null };
 
     return NextResponse.json({
       user: {
@@ -67,6 +74,7 @@ export async function POST(request) {
         phone: user.phone_number || null,
         address: user.address || null,
         statusOfAppointment: user.status_of_appointment || null,
+        department: department?.name || null,
         department_id: user.department_id ?? null,
       },
     });

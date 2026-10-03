@@ -15,4 +15,6 @@ export type StoredUser = {
   role?: string;
   name?: string;
   full_name?: string;
+  statusOfAppointment?: 'full-time' | 'part-time' | null;
+  department?: string | null;
 };

@@ -8,7 +8,7 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from("users")
-      .select("user_id, first_name, middle_name, last_name, email, role, status, status_of_appointment")
+      .select("user_id, first_name, middle_name, last_name, email, role, status, status_of_appointment, department_id")
       .in("role", ["faculty", "program_chair"])
       .eq("status", "active")
       .order("last_name", { ascending: true })
@@ -19,11 +19,24 @@ export async function GET() {
       return NextResponse.json({ error: "Failed to fetch faculty users" }, { status: 500 });
     }
 
+    const departmentIds = [...new Set((data || []).map((user) => user.department_id).filter((id) => id != null))];
+    const { data: departments, error: departmentsError } = departmentIds.length > 0
+      ? await supabase.from("departments").select("department_id, name").in("department_id", departmentIds)
+      : { data: [], error: null };
+
+    if (departmentsError) {
+      console.error("[FACULTY DEPARTMENTS GET ERROR]", departmentsError);
+      return NextResponse.json({ error: "Failed to fetch faculty departments" }, { status: 500 });
+    }
+
+    const departmentNames = new Map((departments || []).map((department) => [String(department.department_id), department.name]));
+
     const formatted = (data || []).map((u) => ({
       id: String(u.user_id),
       name: [u.first_name, u.middle_name, u.last_name].filter(Boolean).join(" "),
       email: u.email || null,
       statusOfAppointment: u.status_of_appointment || null,
+      department: departmentNames.get(String(u.department_id)) || null,
     }));
 
     return NextResponse.json({ data: formatted });

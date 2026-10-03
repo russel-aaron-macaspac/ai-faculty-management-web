@@ -214,6 +214,10 @@ div.overflow-x-auto.rounded-lg.border-sky-300 tbody td > div > div > div:nth-chi
     background: #fff !important;
   }
 
+  .printable-clearance {
+    display: block !important;
+  }
+
 }
 
 ::selection {
