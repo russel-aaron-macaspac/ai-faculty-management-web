@@ -176,6 +176,15 @@ export async function DELETE(request, { params }) {
         .remove([existing.file_path]);
     }
 
+    const { data: attachments } = await supabase
+      .from("clearance_attachments")
+      .select("file_path")
+      .eq("clearance_id", id);
+    const attachmentPaths = (attachments || []).map((attachment) => attachment.file_path).filter(Boolean);
+    if (attachmentPaths.length > 0) {
+      await supabase.storage.from("clearance-files").remove(attachmentPaths);
+    }
+
     const { error: deleteError } = await supabase
       .from("clearances")
       .delete()

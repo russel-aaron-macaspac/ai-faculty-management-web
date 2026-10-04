@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { clearanceService } from '@/services/clearanceService';
 import { Clearance } from '@/types/clearance';
 import { Faculty } from '@/types/faculty';
@@ -11,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
-import { UploadCloud, CheckCircle2, AlertTriangle, FileText, Loader2, Search, Check, X, Clock, Users, ClipboardCheck, ShieldCheck, MessageSquare, Trash2 } from 'lucide-react';
+import { UploadCloud, CheckCircle2, AlertTriangle, FileText, Loader2, Search, Check, X, Clock, Users, ClipboardCheck, ShieldCheck, MessageSquare, Trash2, Printer } from 'lucide-react';
 import { FACULTY_REQUIRED_OFFICES } from '@/lib/clearanceOffices';
 import { isApprovalOfficer, getClearancePageInfo, isFacultyLikeRole } from '@/lib/roleConfig';
 import { StoredUser, normalize } from '@/lib/stringUtils';
@@ -62,6 +63,14 @@ export default function ClearancePage() {
   const [docName, setDocName] = useState('Safety Training Certificate');
   const [uploadError, setUploadError] = useState('');
   const [remarkRecord, setRemarkRecord] = useState<Clearance | null>(null);
+  const [documentRecord, setDocumentRecord] = useState<Clearance | null>(null);
+  const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false);
+  const [academicYear] = useState(() => {
+    const today = new Date();
+    const startYear = today.getMonth() >= 5 ? today.getFullYear() : today.getFullYear() - 1;
+    return `${startYear}-${startYear + 1}`;
+  });
+  const [semester] = useState(() => (new Date().getMonth() >= 5 ? '1st Semester' : '2nd Semester'));
   const [remarkText, setRemarkText] = useState('');
   const [remarkSaving, setRemarkSaving] = useState(false);
 
@@ -131,9 +140,9 @@ export default function ClearancePage() {
   }, []);
 
   useEffect(() => {
-    if (currentUser?.role !== 'admin' && !canReviewFaculty) return;
+    if (!currentUser || (currentUser.role !== 'admin' && !canReviewFaculty && !isFacultyUser)) return;
     void facultyService.getFaculty().then(setFacultyMembers);
-  }, [currentUser, canReviewFaculty]);
+  }, [currentUser, canReviewFaculty, isFacultyUser]);
 
   useEffect(() => {
     const raw = localStorage.getItem('user');
@@ -187,25 +196,22 @@ export default function ClearancePage() {
     if (!currentUser) return;
 
     const employeeId = currentUser.supabase_id ?? '';
-    if (!employeeId) {
-      toast({ title: 'Submission Failed', description: 'Please sign in again.', type: 'error' });
-      return;
-    }
-
     const officeId = officeIdMap.get(normalize(officeName));
-    if (!officeId) {
-      toast({ title: 'Submission Failed', description: 'Office not found.', type: 'error' });
+    if (!employeeId || !officeId) {
+      toast({ title: 'Submission Failed', description: 'Please sign in again or select a valid office.', type: 'error' });
       return;
     }
 
     setSubmittingOfficeId(officeId);
     try {
-      await clearanceService.uploadDocument(employeeId, Number(officeId), officeName, undefined, { name: currentUser.name ?? currentUser.full_name, role: currentUser.role });
+      await clearanceService.uploadDocument(employeeId, Number(officeId), officeName, undefined, {
+        name: currentUser.name ?? currentUser.full_name,
+        role: currentUser.role,
+      });
       await loadData(currentUser);
       toast({ title: 'Clearance Submitted', description: `${officeName} has been submitted for review.`, type: 'success' });
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Submission failed. Please try again.';
-      toast({ title: 'Submission Failed', description: msg, type: 'error' });
+      toast({ title: 'Submission Failed', description: error instanceof Error ? error.message : 'Submission failed. Please try again.', type: 'error' });
     } finally {
       setSubmittingOfficeId(null);
     }
@@ -470,23 +476,41 @@ export default function ClearancePage() {
     }
   };
 
+  const handleOpenFile = async (filePath: string, filename: string) => {
+    try {
+      const url = await clearanceService.getFileUrl(filePath);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      toast({ title: 'Document unavailable', description: `${filename}: ${error instanceof Error ? error.message : 'Could not open the document.'}`, type: 'error' });
+    }
+  };
+
+  const handlePrintClearance = () => {
+    setIsPrintPreviewOpen(true);
+  };
+
+  const handlePrintConfirmed = () => {
+    setIsPrintPreviewOpen(false);
+    window.print();
+  };
+
   const { title: pageTitle, subtitle: pageSubtitle } = getClearancePageInfo(currentUser?.role);
+  const facultyDepartment = currentUser?.department || facultyMembers.find((member) => String(member.id) === String(currentUser?.id))?.department || 'Department not assigned';
 
   const getStatusClass = (status: Clearance['status']) => {
     if (status === 'approved') return 'bg-emerald-100 text-emerald-800';
-    if (status === 'submitted') return 'bg-red-100 text-red-800';
+    if (status === 'pending' || status === 'submitted') return 'bg-amber-100 text-amber-800';
     if (status === 'rejected') return 'bg-rose-100 text-rose-800';
     return 'bg-slate-100 text-slate-800';
   };
 
+  const getStatusLabel = (status: Clearance['status']) => status === 'submitted' ? 'pending' : status;
+
   const getFacultySubmitLabel = (record: Clearance & { _isRequiredPlaceholder?: boolean }) => {
-    if (!record._isRequiredPlaceholder && record.status !== 'rejected') {
-      return 'Submitted';
-    }
     if (record.status === 'rejected') {
-      return 'Resubmit Clearance';
+      return 'Re-request';
     }
-    return 'Submit Clearance';
+    return record._isRequiredPlaceholder ? 'Request' : 'Requested';
   };
 
   let tableRows: React.ReactNode;
@@ -575,6 +599,12 @@ export default function ClearancePage() {
               <AlertTriangle className="h-3 w-3" /> Reason: {record.validationWarning}
             </div>
           )}
+          {(record.filePath || record.attachments?.length) && (
+            <Button type="button" variant="link" className="h-auto px-0 text-xs text-red-700" onClick={() => setDocumentRecord(record)}>
+              <FileText className="mr-1 h-3.5 w-3.5" />
+              View documents ({(record.filePath ? 1 : 0) + (record.attachments?.length ?? 0)})
+            </Button>
+          )}
           {record.notes?.map((note) => (
             <div key={note.id} className="mt-2 flex items-start justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-900">
               <span><span className="font-semibold">Requirement reminder:</span> {note.content}</span>
@@ -590,25 +620,33 @@ export default function ClearancePage() {
         <TableCell>
           <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getStatusClass(record.status)}`}>
             {record.status === 'approved' && <CheckCircle2 className="h-3 w-3" />}
-            {record.status}
+            {getStatusLabel(record.status)}
           </span>
         </TableCell>
         {showSubmitColumn && (
           <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-            <Button
-              type="button"
-              size="sm"
-              className="bg-red-600 hover:bg-red-700"
-              disabled={!currentUser?.supabase_id || actionLoadingId === record.id || submittingOfficeId === officeIdMap.get(normalize(record.requiredDocument)) || (!record._isRequiredPlaceholder && record.status !== 'rejected')}
-              onClick={() => void handleFacultySubmit(record.requiredDocument)}
-            >
-              {submittingOfficeId === officeIdMap.get(normalize(record.requiredDocument)) ? (
-                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <UploadCloud className="mr-1 h-3.5 w-3.5" />
-              )}
-              {getFacultySubmitLabel(record)}
-            </Button>
+            {record.status !== 'approved' && (() => {
+              const officeId = officeIdMap.get(normalize(record.requiredDocument));
+              if (!officeId) return null;
+              return (
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={record.status === 'rejected' || record._isRequiredPlaceholder ? 'default' : 'secondary'}
+                    className={record.status === 'rejected' || record._isRequiredPlaceholder ? '' : 'bg-slate-200 text-slate-500 hover:bg-slate-200 hover:text-slate-500'}
+                    disabled={!currentUser?.supabase_id || submittingOfficeId === officeId || (!record._isRequiredPlaceholder && record.status !== 'rejected')}
+                    onClick={() => void handleFacultySubmit(record.requiredDocument)}
+                  >
+                    {submittingOfficeId === officeId ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <UploadCloud className="mr-1 h-3.5 w-3.5" />}
+                    {getFacultySubmitLabel(record)}
+                  </Button>
+                  <Link href={`/clearance/upload/${officeId}`} className="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50">
+                    {record.filePath ? 'Manage file' : 'Upload file'}
+                  </Link>
+                </div>
+              );
+            })()}
           </TableCell>
         )}
         {showRemarkColumn && (
@@ -665,7 +703,8 @@ export default function ClearancePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <>
+    <div className="space-y-6 print:hidden">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-2">
           <h1 className="text-3xl font-semibold tracking-tight text-slate-900">{pageTitle}</h1>
@@ -738,15 +777,109 @@ export default function ClearancePage() {
             </DialogContent>
           </Dialog>
         )}
+
+        <Dialog open={Boolean(documentRecord)} onOpenChange={(open) => !open && setDocumentRecord(null)}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Uploaded documents for {documentRecord?.employeeName}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-2 pt-4">
+              {documentRecord?.filePath && (
+                <Button type="button" variant="outline" className="w-full justify-start" onClick={() => void handleOpenFile(documentRecord.filePath!, documentRecord.originalFilename || 'submitted document')}>
+                  <FileText className="mr-2 h-4 w-4 text-red-600" />
+                  {documentRecord.originalFilename || 'Submitted document'}
+                </Button>
+              )}
+              {documentRecord?.attachments?.map((attachment) => (
+                <Button key={attachment.id} type="button" variant="outline" className="w-full justify-start" onClick={() => void handleOpenFile(attachment.filePath, attachment.originalFilename)}>
+                  <FileText className="mr-2 h-4 w-4 text-red-600" />
+                  {attachment.originalFilename}
+                </Button>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isPrintPreviewOpen} onOpenChange={setIsPrintPreviewOpen}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
+            <DialogHeader>
+              <DialogTitle>Academic clearance preview</DialogTitle>
+              <p className="text-sm text-slate-500">Review every office before printing the clearance form for Human Resources.</p>
+            </DialogHeader>
+            <div className="border border-slate-400 bg-white p-5 text-slate-900 shadow-sm sm:p-8">
+              <div className="border-b-2 border-slate-700 pb-4 text-center">
+                <p className="text-lg font-bold tracking-wide">ST. DOMINIC COLLEGE OF ASIA</p>
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-600">Human Resources Office</p>
+                <h2 className="mt-4 text-xl font-bold">ACADEMIC CLEARANCE FORM</h2>
+                <p className="mt-1 text-sm text-slate-600">Clearance status: {facultyProgress?.completion === 100 ? 'Complete' : 'Incomplete'}</p>
+              </div>
+              <div className="mt-5 grid gap-x-8 gap-y-2 border-b border-slate-300 pb-4 text-sm sm:grid-cols-2">
+                <p><span className="font-semibold">Name:</span> {currentUser?.full_name || currentUser?.name || 'Faculty User'}</p>
+                <p><span className="font-semibold">Date:</span> {new Date().toLocaleDateString()}</p>
+                <p><span className="font-semibold">Position:</span> Faculty</p>
+                <p><span className="font-semibold">Department:</span> {facultyDepartment}</p>
+                <p><span className="font-semibold">Academic year:</span> {academicYear}</p>
+                <p><span className="font-semibold">Semester:</span> {semester}</p>
+                <p className="sm:col-span-2"><span className="font-semibold">Status:</span> [ {currentUser?.statusOfAppointment === 'full-time' ? 'x' : ' '} ] Full-Time&nbsp;&nbsp;&nbsp;[ {currentUser?.statusOfAppointment === 'part-time' ? 'x' : ' '} ] Part-Time</p>
+              </div>
+              <p className="my-5 text-center text-sm text-slate-700">This form shows the approval status of each office requirement.</p>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[680px] border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-slate-200 text-left">
+                      <th className="border border-slate-400 px-3 py-2">Office / Department</th>
+                      <th className="border border-slate-400 px-3 py-2">Status</th>
+                      <th className="border border-slate-400 px-3 py-2">Date</th>
+                      <th className="border border-slate-400 px-3 py-2">Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {facultyStepRecords.map((record) => (
+                      <tr key={record.id}>
+                        <td className="border border-slate-400 px-3 py-2 font-medium">{record.requiredDocument}</td>
+                        <td className={`border border-slate-400 px-3 py-2 font-semibold ${record.status === 'approved' ? 'text-emerald-700' : record.status === 'rejected' ? 'text-rose-700' : 'text-amber-700'}`}>
+                          {record._isRequiredPlaceholder ? 'Not submitted' : getStatusLabel(record.status)}
+                        </td>
+                        <td className="border border-slate-400 px-3 py-2">{record.reviewedAt || record.submissionDate || '-'}</td>
+                        <td className="border border-slate-400 px-3 py-2">{record.rejectionReason || (record.status === 'approved' ? 'Approved' : 'Follow up with this office')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-300 pt-4 text-sm">
+                <p><span className="font-semibold">Approved:</span> {facultyProgress?.approved ?? 0} of {facultyProgress?.total ?? 0}</p>
+                <p className={facultyProgress?.completion === 100 ? 'font-semibold text-emerald-700' : 'font-semibold text-amber-700'}>
+                  {facultyProgress?.completion === 100 ? 'Ready for HR submission' : 'Complete the missing office approvals before printing'}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setIsPrintPreviewOpen(false)}>Close preview</Button>
+              <Button type="button" onClick={handlePrintConfirmed} disabled={facultyProgress?.completion !== 100} className="bg-slate-900 text-white hover:bg-slate-700">
+                <Printer className="mr-2 h-4 w-4" />
+                Print form
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {isFacultyUser && facultyProgress && (
         <Card className="border-slate-200 shadow-sm">
           <CardHeader className="space-y-2">
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-amber-700">Current stage</p>
-              <p className="mt-1 text-sm font-semibold text-amber-900">{facultyProgress.stage}</p>
-              <p className="mt-1 text-sm text-amber-900">{facultyProgress.nextStep}</p>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-amber-700">Current stage</p>
+                  <p className="mt-1 text-sm font-semibold text-amber-900">{facultyProgress.stage}</p>
+                  <p className="mt-1 text-sm text-amber-900">{facultyProgress.nextStep}</p>
+                </div>
+                <Button type="button" onClick={handlePrintClearance} className="bg-slate-900 text-white hover:bg-slate-700">
+                  <Printer className="mr-2 h-4 w-4" />
+                  Preview clearance
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -844,5 +977,52 @@ export default function ClearancePage() {
         </div>
       </div>
     </div>
+    {isFacultyUser && (
+      <section className="printable-clearance hidden print:block" aria-label="Printable faculty clearance">
+        <div className="mx-auto max-w-4xl text-slate-900">
+          <div className="border-b-2 border-slate-900 pb-4 text-center">
+            <p className="text-lg font-bold tracking-wide">ST. DOMINIC COLLEGE OF ASIA</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-600">Human Resources Office</p>
+            <h1 className="mt-4 text-2xl font-bold">ACADEMIC CLEARANCE FORM</h1>
+          </div>
+          <div className="mt-6 grid grid-cols-2 gap-4 border-b border-slate-300 pb-5 text-sm">
+            <p><span className="font-semibold">Faculty name:</span> {currentUser?.full_name || currentUser?.name || 'Faculty User'}</p>
+            <p><span className="font-semibold">Printed:</span> {new Date().toLocaleDateString()}</p>
+            <p><span className="font-semibold">Position:</span> Faculty</p>
+            <p><span className="font-semibold">Department:</span> {facultyDepartment}</p>
+            <p><span className="font-semibold">Requirements approved:</span> {facultyProgress?.approved ?? 0} of {facultyProgress?.total ?? 0}</p>
+            <p><span className="font-semibold">Academic year:</span> {academicYear}</p>
+            <p><span className="font-semibold">Semester:</span> {semester}</p>
+            <p className="col-span-2"><span className="font-semibold">Status:</span> [ {currentUser?.statusOfAppointment === 'full-time' ? 'x' : ' '} ] Full-Time&nbsp;&nbsp;&nbsp;[ {currentUser?.statusOfAppointment === 'part-time' ? 'x' : ' '} ] Part-Time</p>
+          </div>
+          <p className="my-5 text-center text-sm text-slate-700">This is to certify that the faculty member has completed the required office clearances.</p>
+          <table className="mt-6 w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b-2 border-slate-900 text-left">
+                <th className="py-2 pr-4">Office / Department</th>
+                <th className="py-2 pr-4">Signature</th>
+                <th className="py-2 pr-4">Date</th>
+                <th className="py-2 text-right">Remarks</th>
+              </tr>
+            </thead>
+            <tbody>
+              {facultyStepRecords.map((record) => (
+                <tr key={record.id} className="border-b border-slate-300">
+                  <td className="py-3 pr-4">{record.requiredDocument}</td>
+                  <td className="py-3 pr-4">&nbsp;</td>
+                  <td className="py-3 pr-4">{record.reviewedAt || record.submissionDate || 'N/A'}</td>
+                  <td className="py-3 text-right font-semibold uppercase">{record.status === 'approved' ? 'Approved' : getStatusLabel(record.status)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="mt-16 grid grid-cols-2 gap-16 text-center text-sm">
+            <div className="border-t border-slate-900 pt-2">Faculty signature</div>
+            <div className="border-t border-slate-900 pt-2">HR received by / date</div>
+          </div>
+        </div>
+      </section>
+    )}
+    </>
   );
 }

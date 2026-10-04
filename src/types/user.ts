@@ -9,6 +9,7 @@ export interface User {
   full_name?: string;
   role: Role;
   statusOfAppointment?: 'full-time' | 'part-time' | null;
+  department?: string | null;
   department_id?: number | null;
   avatarUrl?: string;
 }

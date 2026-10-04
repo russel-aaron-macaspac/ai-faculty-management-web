@@ -165,10 +165,10 @@ export const getDashboardPathForRole = (role: string | undefined): string => {
     return '/dashboard/faculty';
   }
 
-  const officer = role ? getApprovalOfficerConfig(role) : undefined;
+  const normalizedRole = role === 'accounting' || role === 'accounting_office' ? 'account' : role;
+  const officer = normalizedRole ? getApprovalOfficerConfig(normalizedRole) : undefined;
   if (officer) {
-  // return officer-specific dashboard path, e.g. /dashboard/approval/dlrc
-  return `${officer.dashboardPath}/${officer.id}`;
+    return `${officer.dashboardPath}/${officer.id}`;
   }
 
   return '/login';

@@ -12,7 +12,25 @@ import { getApprovalOfficerConfig } from '@/lib/roleConfig';
 
 export default function ApprovalDashboardPage() {
   return (
-    <RouteGuard requiredRoles={['dlrc', 'pmo', 'laboratory', 'ict', 'admin']} fallbackPath="/dashboard/faculty">
+    <RouteGuard
+      requiredRoles={[
+        'dlrc',
+        'pmo',
+        'laboratory',
+        'ict',
+        'ceso',
+        'programchair',
+        'dean',
+        'registrar',
+        'ovprel',
+        'ovpaa',
+        'account',
+        'treasury',
+        'hro',
+        'admin',
+      ]}
+      fallbackPath="/dashboard/faculty"
+    >
       <ApprovalDashboardContent />
     </RouteGuard>
   );

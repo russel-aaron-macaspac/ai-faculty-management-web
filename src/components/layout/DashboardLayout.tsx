@@ -15,14 +15,27 @@ export function DashboardLayout({ children }: Readonly<{ children: React.ReactNo
   const router = useRouter();
 
   useEffect(() => {
-    // Check auth on layout load
     const userStr = localStorage.getItem('user');
-    if (userStr) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setUser(JSON.parse(userStr));
-    } else {
+
+    if (!userStr) {
+      router.push('/login');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const parsedUser = JSON.parse(userStr) as User;
+      if (!parsedUser || typeof parsedUser !== 'object' || !parsedUser.role) {
+        throw new Error('Stored user session is missing a role');
+      }
+
+      setUser(parsedUser);
+    } catch (error) {
+      console.error('Invalid stored user session', error);
+      localStorage.removeItem('user');
       router.push('/login');
     }
+
     setLoading(false);
   }, [router]);
 
