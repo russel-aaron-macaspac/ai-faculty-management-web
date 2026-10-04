@@ -1,5 +1,6 @@
 'use client';
 
+import { RouteGuard } from '@/components/RouteGuard';
 import { useEffect, useMemo, useState } from 'react';
 import { facultyService } from '@/services/facultyService';
 import { Faculty } from '@/types/faculty';
@@ -7,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -47,6 +47,14 @@ type SortDirection = 'asc' | 'desc';
 const PAGE_SIZE = 8;
 
 export default function FacultyPage() {
+  return (
+    <RouteGuard requiredRoles={['hro', 'admin']} fallbackPath="/dashboard/faculty">
+      <FacultyPageContent />
+    </RouteGuard>
+  );
+}
+
+function FacultyPageContent() {
   const [faculty, setFaculty] = useState<Faculty[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');

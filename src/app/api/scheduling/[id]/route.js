@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { NextResponse } from "next/server";
+import { detectScheduleConflicts, generateConflictSuggestions } from "@/lib/scheduling/conflictDetection";
 import { getInitialStatusForCreator } from "@/lib/scheduling/approvalWorkflow";
 import { getDepartmentScope, hasDepartmentAccess } from "@/lib/scheduling/departmentAccess";
 
@@ -115,6 +116,48 @@ export async function PUT(request, { params }) {
     const storedRoomId = isOnlineRoom(selectedRoom.name)
       ? await createVirtualRoom(supabase, { name: selectedRoom.name, capacity: classSize })
       : roomId;
+
+    let conflictResult;
+    try {
+      conflictResult = await detectScheduleConflicts(supabase, {
+        userId: facultyId,
+        roomId,
+        day,
+        startTime: normalizedStart,
+        endTime: normalizedEnd,
+        excludeScheduleId: id,
+      });
+    } catch (conflictError) {
+      console.error("[SCHEDULING UPDATE CONFLICT ERROR]", conflictError);
+      return NextResponse.json(
+        { error: "Conflict detection failed", details: String(conflictError) },
+        { status: 500 }
+      );
+    }
+
+    if (conflictResult.hasConflict) {
+      let suggestions = { suggested_rooms: [], suggested_time_slots: [] };
+      try {
+        suggestions = await generateConflictSuggestions(supabase, {
+          userId: facultyId,
+          day,
+          startTime: normalizedStart,
+          endTime: normalizedEnd,
+        });
+      } catch (suggestionError) {
+        console.error("[SCHEDULING UPDATE SUGGESTIONS ERROR]", suggestionError);
+      }
+
+      return NextResponse.json(
+        {
+          error: "Schedule conflict detected",
+          conflict_type: conflictResult.conflict_type,
+          conflicts: conflictResult.conflicts,
+          suggestions,
+        },
+        { status: 409 }
+      );
+    }
 
     const updatePayload = {
       faculty_id: facultyId,

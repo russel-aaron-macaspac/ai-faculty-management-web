@@ -7,10 +7,10 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2 } from 'lucide-react';
+import { CalendarDays, Loader2 } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
 import { Schedule } from '@/types/schedule';
-import { formatTimeToTwelveHour } from '@/lib/timeUtils';
+import { formatTimeToTwelveHour, parseTimeToMinutes } from '@/lib/timeUtils';
 
 const getRoomDisplayName = (roomName?: string | null) => {
   if (/\b(tbd|tba)\b/i.test(roomName || '')) return 'TBA';
@@ -29,6 +29,24 @@ type LocalUser = {
 };
 type DeliveryMode = 'on-campus' | 'online';
 type AvailabilityRow = { day: string; startTime: string; endTime: string; deliveryMode: DeliveryMode };
+
+const FACULTY_BOARD_START = 7 * 60;
+const FACULTY_BOARD_END = 20 * 60;
+const FACULTY_BOARD_SLOTS = Array.from(
+  { length: (FACULTY_BOARD_END - FACULTY_BOARD_START) / 30 },
+  (_, index) => FACULTY_BOARD_START + index * 30
+);
+
+const formatStatus = (status: Schedule['status']) =>
+  status
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+
+const formatBoardTime = (minutes: number) => {
+  const hours = Math.floor(minutes / 60);
+  return `${hours % 12 || 12}:${String(minutes % 60).padStart(2, '0')} ${hours >= 12 ? 'PM' : 'AM'}`;
+};
 
 export default function SchedulesPage() {
   return (
@@ -108,39 +126,71 @@ function SchedulesContent() {
     scheduleContent = <div className="py-8 text-center text-slate-500">No schedules found.</div>;
   } else {
     scheduleContent = (
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Faculty</TableHead>
-            <TableHead>Subject</TableHead>
-            <TableHead>Room</TableHead>
-            <TableHead>Day</TableHead>
-            <TableHead>Time</TableHead>
-            <TableHead>Status</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {visibleSchedules.map((item) => (
-            <TableRow key={item.id}>
-              <TableCell>{item.facultyName}</TableCell>
-              <TableCell>
-                {item.subject?.code} - {item.subject?.name}
-                {item.section ? <span className="ml-2 text-xs text-slate-500">Section {item.section}</span> : null}
-              </TableCell>
-              <TableCell>{getRoomDisplayName(item.room?.name)}</TableCell>
-              <TableCell>{item.day}</TableCell>
-              <TableCell>
-                {formatTimeToTwelveHour(item.startTime)} - {formatTimeToTwelveHour(item.endTime)}
-              </TableCell>
-              <TableCell>
-                <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
-                  {item.status}
-                </span>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <div className="overflow-x-auto rounded-lg border border-slate-300 bg-white shadow-sm">
+        <table className="w-full min-w-[960px] table-fixed border-collapse text-xs">
+          <thead>
+            <tr className="bg-slate-100 text-slate-800">
+              <th className="w-32 border border-slate-300 px-2 py-3 text-center font-bold uppercase">Time</th>
+              {DAYS.map((day) => (
+                <th key={day} className="border border-slate-300 px-2 py-3 text-center font-bold uppercase">
+                  {day}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {FACULTY_BOARD_SLOTS.map((slot) => (
+              <tr key={slot} className="h-10">
+                <th className="border border-slate-300 bg-slate-50 px-2 text-center font-semibold text-slate-600">
+                  {formatBoardTime(slot)}
+                </th>
+                {DAYS.map((day) => {
+                  const schedule = visibleSchedules.find(
+                    (candidate) => candidate.day === day && parseTimeToMinutes(candidate.startTime) === slot
+                  );
+                  const active = visibleSchedules.some(
+                    (candidate) =>
+                      candidate.day === day &&
+                      (parseTimeToMinutes(candidate.startTime) ?? 0) < slot &&
+                      (parseTimeToMinutes(candidate.endTime) ?? 0) > slot
+                  );
+
+                  if (active && !schedule) return null;
+                  if (!schedule) {
+                    return <td key={`${day}-${slot}`} className="border border-slate-300 bg-white" />;
+                  }
+
+                  const start = parseTimeToMinutes(schedule.startTime) ?? slot;
+                  const end = parseTimeToMinutes(schedule.endTime) ?? start + 30;
+                  const span = Math.max(1, Math.ceil((end - start) / 30));
+
+                  return (
+                    <td
+                      key={`${day}-${slot}`}
+                      rowSpan={span}
+                      style={{ height: `${span * 40}px` }}
+                      className="border border-slate-300 px-2 py-0 align-top text-slate-900"
+                    >
+                      <div
+                        style={{ minHeight: `${span * 40}px` }}
+                        className="flex h-full flex-col gap-1 rounded-lg border border-slate-700/40 bg-slate-300 p-2.5 text-left shadow-sm"
+                      >
+                        <div className="break-words font-semibold leading-tight">{schedule.subject?.code || 'Assigned class'}</div>
+                        <div className="break-words leading-tight">{schedule.subject?.name || 'Subject details unavailable'}</div>
+                        <div className="break-words font-medium">{schedule.section || 'No section'}</div>
+                        <div className="break-words text-[11px] text-slate-700">
+                          {getRoomDisplayName(schedule.room?.name)} · {formatTimeToTwelveHour(schedule.startTime)} - {formatTimeToTwelveHour(schedule.endTime)}
+                        </div>
+                        <div className="break-words text-[10px] font-medium text-slate-600">{formatStatus(schedule.status)}</div>
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     );
   }
 
@@ -231,7 +281,10 @@ function SchedulesContent() {
 
       <Card>
         <CardHeader>
-          <CardTitle>{isFacultyLikeRole(user?.role) ? 'Faculty Schedule' : 'Schedule Overview'}</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <CalendarDays className="h-5 w-5 text-[#D4A017]" />
+            {isFacultyLikeRole(user?.role) ? 'Faculty Timetable' : 'Schedule Overview'}
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {scheduleContent}

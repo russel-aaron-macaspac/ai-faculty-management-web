@@ -11,14 +11,20 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { CheckCircle2, Loader2, XCircle, ChevronDown, ChevronUp, Pencil, Trash2, Plus } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
 import { Schedule } from '@/types/schedule';
-import { formatTimeToTwelveHour } from '@/lib/timeUtils';
+import { formatTimeToTwelveHour, parseTimeToMinutes } from '@/lib/timeUtils';
 import { isFacultyLikeRole } from '@/lib/roleConfig';
 import { toast } from '@/lib/toast';
 import { FacultyLoadGrid } from '@/components/Facultyloadgrid';
 import { AIScheduleGenerator } from '@/components/AIScheduleGenerator';
 
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const APPROVAL_ROLES = new Set(['dean', 'ovpaa', 'registrar', 'hro']);
+const MASTER_BOARD_START = 7 * 60;
+const MASTER_BOARD_END = 20 * 60;
+const MASTER_BOARD_SLOTS = Array.from(
+  { length: (MASTER_BOARD_END - MASTER_BOARD_START) / 30 },
+  (_, index) => MASTER_BOARD_START + index * 30
+);
 
 const getRoomDisplayName = (roomName?: string | null) => {
   if (/\b(tbd|tba)\b/i.test(roomName || '')) return 'TBA';
@@ -49,6 +55,25 @@ const getLoadType = (schedule: Schedule) => {
 const getClassType = (schedule: Schedule) => {
   const description = schedule.subject?.name?.toLowerCase() || '';
   return description.includes('(lab') || description.includes('laboratory') ? 'lab' : 'lec';
+};
+
+const formatBoardTime = (minutes: number) => {
+  const hours = Math.floor(minutes / 60);
+  return `${hours % 12 || 12}:${String(minutes % 60).padStart(2, '0')} ${hours >= 12 ? 'PM' : 'AM'}`;
+};
+
+const calculateEndTime = (startTime: string, hours: number | null | undefined, fallbackEndTime = '') => {
+  if (!startTime) return fallbackEndTime;
+  const [startHours, startMinutes] = startTime.split(':').map(Number);
+  const durationMinutes = Number(hours) * 60;
+  if (!Number.isFinite(startHours) || !Number.isFinite(startMinutes) || !Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+    return fallbackEndTime;
+  }
+
+  const totalMinutes = startHours * 60 + startMinutes + durationMinutes;
+  if (totalMinutes >= 24 * 60) return fallbackEndTime;
+
+  return `${String(Math.floor(totalMinutes / 60)).padStart(2, '0')}:${String(totalMinutes % 60).padStart(2, '0')}`;
 };
 
 type LocalUser = {
@@ -339,55 +364,93 @@ function ScheduleLoadingContent() {
 
   // Extract master schedule content to avoid nested ternary in JSX
   const renderLoadMatrix = (title: string, loadSchedules: Schedule[]) => (
-    <div className="overflow-x-auto px-4 pb-4">
+    <div className="px-4 pb-4">
       <div className="mb-2 border-b border-slate-200 pb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
         {title}
       </div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Code</TableHead>
-            <TableHead>Description</TableHead>
-            <TableHead>Time</TableHead>
-            <TableHead>Day/s</TableHead>
-            <TableHead>Section</TableHead>
-            <TableHead>Room</TableHead>
-            <TableHead>Units</TableHead>
-            <TableHead>Contact Hrs. Lec</TableHead>
-            <TableHead>Contact Hrs. Lab</TableHead>
-            <TableHead>Class Size</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {loadSchedules.map((item) => {
-            const classType = getClassType(item);
-            const contactHours = getContactHours(item.startTime, item.endTime) ?? '-';
-            return (
-              <TableRow key={item.id}>
-                <TableCell className="font-medium">{item.subject?.code || '-'}</TableCell>
-                <TableCell>{item.subject?.name || '-'}</TableCell>
-                <TableCell>{formatTimeToTwelveHour(item.startTime)} - {formatTimeToTwelveHour(item.endTime)}</TableCell>
-                <TableCell>{item.day || '-'}</TableCell>
-                <TableCell>{item.section || '-'}</TableCell>
-                <TableCell>{getRoomDisplayName(item.room?.name)}</TableCell>
-                <TableCell>{item.units ?? '-'}</TableCell>
-                <TableCell>{item.lectureContactHours ?? (classType === 'lec' ? contactHours : '-')}</TableCell>
-                <TableCell>{item.labContactHours ?? (classType === 'lab' ? contactHours : '-')}</TableCell>
-                <TableCell>{item.classSize ?? '-'}</TableCell>
-                <TableCell className="space-x-2 text-right">
-                  <Button type="button" size="sm" variant="outline" onClick={() => openEditScheduleDialog(item)} disabled={saving}>
-                    <Pencil className="mr-1 h-4 w-4" /> Edit
-                  </Button>
-                  <Button type="button" size="sm" variant="destructive" onClick={() => handleDeleteSchedule(item)} disabled={saving}>
-                    <Trash2 className="mr-1 h-4 w-4" /> Delete
-                  </Button>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+      {loadSchedules.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-slate-300 px-3 py-6 text-center text-sm text-slate-500">
+          No schedules in this load.
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-slate-300 bg-white shadow-sm">
+          <table className="w-full min-w-[960px] table-fixed border-collapse text-xs">
+            <thead>
+              <tr className="bg-slate-100 text-slate-800">
+                <th className="w-32 border border-slate-300 px-2 py-3 text-center font-bold uppercase">Time</th>
+                {DAYS.slice(0, 6).map((day) => (
+                  <th key={day} className="border border-slate-300 px-2 py-3 text-center font-bold uppercase">
+                    {day}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {MASTER_BOARD_SLOTS.map((slot) => (
+                <tr key={slot} className="h-10">
+                  <th className="border border-slate-300 bg-slate-50 px-2 text-center font-semibold text-slate-600">
+                    {formatBoardTime(slot)}
+                  </th>
+                  {DAYS.slice(0, 6).map((day) => {
+                    const schedule = loadSchedules.find(
+                      (candidate) => candidate.day === day && parseTimeToMinutes(candidate.startTime) === slot
+                    );
+                    const active = loadSchedules.some(
+                      (candidate) =>
+                        candidate.day === day &&
+                        (parseTimeToMinutes(candidate.startTime) ?? 0) < slot &&
+                        (parseTimeToMinutes(candidate.endTime) ?? 0) > slot
+                    );
+
+                    if (active && !schedule) return null;
+                    if (!schedule) {
+                      return <td key={`${day}-${slot}`} className="border border-slate-300 bg-white" />;
+                    }
+
+                    const classType = getClassType(schedule);
+                    const contactHours = getContactHours(schedule.startTime, schedule.endTime) ?? '-';
+                    const start = parseTimeToMinutes(schedule.startTime) ?? slot;
+                    const end = parseTimeToMinutes(schedule.endTime) ?? start + 30;
+                    const span = Math.max(1, Math.ceil((end - start) / 30));
+
+                    return (
+                      <td
+                        key={`${day}-${slot}`}
+                        rowSpan={span}
+                        style={{ height: `${span * 40}px` }}
+                        className="border border-slate-300 px-2 py-0 align-top text-slate-900"
+                      >
+                        <div
+                          style={{ minHeight: `${span * 40}px` }}
+                          className="flex h-full flex-col gap-1 rounded-lg border border-slate-700/40 bg-slate-300 p-2.5 text-left shadow-sm"
+                        >
+                          <div className="break-words font-semibold leading-tight">{schedule.subject?.code || '-'}</div>
+                          <div className="break-words leading-tight">{schedule.subject?.name || '-'}</div>
+                          <div className="break-words font-medium">{schedule.section || 'No section'}</div>
+                          <div className="break-words text-[11px] text-slate-700">
+                            {getRoomDisplayName(schedule.room?.name)} · {formatTimeToTwelveHour(schedule.startTime)} - {formatTimeToTwelveHour(schedule.endTime)}
+                          </div>
+                          <div className="break-words text-[10px] text-slate-600">
+                            {schedule.units ?? '-'} units · {classType === 'lec' ? 'Lec' : 'Lab'} {schedule.lectureContactHours ?? (classType === 'lec' ? contactHours : '-')} hrs · Class size {schedule.classSize ?? '-'}
+                          </div>
+                          <div className="mt-auto flex flex-wrap gap-1 pt-1">
+                            <Button type="button" size="sm" variant="outline" className="h-7 bg-white px-2 text-[11px]" onClick={() => openEditScheduleDialog(schedule)} disabled={saving}>
+                              <Pencil className="mr-1 h-3 w-3" /> Edit
+                            </Button>
+                            <Button type="button" size="sm" variant="destructive" className="h-7 px-2 text-[11px]" onClick={() => handleDeleteSchedule(schedule)} disabled={saving}>
+                              <Trash2 className="mr-1 h-3 w-3" /> Delete
+                            </Button>
+                          </div>
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 
@@ -546,6 +609,9 @@ function ScheduleLoadingContent() {
     const facultyId = String(item.facultyId ?? item.employeeId ?? '');
     const subjectId = String(item.subjectId ?? item.subject?.id ?? '');
     const roomId = String(item.roomId ?? item.room?.id ?? '');
+    const allocatedHours = meta.subjects.find((subject) => String(subject.id) === subjectId)?.hours;
+    const currentDurationHours = getContactHours(item.startTime, item.endTime);
+    const initialEndTime = calculateEndTime(item.startTime, allocatedHours ?? currentDurationHours, item.endTime || '');
 
     setEditSchedule({
       id: item.id,
@@ -558,7 +624,7 @@ function ScheduleLoadingContent() {
       roomName: item.room?.name || '',
       day: item.day || 'Monday',
       startTime: item.startTime || '',
-      endTime: item.endTime || '',
+      endTime: initialEndTime,
       loadType: item.loadType === 'overload' ? 'overload' : 'regular',
       units: item.units == null ? '' : String(item.units),
       lectureContactHours: item.lectureContactHours == null ? '' : String(item.lectureContactHours),
@@ -572,8 +638,8 @@ function ScheduleLoadingContent() {
   const handleUpdateSchedule = async () => {
     if (!user || !editSchedule) return;
 
-    if (!editSchedule.facultyId || !editSchedule.subjectCode.trim() || !editSchedule.subjectName.trim() || !editSchedule.roomName.trim() || !editSchedule.day || !editSchedule.startTime || !editSchedule.endTime) {
-      setEditError('Complete all schedule fields.');
+    if (!editSchedule.facultyId || !editSchedule.subjectId || !editSchedule.roomId || !editSchedule.day || !editSchedule.startTime || !editSchedule.endTime) {
+      setEditError('Choose a day and start time.');
       return;
     }
 
@@ -585,28 +651,13 @@ function ScheduleLoadingContent() {
     setEditError('');
     setSaving(true);
     try {
-      const existingSubject = meta.subjects.find(
-        (subject) => subject.code.toLowerCase() === editSchedule.subjectCode.trim().toLowerCase() && subject.name.toLowerCase() === editSchedule.subjectName.trim().toLowerCase()
-      );
-      const subjectId = existingSubject?.id ?? (await scheduleService.createSubject({
-        code: editSchedule.subjectCode.trim(),
-        name: editSchedule.subjectName.trim(),
-      })).data?.id;
-      const matchingRoom = meta.rooms.find((room) => room.name.trim().toLowerCase() === editSchedule.roomName.trim().toLowerCase());
-      if (!subjectId) {
-        throw new Error('Subject not found.');
-      }
-      if (!matchingRoom) {
-        throw new Error('Room not found.');
-      }
-
       await scheduleService.updateSchedule(editSchedule.id, {
         actorId: String(user.id),
         actorRole: user.role,
         facultyId: editSchedule.facultyId,
         section: editSchedule.section || undefined,
-        subjectId,
-        roomId: matchingRoom.id,
+        subjectId: editSchedule.subjectId,
+        roomId: editSchedule.roomId,
         day: editSchedule.day,
         startTime: editSchedule.startTime,
         endTime: editSchedule.endTime,
@@ -844,27 +895,28 @@ function ScheduleLoadingContent() {
 
                 <div className="space-y-1 md:col-span-2">
                   <div className="text-sm font-medium text-slate-700">Section</div>
-                  <Input className="h-10" value={editSchedule.section} onChange={(event) => setEditSchedule((prev) => (prev ? { ...prev, section: event.target.value } : prev))} />
+                  <Input className="h-10 bg-slate-50" value={editSchedule.section || 'No section'} readOnly />
                 </div>
 
                 <div className="space-y-1">
                   <div className="text-sm font-medium text-slate-700">Subject code</div>
-                  <Input className="h-10" value={editSchedule.subjectCode} onChange={(event) => setEditSchedule((prev) => (prev ? { ...prev, subjectCode: event.target.value } : prev))} />
+                  <Input className="h-10 bg-slate-50" value={editSchedule.subjectCode || '-'} readOnly />
                 </div>
 
                 <div className="space-y-1">
                   <div className="text-sm font-medium text-slate-700">Room</div>
                   <Input
-                    className="h-10"
                     placeholder="e.g. ComLab 1"
-                    value={editSchedule.roomName}
-                    onChange={(event) => setEditSchedule((prev) => (prev ? { ...prev, roomName: event.target.value } : prev))}
+                    value={editSchedule.roomName || '-'}
+                    readOnly
+                    aria-readonly="true"
+                    className="h-10 bg-slate-50"
                   />
                 </div>
 
                 <div className="space-y-1 md:col-span-2">
                   <div className="text-sm font-medium text-slate-700">Subject name</div>
-                  <Input className="h-10" value={editSchedule.subjectName} onChange={(event) => setEditSchedule((prev) => (prev ? { ...prev, subjectName: event.target.value } : prev))} />
+                  <Input className="h-10 bg-slate-50" value={editSchedule.subjectName || '-'} readOnly />
                 </div>
               </div>
 
@@ -886,11 +938,26 @@ function ScheduleLoadingContent() {
                 </div>
                 <div>
                   <div className="text-sm font-medium">Start Time</div>
-                  <Input type="time" value={editSchedule.startTime} onChange={(event) => setEditSchedule((prev) => (prev ? { ...prev, startTime: event.target.value } : prev))} />
+                  <Input
+                    type="time"
+                    value={editSchedule.startTime}
+                    onChange={(event) =>
+                      setEditSchedule((prev) => {
+                        if (!prev) return prev;
+                        const subjectHours = meta.subjects.find((subject) => String(subject.id) === prev.subjectId)?.hours;
+                        const currentDurationHours = getContactHours(prev.startTime, prev.endTime);
+                        return {
+                          ...prev,
+                          startTime: event.target.value,
+                          endTime: calculateEndTime(event.target.value, subjectHours ?? currentDurationHours, prev.endTime),
+                        };
+                      })
+                    }
+                  />
                 </div>
                 <div>
                   <div className="text-sm font-medium">End Time</div>
-                  <Input type="time" value={editSchedule.endTime} onChange={(event) => setEditSchedule((prev) => (prev ? { ...prev, endTime: event.target.value } : prev))} />
+                  <Input type="time" value={editSchedule.endTime} readOnly className="bg-slate-50" />
                 </div>
               </div>
 
@@ -908,7 +975,8 @@ function ScheduleLoadingContent() {
                       inputMode="numeric"
                       pattern="[0-9]*"
                       value={editSchedule[field as keyof EditScheduleFormState]}
-                      onChange={(event) => setEditSchedule((prev) => (prev ? { ...prev, [field]: event.target.value.replace(/\D/g, '') } : prev))}
+                      readOnly
+                      className="bg-slate-50"
                     />
                   </div>
                 ))}

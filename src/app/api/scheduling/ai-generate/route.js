@@ -1,7 +1,7 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { NextResponse } from "next/server";
 
-const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const ONLINE_ROOM_PATTERN = /online|virtual|remote|tbd|tba/i;
 
 export const maxDuration = 60;
