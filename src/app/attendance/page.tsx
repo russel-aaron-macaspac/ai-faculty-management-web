@@ -6,7 +6,7 @@ import { Attendance } from '@/types/attendance';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { Loader2, Search, AlertTriangle, Sparkles, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { Loader2, Search, AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { format } from 'date-fns';
 import { StoredUser, normalize } from '@/lib/stringUtils';
 import { formatTimeToTwelveHour, formatAttendanceTimestampToTime } from '@/lib/timeUtils';
@@ -269,12 +269,12 @@ function buildAverageInsights(averageMinutes: number, trendCount: number): Sched
     {
       label: 'Pattern',
       tone: 'emerald',
-      text: `Average check-in is ${formatMinutesToTwelveHour(averageMinutes)} based on the last ${LOOKBACK_DAYS} days (${trendCount} scans).`,
+      text: `Average check-in is ${formatMinutesToTwelveHour(averageMinutes)} based on the last ${LOOKBACK_DAYS} days (${trendCount} check-ins).`,
     },
     {
       label: 'Recommendation',
       tone: 'blue',
-      text: `Use ${formatMinutesToTwelveHour(recommendedStart)}-${formatMinutesToTwelveHour(recommendedEnd)} as the check-in window for the next scans.`,
+      text: `Use ${formatMinutesToTwelveHour(recommendedStart)}-${formatMinutesToTwelveHour(recommendedEnd)} as the expected check-in window for attendance review.`,
     },
   ];
 }
@@ -307,19 +307,23 @@ function buildDuplicateInsight(duplicateCount: number): SchedulerInsight[] {
     {
       label: 'Alert',
       tone: 'amber',
-      text: `${duplicateCount} duplicate scan${duplicateCount === 1 ? '' : 's'} found within ${DUPLICATE_SCAN_THRESHOLD_MINUTES} minutes. Fix: keep one scan per entry and increase reader debounce if needed.`,
+      text: `${duplicateCount} duplicate attendance entr${duplicateCount === 1 ? 'y' : 'ies'} found within ${DUPLICATE_SCAN_THRESHOLD_MINUTES} minutes. Review the affected records before approving timekeeping.`,
     },
   ];
 }
 
-function buildMissingInsights(openEntries: number, missingCheckIns: number): SchedulerInsight[] {
+function buildMissingInsights(
+  openEntries: number,
+  missingCheckIns: number,
+  isFacultyReviewer = false
+): SchedulerInsight[] {
   const openEntryInsight: SchedulerInsight[] =
     openEntries > 0
       ? [
           {
             label: 'Alert',
             tone: 'rose',
-            text: `${openEntries} open attendance entr${openEntries === 1 ? 'y is' : 'ies are'} missing a time out. Fix: scan out, or close the row if the exit scan was missed.`,
+            text: `${openEntries} open attendance entr${openEntries === 1 ? 'y is' : 'ies are'} missing a time out. ${isFacultyReviewer ? 'Review the record and follow up with the faculty member.' : 'Scan out, or close the row if the exit scan was missed.'}`,
           },
         ]
       : [];
@@ -330,7 +334,7 @@ function buildMissingInsights(openEntries: number, missingCheckIns: number): Sch
           {
             label: 'Alert',
             tone: 'rose',
-            text: `${missingCheckIns} row${missingCheckIns === 1 ? '' : 's'} is missing a time in. Fix: re-scan the card or backfill the entry if the first scan failed.`,
+            text: `${missingCheckIns} row${missingCheckIns === 1 ? '' : 's'} is missing a time in. ${isFacultyReviewer ? 'Review the record and follow up with the faculty member.' : 'Re-scan the card or backfill the entry if the first scan failed.'}`,
           },
         ]
       : [];
@@ -352,7 +356,11 @@ function buildFallbackInsight(hasVisibleRecords: boolean): SchedulerInsight[] {
   ];
 }
 
-function buildSchedulerInsights(recentRecords: Attendance[], visibleRecords: Attendance[]): SchedulerInsight[] {
+function buildSchedulerInsights(
+  recentRecords: Attendance[],
+  visibleRecords: Attendance[],
+  isFacultyReviewer = false
+): SchedulerInsight[] {
   const trendSource = recentRecords.length > 0 ? recentRecords : visibleRecords;
   const trendMinutes = getTimeValues(trendSource);
   const averageMinutes = getAverageMinutes(trendMinutes);
@@ -365,8 +373,16 @@ function buildSchedulerInsights(recentRecords: Attendance[], visibleRecords: Att
     ...(averageMinutes === null ? [] : buildAverageInsights(averageMinutes, trendMinutes.length)),
     ...buildVarianceInsight(firstCheckInMinutes, averageMinutes),
     ...buildDuplicateInsight(duplicateCount),
-    ...buildMissingInsights(openEntries, missingCheckIns),
-    ...buildFallbackInsight(visibleRecords.length > 0),
+    ...buildMissingInsights(openEntries, missingCheckIns, isFacultyReviewer),
+    ...(isFacultyReviewer && visibleRecords.length === 0
+      ? [
+          {
+            label: 'Pattern' as const,
+            tone: 'slate' as const,
+            text: `No faculty attendance records for the selected date. Select another date to review the ${LOOKBACK_DAYS}-day history.`,
+          },
+        ]
+      : buildFallbackInsight(visibleRecords.length > 0)),
   ];
 
   if (insights.length > 0) {
@@ -410,30 +426,32 @@ export default function AttendancePage() {
     }
   });
   const isAdminUser = currentUser?.role === 'admin';
+  const isFacultyReviewer = currentUser?.role === 'hro';
   const currentUserId = currentUser?.id ? String(currentUser.id) : '';
-  const scopeUserId = activeScannedUserId || (!isAdminUser && currentUserId ? currentUserId : null);
+  const scopeUserId = activeScannedUserId || (!isAdminUser && !isFacultyReviewer && currentUserId ? currentUserId : null);
+  const attendanceScope = isFacultyReviewer ? 'faculty' as const : undefined;
 
   const loadAttendance = useCallback(async (showLoading = true, userId?: string | null) => {
     if (showLoading) {
       setLoading(true);
     }
 
-    const data = await attendanceService.getAttendance(filterDate, userId || undefined);
+    const data = await attendanceService.getAttendance(filterDate, userId || undefined, attendanceScope);
     setRecords(data);
 
     if (showLoading) {
       setLoading(false);
     }
-  }, [filterDate]);
+  }, [attendanceScope, filterDate]);
 
   const loadRecentRecords = useCallback(async (userId?: string | null) => {
     const dates = getLookbackDates(filterDate, LOOKBACK_DAYS);
     const results = await Promise.all(
-      dates.map((date) => attendanceService.getAttendance(date, userId || undefined))
+      dates.map((date) => attendanceService.getAttendance(date, userId || undefined, attendanceScope))
     );
 
     setRecentRecords(results.flat());
-  }, [filterDate]);
+  }, [attendanceScope, filterDate]);
 
   const onDateChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.value;
@@ -471,7 +489,7 @@ export default function AttendancePage() {
     const scannedUserId = scan.userId ? String(scan.userId) : null;
     const isOwnScan = scannedUserId !== null && currentUserId !== '' && scannedUserId === currentUserId;
 
-    if (!isAdminUser && !isOwnScan) {
+    if (!isAdminUser && !isFacultyReviewer && !isOwnScan) {
       return;
     }
 
@@ -495,7 +513,7 @@ export default function AttendancePage() {
     });
 
     void loadRecentRecords(scannedUserId);
-  }, [currentUserId, isAdminUser, loadAttendance, loadRecentRecords]);
+  }, [currentUserId, isAdminUser, isFacultyReviewer, loadAttendance, loadRecentRecords]);
 
   const fetchLatestScan = useCallback(async (): Promise<LatestScanSummary | null> => {
     const response = await fetch('/api/iot/scans?limit=1&includeAnalysis=1', { cache: 'no-store' });
@@ -512,7 +530,7 @@ export default function AttendancePage() {
   }, []);
 
   useRFID({
-    autoConnect: true,
+    autoConnect: !isFacultyReviewer,
     onScan: (scan) => {
       refreshFromScan({
         uid: scan.uid,
@@ -527,6 +545,10 @@ export default function AttendancePage() {
   });
 
   useEffect(() => {
+    if (isFacultyReviewer) {
+      return;
+    }
+
     let isMounted = true;
 
     const syncLatestHttpScan = async () => {
@@ -561,7 +583,7 @@ export default function AttendancePage() {
       isMounted = false;
       globalThis.clearInterval(intervalId);
     };
-  }, [fetchLatestScan, refreshFromScan]);
+  }, [fetchLatestScan, isFacultyReviewer, refreshFromScan]);
 
   const accountRecords = useMemo(() => {
     if (!currentUser) {
@@ -587,27 +609,39 @@ export default function AttendancePage() {
   };
 
   let visibleRecords = accountRecords;
-  if (isAdminUser || activeScannedUserId) {
+  if (isAdminUser || isFacultyReviewer || activeScannedUserId) {
     visibleRecords = records;
   }
 
-  const filtered = isAdminUser
+  const filtered = isAdminUser || isFacultyReviewer
     ? visibleRecords.filter((record) =>
       record.employeeName.toLowerCase().includes(searchTerm.toLowerCase())
     )
     : visibleRecords;
 
   const schedulerInsights = useMemo(
-    () => buildSchedulerInsights(recentRecords, visibleRecords),
-    [recentRecords, visibleRecords]
+    () => buildSchedulerInsights(recentRecords, visibleRecords, isFacultyReviewer),
+    [isFacultyReviewer, recentRecords, visibleRecords]
   );
+  const attendanceSummary = useMemo(() => ({
+    total: filtered.length,
+    present: filtered.filter((record) => record.status === 'present').length,
+    late: filtered.filter((record) => record.status === 'late').length,
+    open: filtered.filter((record) => record.timeIn && !record.timeOut).length,
+  }), [filtered]);
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center flex-wrap gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Attendance Log</h1>
-          <p className="text-slate-500 mt-1">Live RFID + attendance in one page.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+            {isFacultyReviewer ? 'Faculty Attendance Log' : 'Attendance Log'}
+          </h1>
+          <p className="text-slate-500 mt-1">
+            {isFacultyReviewer
+              ? 'Review faculty attendance records and timekeeping status.'
+              : 'Live RFID + attendance in one page.'}
+          </p>
         </div>
       </div>
 
@@ -623,20 +657,38 @@ export default function AttendancePage() {
         </div>
       </div>
 
+      {isFacultyReviewer && (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {[
+            { label: 'Faculty records', value: attendanceSummary.total },
+            { label: 'Present', value: attendanceSummary.present },
+            { label: 'Late', value: attendanceSummary.late },
+            { label: 'Open entries', value: attendanceSummary.open },
+          ].map((item) => (
+            <div key={item.label} className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{item.label}</div>
+              <div className="mt-1 text-2xl font-semibold text-slate-900">{item.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4">
-          {isAdminUser ? (
+          {isAdminUser || isFacultyReviewer ? (
             <div className="flex items-center gap-2 flex-1 min-w-50">
               <Search className="h-5 w-5 text-slate-400" />
               <Input
-                placeholder="Search by employee name..."
+                placeholder="Search faculty by name..."
                 className="max-w-sm border-0 focus-visible:ring-0 px-0"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
           ) : (
-            <div className="text-sm text-slate-500">Showing your attendance records only.</div>
+            <div className="text-sm text-slate-500">
+              {isFacultyReviewer ? 'Showing faculty attendance records only.' : 'Showing your attendance records only.'}
+            </div>
           )}
           <div className="flex items-center gap-2">
             <span className="text-sm text-slate-500">Date:</span>
@@ -647,7 +699,7 @@ export default function AttendancePage() {
               max={format(new Date(), 'yyyy-MM-dd')}
               onChange={onDateChange}
             />
-            {activeScannedUserId && (
+            {!isFacultyReviewer && activeScannedUserId && (
               <Button
                 variant="outline"
                 className="h-9"
@@ -666,14 +718,14 @@ export default function AttendancePage() {
           </div>
         </div>
 
-        {(lastScanMessage || refreshingFromScan) && (
+        {!isFacultyReviewer && (lastScanMessage || refreshingFromScan) && (
           <div className="px-4 py-3 border-b border-slate-100 bg-emerald-50/70 flex items-center justify-between gap-3">
             <p className="text-sm text-emerald-800">{lastScanMessage ?? 'Refreshing attendance from live RFID scan...'}</p>
             {refreshingFromScan && <Loader2 className="h-4 w-4 animate-spin text-emerald-700" />}
           </div>
         )}
 
-        {lastScanValidation && (
+        {!isFacultyReviewer && lastScanValidation && (
           <div className={`px-4 py-3 border-b ${VALIDATION_TONE_CLASSES[lastScanValidation.tone]}`}>
             <div className="flex items-center gap-2 font-semibold text-sm">
               {lastScanValidation.tone === 'emerald' ? (

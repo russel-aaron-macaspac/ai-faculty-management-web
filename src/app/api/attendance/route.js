@@ -142,6 +142,7 @@ export async function GET(request) {
     const date = searchParams.get("date") ?? todayDate();
     const user_id = searchParams.get("user_id");
     const status = searchParams.get("status");
+    const scope = searchParams.get("scope");
     const limit = Number.parseInt(searchParams.get("limit") ?? "100", 10);
 
     const supabase = createSupabaseAdminClient();
@@ -156,7 +157,7 @@ export async function GET(request) {
         status,
         remarks,
         created_at,
-        users!fk_attendance_user (
+        users!fk_attendance_user!inner (
           user_id,
           employee_no,
           first_name,
@@ -171,6 +172,9 @@ export async function GET(request) {
 
     if (user_id) query = query.eq("user_id", Number(user_id));
     if (status) query = query.eq("status", status);
+    if (scope === "faculty") {
+      query = query.in("users.role", ["faculty", "program_chair"]);
+    }
 
     const { data: records, error } = await query;
 

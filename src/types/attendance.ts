@@ -7,4 +7,5 @@ export interface Attendance {
   timeOut?: string;
   status: 'present' | 'late' | 'absent' | 'on_leave';
   anomalyDetected?: boolean;
+  role?: string;
 }

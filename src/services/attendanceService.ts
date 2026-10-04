@@ -19,6 +19,7 @@ type AttendanceApiUser = {
   first_name?: string | null;
   middle_name?: string | null;
   last_name?: string | null;
+  role?: string | null;
 };
 
 type AttendanceApiRecord = {
@@ -58,17 +59,21 @@ function mapAttendanceRecord(record: AttendanceApiRecord): Attendance {
     timeIn: toDisplayTime(record.time_in),
     timeOut: toDisplayTime(record.time_out),
     status: normalizeStatus(record.status),
+    role: user?.role,
   };
 }
 
 export const attendanceService = {
-  getAttendance: async (date?: string, userId?: string): Promise<Attendance[]> => {
+  getAttendance: async (date?: string, userId?: string, scope?: 'faculty'): Promise<Attendance[]> => {
     const params = new URLSearchParams();
     if (date) {
       params.set('date', date);
     }
     if (userId) {
       params.set('user_id', userId);
+    }
+    if (scope) {
+      params.set('scope', scope);
     }
 
     const query = params.toString() ? `?${params.toString()}` : '';
@@ -91,10 +96,12 @@ export const attendanceService = {
       // Keep pages usable if the API is temporarily unavailable.
       await delay(250);
       if (date) {
-        return mockAttendanceData.filter((a) => a.date === date);
+        return mockAttendanceData.filter((a) => a.date === date && (!scope || a.employeeId.startsWith('f')));
       }
 
-      return [...mockAttendanceData];
+      return scope
+        ? mockAttendanceData.filter((a) => a.employeeId.startsWith('f'))
+        : [...mockAttendanceData];
     }
   },
 };
