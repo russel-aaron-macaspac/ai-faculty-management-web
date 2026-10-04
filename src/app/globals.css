@@ -206,16 +206,97 @@ div.overflow-x-auto.rounded-lg.border-sky-300 tbody td > div > div > div:nth-chi
 
 @media print {
   @page {
-    size: landscape;
-    margin: 10mm;
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  html,
+  body {
+    height: auto !important;
+    width: 210mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
   }
 
   body {
     background: #fff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .university-shell {
+    display: block !important;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+  }
+
+  .university-shell main {
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+  }
+
+  .university-shell nav,
+  .university-shell aside,
+  .university-shell header {
+    display: none !important;
   }
 
   .printable-clearance {
     display: block !important;
+    width: 210mm !important;
+    height: 297mm !important;
+    max-height: 297mm !important;
+    margin: 0 !important;
+    padding: 8mm !important;
+    background: #fff !important;
+    color: #000 !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+    box-shadow: none !important;
+    page-break-before: avoid;
+    page-break-after: avoid;
+    page-break-inside: avoid;
+  }
+
+  .printable-clearance-content {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: 100% !important;
+    min-height: 100% !important;
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 10px !important;
+    line-height: 1.25 !important;
+  }
+
+  .printable-clearance-content,
+  .printable-clearance-content *,
+  .printable-clearance-content > div,
+  .printable-clearance-content > p,
+  .printable-clearance-content > table,
+  .printable-clearance-content th,
+  .printable-clearance-content td {
+    background-color: #fff !important;
+  }
+
+  .printable-clearance-signatures {
+    margin-top: auto !important;
+  }
+
+  .printable-clearance-content table {
+    page-break-inside: avoid;
+  }
+
+  .printable-clearance-content th,
+  .printable-clearance-content td {
+    padding-top: 3px !important;
+    padding-bottom: 3px !important;
   }
 
 }

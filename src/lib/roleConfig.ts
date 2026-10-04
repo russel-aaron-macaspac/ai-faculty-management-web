@@ -129,6 +129,38 @@ export const getApprovalOfficerConfig = (roleId: string): ApprovalOfficer | unde
   return APPROVAL_OFFICERS.find(o => o.id === roleId);
 };
 
+const APPROVAL_ROLE_ALIASES: Record<string, ApprovalOfficerId> = {
+  accounting: 'account',
+  accounting_office: 'account',
+  accounting_officer: 'account',
+};
+
+/**
+ * Resolve the canonical approval role used by navigation and route guards.
+ * Some existing accounts use the office name instead of the configured role id.
+ */
+export const normalizeApprovalOfficerRole = (
+  role: string | undefined,
+  email: string | undefined,
+): string | undefined => {
+  const normalizedRole = role?.trim().toLowerCase();
+  const normalizedEmail = email?.trim().toLowerCase();
+  const configuredOfficer = APPROVAL_OFFICERS.find(
+    (officer) => officer.email.toLowerCase() === normalizedEmail,
+  );
+
+  if (configuredOfficer) {
+    return configuredOfficer.id;
+  }
+
+  const emailLocalPart = normalizedEmail?.split('@')[0];
+  if (emailLocalPart && APPROVAL_ROLE_ALIASES[emailLocalPart]) {
+    return APPROVAL_ROLE_ALIASES[emailLocalPart];
+  }
+
+  return normalizedRole ? APPROVAL_ROLE_ALIASES[normalizedRole] ?? normalizedRole : undefined;
+};
+
 export const getRequiredOfficeForOfficer = (role: string | undefined): string | null => {
   const officeByRole: Partial<Record<ApprovalOfficerId, string>> = {
     dlrc: 'Dominican Learning Resource Center',
@@ -165,7 +197,7 @@ export const getDashboardPathForRole = (role: string | undefined): string => {
     return '/dashboard/faculty';
   }
 
-  const normalizedRole = role === 'accounting' || role === 'accounting_office' ? 'account' : role;
+  const normalizedRole = normalizeApprovalOfficerRole(role, undefined);
   const officer = normalizedRole ? getApprovalOfficerConfig(normalizedRole) : undefined;
   if (officer) {
     return `${officer.dashboardPath}/${officer.id}`;

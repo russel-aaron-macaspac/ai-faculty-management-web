@@ -1,7 +1,7 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { APPROVAL_OFFICERS } from '@/lib/roleConfig';
+import { normalizeApprovalOfficerRole } from '@/lib/roleConfig';
 
 export async function POST(request) {
   try {
@@ -47,16 +47,7 @@ export async function POST(request) {
     // Approval officers are stored as staff (or an office-specific role) in the
     // database. Resolve configured officer emails first so the frontend always
     // receives the role id used by navigation and redirects.
-    let frontendRole = user.role;
-    if (user.email) {
-      const match = APPROVAL_OFFICERS.find((o) => o.email.toLowerCase() === String(user.email).toLowerCase());
-      if (match) {
-        frontendRole = match.id;
-      }
-    }
-    if (frontendRole === 'accounting' || frontendRole === 'accounting_office') {
-      frontendRole = 'account';
-    }
+    const frontendRole = normalizeApprovalOfficerRole(user.role, user.email);
 
     const fullName = [user.first_name, user.middle_name, user.last_name].filter(Boolean).join(' ');
     const { data: department } = user.department_id

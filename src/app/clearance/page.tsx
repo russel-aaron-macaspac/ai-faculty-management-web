@@ -65,6 +65,7 @@ export default function ClearancePage() {
   const [remarkRecord, setRemarkRecord] = useState<Clearance | null>(null);
   const [documentRecord, setDocumentRecord] = useState<Clearance | null>(null);
   const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false);
+  const [shouldPrintAfterPreviewClose, setShouldPrintAfterPreviewClose] = useState(false);
   const [academicYear] = useState(() => {
     const today = new Date();
     const startYear = today.getMonth() >= 5 ? today.getFullYear() : today.getFullYear() - 1;
@@ -490,9 +491,20 @@ export default function ClearancePage() {
   };
 
   const handlePrintConfirmed = () => {
+    setShouldPrintAfterPreviewClose(true);
     setIsPrintPreviewOpen(false);
-    window.print();
   };
+
+  useEffect(() => {
+    if (!shouldPrintAfterPreviewClose || isPrintPreviewOpen) return;
+
+    const frameId = window.requestAnimationFrame(() => {
+      window.print();
+      setShouldPrintAfterPreviewClose(false);
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [shouldPrintAfterPreviewClose, isPrintPreviewOpen]);
 
   const { title: pageTitle, subtitle: pageSubtitle } = getClearancePageInfo(currentUser?.role);
   const facultyDepartment = currentUser?.department || facultyMembers.find((member) => String(member.id) === String(currentUser?.id))?.department || 'Department not assigned';
@@ -801,7 +813,7 @@ export default function ClearancePage() {
         </Dialog>
 
         <Dialog open={isPrintPreviewOpen} onOpenChange={setIsPrintPreviewOpen}>
-          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl print:hidden">
             <DialogHeader>
               <DialogTitle>Academic clearance preview</DialogTitle>
               <p className="text-sm text-slate-500">Review every office before printing the clearance form for Human Resources.</p>
@@ -979,13 +991,13 @@ export default function ClearancePage() {
     </div>
     {isFacultyUser && (
       <section className="printable-clearance hidden print:block" aria-label="Printable faculty clearance">
-        <div className="mx-auto max-w-4xl text-slate-900">
-          <div className="border-b-2 border-slate-900 pb-4 text-center">
-            <p className="text-lg font-bold tracking-wide">ST. DOMINIC COLLEGE OF ASIA</p>
+        <div className="printable-clearance-content mx-auto max-w-4xl text-slate-900">
+          <div className="border-b-2 border-slate-900 pb-2 text-center">
+            <p className="text-base font-bold tracking-wide">ST. DOMINIC COLLEGE OF ASIA</p>
             <p className="text-xs uppercase tracking-[0.18em] text-slate-600">Human Resources Office</p>
-            <h1 className="mt-4 text-2xl font-bold">ACADEMIC CLEARANCE FORM</h1>
+            <h1 className="mt-2 text-xl font-bold">ACADEMIC CLEARANCE FORM</h1>
           </div>
-          <div className="mt-6 grid grid-cols-2 gap-4 border-b border-slate-300 pb-5 text-sm">
+          <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-b border-slate-300 pb-3 text-xs">
             <p><span className="font-semibold">Faculty name:</span> {currentUser?.full_name || currentUser?.name || 'Faculty User'}</p>
             <p><span className="font-semibold">Printed:</span> {new Date().toLocaleDateString()}</p>
             <p><span className="font-semibold">Position:</span> Faculty</p>
@@ -995,12 +1007,11 @@ export default function ClearancePage() {
             <p><span className="font-semibold">Semester:</span> {semester}</p>
             <p className="col-span-2"><span className="font-semibold">Status:</span> [ {currentUser?.statusOfAppointment === 'full-time' ? 'x' : ' '} ] Full-Time&nbsp;&nbsp;&nbsp;[ {currentUser?.statusOfAppointment === 'part-time' ? 'x' : ' '} ] Part-Time</p>
           </div>
-          <p className="my-5 text-center text-sm text-slate-700">This is to certify that the faculty member has completed the required office clearances.</p>
-          <table className="mt-6 w-full border-collapse text-sm">
+          <p className="my-2 text-center text-xs text-slate-700">This is to certify that the faculty member has completed the required office clearances.</p>
+          <table className="mt-3 w-full border-collapse text-xs">
             <thead>
               <tr className="border-b-2 border-slate-900 text-left">
                 <th className="py-2 pr-4">Office / Department</th>
-                <th className="py-2 pr-4">Signature</th>
                 <th className="py-2 pr-4">Date</th>
                 <th className="py-2 text-right">Remarks</th>
               </tr>
@@ -1008,15 +1019,14 @@ export default function ClearancePage() {
             <tbody>
               {facultyStepRecords.map((record) => (
                 <tr key={record.id} className="border-b border-slate-300">
-                  <td className="py-3 pr-4">{record.requiredDocument}</td>
-                  <td className="py-3 pr-4">&nbsp;</td>
-                  <td className="py-3 pr-4">{record.reviewedAt || record.submissionDate || 'N/A'}</td>
-                  <td className="py-3 text-right font-semibold uppercase">{record.status === 'approved' ? 'Approved' : getStatusLabel(record.status)}</td>
+                  <td className="py-1 pr-4">{record.requiredDocument}</td>
+                  <td className="py-1 pr-4">{record.reviewedAt || record.submissionDate || 'N/A'}</td>
+                  <td className="py-1 text-right font-semibold uppercase">{record.status === 'approved' ? 'Approved' : getStatusLabel(record.status)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <div className="mt-16 grid grid-cols-2 gap-16 text-center text-sm">
+          <div className="printable-clearance-signatures mt-auto grid grid-cols-2 gap-16 text-center text-xs">
             <div className="border-t border-slate-900 pt-2">Faculty signature</div>
             <div className="border-t border-slate-900 pt-2">HR received by / date</div>
           </div>
