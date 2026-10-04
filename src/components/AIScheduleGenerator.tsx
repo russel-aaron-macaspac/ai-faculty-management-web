@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Loader2, RotateCcw, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,7 +11,7 @@ import { toast } from '@/lib/toast';
 import { formatTimeToTwelveHour } from '@/lib/timeUtils';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const isPhysicalRoom = (name?: string | null) => !/\b(tba|tbd|online|virtual|remote)\b/i.test(name || '');
 type LoadType = 'regular' | 'overload';
 type RowStatus = 'idle' | 'saving' | 'saved' | 'conflict' | 'error';
@@ -225,7 +225,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
   const [selectedFacultyIds, setSelectedFacultyIds] = useState<string[]>([]);
   const [subjectsByFaculty, setSubjectsByFaculty] = useState<Record<string, SubjectAssignment[]>>({});
   const [activeFacultyId, setActiveFacultyId] = useState('');
-  const [subjectCode, setSubjectCode] = useState('');
+  const [selectedSubjectId, setSelectedSubjectId] = useState('');
   const [isMinimized, setIsMinimized] = useState(true);
   const [activeFacultyAvailability, setActiveFacultyAvailability] = useState<Array<{ day: string; startTime: string; endTime: string; deliveryMode: DeliveryMode }>>([]);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
@@ -238,12 +238,6 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
   const [finalizationOpen, setFinalizationOpen] = useState(false);
 
   const recommendationColors = ['#ffc000', '#7dd3fc', '#86efac'];
-
-  const filteredSubjects = useMemo(() => {
-    const query = subjectCode.trim().toLowerCase();
-    if (!query) return [];
-    return subjects.filter((subject) => subject.code.toLowerCase().includes(query)).slice(0, 8);
-  }, [subjectCode, subjects]);
 
   const onlineAssignments = selectedFacultyIds.flatMap((facultyId) => {
     const faculty = faculties.find((item) => item.id === facultyId);
@@ -389,7 +383,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
   const toggleFaculty = (facultyId: string) => {
     setSelectedFacultyIds((current) => current.includes(facultyId) ? current.filter((id) => id !== facultyId) : [...current, facultyId]);
     setActiveFacultyId(facultyId);
-    setSubjectCode('');
+    setSelectedSubjectId('');
   };
 
   const toggleSubject = (facultyId: string, subject: Subject) => setSubjectsByFaculty((current) => {
@@ -596,7 +590,7 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
     </div>
     {selectedFacultyIds.length > 0 && <div className="space-y-3">
       <div className="text-sm font-medium text-slate-700">2. Assign subjects by faculty</div>
-      <div className="flex flex-wrap gap-2">{selectedFacultyIds.map((facultyId) => { const faculty = faculties.find((item) => item.id === facultyId); return <Button key={facultyId} type="button" size="sm" variant={activeFacultyId === facultyId ? 'default' : 'outline'} onClick={() => { setActiveFacultyId(facultyId); setSubjectCode(''); }}>{faculty?.name || facultyId}</Button>; })}</div>
+      <div className="flex flex-wrap gap-2">{selectedFacultyIds.map((facultyId) => { const faculty = faculties.find((item) => item.id === facultyId); return <Button key={facultyId} type="button" size="sm" variant={activeFacultyId === facultyId ? 'default' : 'outline'} onClick={() => { setActiveFacultyId(facultyId); setSelectedSubjectId(''); }}>{faculty?.name || facultyId}</Button>; })}</div>
       {activeFacultyId && <div className="grid gap-3 md:grid-cols-2">
         <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 md:col-span-2">
           <div className="flex items-center justify-between gap-2">
@@ -607,8 +601,23 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
         </div>
         <div className="space-y-2">
           <label htmlFor="ai-subject-code" className="text-sm font-medium text-slate-700">Subject code</label>
-          <Input id="ai-subject-code" value={subjectCode} onChange={(event) => setSubjectCode(event.target.value)} placeholder="Search saved subjects" autoComplete="off" />
-          {subjectCode.trim() && <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm">{filteredSubjects.length === 0 ? <div className="px-3 py-2 text-sm text-slate-500">No saved subjects match this code.</div> : filteredSubjects.map((subject) => <button key={subject.id} type="button" className={`block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-slate-50 ${(subjectsByFaculty[activeFacultyId] || []).some((selected) => selected.id === subject.id) ? 'bg-red-50 text-red-900' : 'text-slate-800'}`} onClick={() => toggleSubject(activeFacultyId, subject)}><span className="font-medium">{subject.code}</span><span className="ml-2 text-slate-500">{subject.name}</span></button>)}</div>}
+          <Select
+            value={selectedSubjectId}
+            onValueChange={(value) => {
+              const subject = subjects.find((item) => item.id === value);
+              if (subject) toggleSubject(activeFacultyId, subject);
+              setSelectedSubjectId('');
+            }}
+          >
+            <SelectTrigger id="ai-subject-code" className="h-10">
+              <SelectValue placeholder="Select a subject code" />
+            </SelectTrigger>
+            <SelectContent>
+              {subjects.length === 0
+                ? <SelectItem value="no-subjects" disabled>No saved subjects available</SelectItem>
+                : subjects.map((subject) => <SelectItem key={subject.id} value={subject.id}><span className="font-medium">{subject.code}</span><span className="text-slate-500">{subject.name}</span></SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
         <div className="space-y-2">
           <div className="text-sm font-medium text-slate-700">Assigned to {faculties.find((item) => item.id === activeFacultyId)?.name}</div>

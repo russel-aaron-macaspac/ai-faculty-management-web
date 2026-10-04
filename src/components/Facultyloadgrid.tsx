@@ -11,7 +11,7 @@ import { ChevronDown, ChevronUp, Loader2, Plus, Trash2, AlertTriangle, CheckCirc
 import { scheduleService } from '@/services/scheduleService';
 import { toast } from '@/lib/toast';
 
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 type LoadType = 'regular' | 'overload';
 type RowStatus = 'idle' | 'saving' | 'saved' | 'conflict' | 'error';
