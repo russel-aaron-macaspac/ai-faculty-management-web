@@ -115,6 +115,10 @@ export function Sidebar({ user, collapsed = false, onToggle }: Readonly<SidebarP
     links.push({ href: '/section-matrix', label: 'Master Schedules', icon: BookOpen });
   }
 
+  if (user?.role === 'registrar') {
+    links.push({ href: '/section-matrix', label: 'Room & Section Schedules', icon: Calendar });
+  }
+
   // Split into primary nav vs. account-related items so the list gets a
   // section break instead of one long undifferentiated column with a
   // large empty gap above the footer.
@@ -127,7 +131,7 @@ export function Sidebar({ user, collapsed = false, onToggle }: Readonly<SidebarP
     router.push('/login');
   };
 
-  const renderLink = (link: { href: string; label: string; icon: typeof LayoutDashboard }) => {
+  const renderLink = (link: { href: string; label: string; icon: typeof LayoutDashboard }, index: number) => {
     const Icon = link.icon;
     const isActive = pathname === link.href || (
       link.label !== 'Dashboard' &&
@@ -137,7 +141,7 @@ export function Sidebar({ user, collapsed = false, onToggle }: Readonly<SidebarP
     );
     return (
       <Link
-        key={link.label}
+        key={`${link.href}-${link.label}-${index}`}
         href={link.href}
         aria-current={isActive ? 'page' : undefined}
         title={collapsed ? link.label : undefined}

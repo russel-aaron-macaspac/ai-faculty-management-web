@@ -236,7 +236,9 @@ export async function GET(request) {
     const facultyId = searchParams.get("facultyId");
     const actorRole = searchParams.get("actorRole");
     const canViewOwnSchedule = ["faculty", "program_chair", "dean"].includes(actorRole);
-    const scope = canViewOwnSchedule && facultyId
+    const scope = actorRole === "registrar"
+      ? { isAdmin: true, departmentId: null }
+      : canViewOwnSchedule && facultyId
       ? { isAdmin: true, departmentId: null }
       : await getDepartmentScope(supabase, searchParams.get("actorId"), actorRole);
 

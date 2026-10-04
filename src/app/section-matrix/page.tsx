@@ -182,7 +182,9 @@ function SectionMatrixContent() {
       : 'No subjects found for this section.';
   const emptyRoomMessage = 'No saved physical-room schedules are available.';
   const compiledLabel = user
-    ? `${matrixRows.length} subject${matrixRows.length === 1 ? '' : 's'} and ${roomSchedules.length} room schedule${roomSchedules.length === 1 ? '' : 's'} compiled`
+    ? user.role === 'registrar'
+      ? `${roomSchedules.length} room schedule${roomSchedules.length === 1 ? '' : 's'} compiled`
+      : `${matrixRows.length} subject${matrixRows.length === 1 ? '' : 's'} and ${roomSchedules.length} room schedule${roomSchedules.length === 1 ? '' : 's'} compiled`
     : 'Sign in to view saved subjects.';
 
   return (
@@ -190,14 +192,21 @@ function SectionMatrixContent() {
       <div className="flex flex-wrap items-end justify-between gap-4 print:hidden">
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#D4A017]">Scheduling</p>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Section Schedule</h1>
-          <p className="text-slate-500">Compiled subjects and class meetings from saved schedules.</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+            {user?.role === 'registrar' ? 'Room & Section Schedules' : 'Section Schedule'}
+          </h1>
+          <p className="text-slate-500">
+            {user?.role === 'registrar'
+              ? 'View all physical-room and section matrices from saved schedules.'
+              : 'Compiled subjects and class meetings from saved schedules.'}
+          </p>
         </div>
         <Button type="button" variant="outline" onClick={handlePrint} disabled={matrixRows.length === 0}>
           <Printer className="mr-2 h-4 w-4" /> Print Schedule
         </Button>
       </div>
 
+      {(user?.role === 'program_chair' || user?.role === 'registrar') && (
       <Card className="section-matrix-card print:border-0 print:shadow-none">
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 print:hidden">
           <CardTitle>Saved subjects by section</CardTitle>
@@ -284,10 +293,15 @@ function SectionMatrixContent() {
           )}
         </CardContent>
       </Card>
+      )}
       <Card className="room-matrix-card print:hidden">
         <CardHeader>
-          <CardTitle>Saved room matrix</CardTitle>
-          <p className="text-sm text-slate-500">Saved physical-room schedules shown in the automatic scheduler layout.</p>
+          <CardTitle>{user?.role === 'registrar' ? 'Room Schedule Matrices' : 'Saved room matrix'}</CardTitle>
+          <p className="text-sm text-slate-500">
+            {user?.role === 'registrar'
+              ? 'All saved physical-room schedules shown by room in the automatic scheduler layout.'
+              : 'Saved physical-room schedules shown in the automatic scheduler layout.'}
+          </p>
         </CardHeader>
         <CardContent className="print:p-0">
           {loading ? (
@@ -321,7 +335,7 @@ function SectionMatrixContent() {
 
 export default function SectionMatrixPage() {
   return (
-    <RouteGuard requiredRoles={['program_chair']} fallbackPath="/login">
+    <RouteGuard requiredRoles={['program_chair', 'registrar']} fallbackPath="/login">
       <SectionMatrixContent />
     </RouteGuard>
   );
