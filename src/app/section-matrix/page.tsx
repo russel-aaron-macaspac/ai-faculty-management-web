@@ -182,9 +182,7 @@ function SectionMatrixContent() {
       : 'No subjects found for this section.';
   const emptyRoomMessage = 'No saved physical-room schedules are available.';
   const compiledLabel = user
-    ? user.role === 'registrar'
-      ? `${roomSchedules.length} room schedule${roomSchedules.length === 1 ? '' : 's'} compiled`
-      : `${matrixRows.length} subject${matrixRows.length === 1 ? '' : 's'} and ${roomSchedules.length} room schedule${roomSchedules.length === 1 ? '' : 's'} compiled`
+    ? `${matrixRows.length} subject${matrixRows.length === 1 ? '' : 's'} compiled`
     : 'Sign in to view saved subjects.';
 
   return (
@@ -193,12 +191,10 @@ function SectionMatrixContent() {
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#D4A017]">Scheduling</p>
           <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
-            {user?.role === 'registrar' ? 'Room & Section Schedules' : 'Section Schedule'}
+            Section Schedule
           </h1>
           <p className="text-slate-500">
-            {user?.role === 'registrar'
-              ? 'View all physical-room and section matrices from saved schedules.'
-              : 'Compiled subjects and class meetings from saved schedules.'}
+            Compiled subjects and class meetings from saved schedules.
           </p>
         </div>
         <Button type="button" variant="outline" onClick={handlePrint} disabled={matrixRows.length === 0}>
@@ -294,7 +290,7 @@ function SectionMatrixContent() {
         </CardContent>
       </Card>
       )}
-      <Card className="room-matrix-card print:hidden">
+      {user?.role !== 'registrar' && <Card className="room-matrix-card print:hidden">
         <CardHeader>
           <CardTitle>{user?.role === 'registrar' ? 'Room Schedule Matrices' : 'Saved room matrix'}</CardTitle>
           <p className="text-sm text-slate-500">
@@ -327,7 +323,7 @@ function SectionMatrixContent() {
             </div>
           )}
         </CardContent>
-      </Card>
+      </Card>}
       <p className="text-xs text-slate-500 print:hidden">{compiledLabel}</p>
     </div>
   );

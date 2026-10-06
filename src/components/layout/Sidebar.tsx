@@ -114,7 +114,10 @@ export function Sidebar({ user, collapsed = false, onToggle }: Readonly<SidebarP
   }
 
   if (user?.role === 'registrar') {
-    links.push({ href: '/section-matrix', label: 'Room & Section Schedules', icon: Calendar });
+    links.push(
+      { href: '/section-matrix', label: 'Section Schedules', icon: BookOpen },
+      { href: '/room-schedules', label: 'Room Schedules', icon: Calendar },
+    );
   }
 
   // Split into primary nav vs. account-related items so the list gets a
