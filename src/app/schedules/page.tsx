@@ -18,6 +18,7 @@ const getRoomDisplayName = (roomName?: string | null) => {
 };
 import { isFacultyLikeRole } from '@/lib/roleConfig';
 import { toast } from '@/lib/toast';
+import { getScheduleStatusClasses, getScheduleStatusLabel } from '@/lib/scheduleStatus';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -173,7 +174,7 @@ function SchedulesContent() {
                     >
                       <div
                         style={{ minHeight: `${span * 40}px` }}
-                        className="flex h-full flex-col gap-1 rounded-lg border border-slate-700/40 bg-slate-300 p-2.5 text-left shadow-sm"
+                        className={`flex h-full flex-col gap-1 rounded-lg border p-2.5 text-left shadow-sm ${getScheduleStatusClasses(schedule.status)}`}
                       >
                         <div className="break-words font-semibold leading-tight">{schedule.subject?.code || 'Assigned class'}</div>
                         <div className="break-words leading-tight">{schedule.subject?.name || 'Subject details unavailable'}</div>
@@ -181,6 +182,7 @@ function SchedulesContent() {
                         <div className="break-words text-[11px] text-slate-700">
                           {getRoomDisplayName(schedule.room?.name)} · {formatTimeToTwelveHour(schedule.startTime)} - {formatTimeToTwelveHour(schedule.endTime)}
                         </div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wide">{getScheduleStatusLabel(schedule.status)}</div>
                         <div className="break-words text-[10px] font-medium text-slate-600">{formatStatus(schedule.status)}</div>
                       </div>
                     </td>

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
 import { Schedule } from '@/types/schedule';
+import { getScheduleStatusClasses, getScheduleStatusLabel } from '@/lib/scheduleStatus';
 
 const ROOM_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const ROOM_BOARD_START = 7 * 60;
@@ -52,11 +53,12 @@ function RoomScheduleBoard({ schedules }: Readonly<{ schedules: Schedule[] }>) {
                 const span = Math.max(1, Math.ceil((boardMinutes(schedule.endTime) - boardMinutes(schedule.startTime)) / 30));
                 return (
                   <td key={`${day}-${slot}`} rowSpan={span} style={{ height: `${span * 40}px` }} className="border border-slate-300 px-2 py-0 align-top text-slate-900">
-                    <div style={{ minHeight: `${span * 40}px` }} className="flex h-full flex-col gap-1 rounded-lg border border-slate-700/40 bg-slate-300 p-2.5 text-left shadow-sm">
+                    <div style={{ minHeight: `${span * 40}px` }} className={`flex h-full flex-col gap-1 rounded-lg border p-2.5 text-left shadow-sm ${getScheduleStatusClasses(schedule.status)}`}>
                       <div className="font-semibold leading-tight">{schedule.subject.code}</div>
                       <div className="leading-tight">{schedule.subject.name}</div>
                       <div className="font-medium">{schedule.section || 'No section'}</div>
                       <div className="text-[10px] text-slate-600">{schedule.facultyName || 'Unassigned faculty'}</div>
+                      <div className="text-[10px] font-semibold uppercase tracking-wide">{getScheduleStatusLabel(schedule.status)}</div>
                     </div>
                   </td>
                 );

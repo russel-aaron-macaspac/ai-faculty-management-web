@@ -82,6 +82,10 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
     }
 
+    if (schedule.status === "approved") {
+      return NextResponse.json({ error: "Approved schedules cannot be edited" }, { status: 409 });
+    }
+
     const scope = await getDepartmentScope(supabase, actorId, actorRole);
     if (!scope.isAdmin && !scope.actor) {
       return NextResponse.json({ error: "Program chair account not found" }, { status: 403 });
@@ -218,6 +222,10 @@ export async function DELETE(request, { params }) {
 
     if (fetchError || !schedule) {
       return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
+    }
+
+    if (schedule.status === "approved") {
+      return NextResponse.json({ error: "Approved schedules cannot be deleted" }, { status: 409 });
     }
 
     const scope = await getDepartmentScope(supabase, actorId, actorRole);

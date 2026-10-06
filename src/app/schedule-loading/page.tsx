@@ -16,6 +16,7 @@ import { isFacultyLikeRole } from '@/lib/roleConfig';
 import { toast } from '@/lib/toast';
 import { FacultyLoadGrid } from '@/components/Facultyloadgrid';
 import { AIScheduleGenerator } from '@/components/AIScheduleGenerator';
+import { getScheduleStatusClasses, getScheduleStatusLabel, isApprovedSchedule } from '@/lib/scheduleStatus';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const APPROVAL_ROLES = new Set(['dean', 'ovpaa', 'registrar', 'hro']);
@@ -422,7 +423,7 @@ function ScheduleLoadingContent() {
                       >
                         <div
                           style={{ minHeight: `${span * 40}px` }}
-                          className="flex h-full flex-col gap-1 rounded-lg border border-slate-700/40 bg-slate-300 p-2.5 text-left shadow-sm"
+                          className={`flex h-full flex-col gap-1 rounded-lg border p-2.5 text-left shadow-sm ${getScheduleStatusClasses(schedule.status)}`}
                         >
                           <div className="break-words font-semibold leading-tight">{schedule.subject?.code || '-'}</div>
                           <div className="break-words leading-tight">{schedule.subject?.name || '-'}</div>
@@ -430,14 +431,15 @@ function ScheduleLoadingContent() {
                           <div className="break-words text-[11px] text-slate-700">
                             {getRoomDisplayName(schedule.room?.name)} · {formatTimeToTwelveHour(schedule.startTime)} - {formatTimeToTwelveHour(schedule.endTime)}
                           </div>
-                          <div className="break-words text-[10px] text-slate-600">
+                          <div className="break-words text-[10px]">
                             {schedule.units ?? '-'} units · {classType === 'lec' ? 'Lec' : 'Lab'} {schedule.lectureContactHours ?? (classType === 'lec' ? contactHours : '-')} hrs · Class size {schedule.classSize ?? '-'}
                           </div>
+                          <div className="text-[10px] font-semibold uppercase tracking-wide">{getScheduleStatusLabel(schedule.status)}</div>
                           <div className="mt-auto flex flex-wrap gap-1 pt-1">
-                            <Button type="button" size="sm" variant="outline" className="h-7 bg-white px-2 text-[11px]" onClick={() => openEditScheduleDialog(schedule)} disabled={saving}>
+                            <Button type="button" size="sm" variant="outline" className="h-7 bg-white px-2 text-[11px]" onClick={() => openEditScheduleDialog(schedule)} disabled={saving || isApprovedSchedule(schedule.status)}>
                               <Pencil className="mr-1 h-3 w-3" /> Edit
                             </Button>
-                            <Button type="button" size="sm" variant="destructive" className="h-7 px-2 text-[11px]" onClick={() => handleDeleteSchedule(schedule)} disabled={saving}>
+                            <Button type="button" size="sm" variant="destructive" className="h-7 px-2 text-[11px]" onClick={() => handleDeleteSchedule(schedule)} disabled={saving || isApprovedSchedule(schedule.status)}>
                               <Trash2 className="mr-1 h-3 w-3" /> Delete
                             </Button>
                           </div>
@@ -606,6 +608,10 @@ function ScheduleLoadingContent() {
   };
 
   const openEditScheduleDialog = (item: Schedule) => {
+    if (isApprovedSchedule(item.status)) {
+      toast({ title: 'Approved schedule is locked', description: 'Approved schedules cannot be edited.', type: 'warning' });
+      return;
+    }
     const facultyId = String(item.facultyId ?? item.employeeId ?? '');
     const subjectId = String(item.subjectId ?? item.subject?.id ?? '');
     const roomId = String(item.roomId ?? item.room?.id ?? '');
@@ -683,6 +689,10 @@ function ScheduleLoadingContent() {
 
   const handleDeleteSchedule = async (item: Schedule) => {
     if (!user) return;
+    if (isApprovedSchedule(item.status)) {
+      toast({ title: 'Approved schedule is locked', description: 'Approved schedules cannot be deleted.', type: 'warning' });
+      return;
+    }
 
     const confirmed = globalThis.confirm(`Delete this schedule for ${item.facultyName} on ${item.day}?`);
     if (!confirmed) return;
@@ -866,6 +876,11 @@ function ScheduleLoadingContent() {
       <Card className={isMasterScheduleMinimized ? 'cursor-pointer' : undefined} onClick={isMasterScheduleMinimized ? () => setIsMasterScheduleMinimized(false) : undefined}>
         <CardHeader className="cursor-pointer" onClick={() => setIsMasterScheduleMinimized((current) => !current)}>
           <CardTitle>Master Schedule</CardTitle>
+          <div className="flex flex-wrap gap-3 text-xs text-slate-600" aria-label="Schedule status legend">
+            <span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm border border-emerald-700/40 bg-emerald-200" /> Approved</span>
+            <span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm border border-orange-700/40 bg-orange-200" /> Pending</span>
+            <span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm border border-rose-700/40 bg-rose-200" /> Rejected</span>
+          </div>
         </CardHeader>
         {!isMasterScheduleMinimized && <CardContent>{masterScheduleContent}</CardContent>}
       </Card>
