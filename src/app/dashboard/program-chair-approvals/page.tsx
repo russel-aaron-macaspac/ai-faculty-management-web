@@ -308,20 +308,22 @@ function ProgramChairApprovalsContent() {
       </Dialog>
 
       <Dialog open={Boolean(documentRecord)} onOpenChange={(open) => !open && setDocumentRecord(null)}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Uploaded documents for {documentRecord?.employeeName}</DialogTitle>
+        <DialogContent className="min-w-0 overflow-hidden sm:max-w-lg">
+          <DialogHeader className="min-w-0">
+            <DialogTitle className="min-w-0 break-words">Uploaded documents for {documentRecord?.employeeName}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2 pt-4">
+          <div className="min-w-0 space-y-2 pt-4">
             {documentRecord?.filePath && (
               <Button
                 type="button"
                 variant="outline"
-                className="w-full justify-start"
+                className="w-full min-w-0 max-w-full justify-start overflow-hidden"
                 onClick={() => void handleOpenFile(documentRecord.filePath!, documentRecord.originalFilename || 'submitted document')}
               >
                 <FileText className="mr-2 h-4 w-4 text-red-600" />
-                {documentRecord.originalFilename || 'Submitted document'}
+                <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">
+                  {documentRecord.originalFilename || 'Submitted document'}
+                </span>
               </Button>
             )}
             {documentRecord?.attachments?.map((attachment) => (
@@ -329,11 +331,11 @@ function ProgramChairApprovalsContent() {
                 key={attachment.id}
                 type="button"
                 variant="outline"
-                className="w-full justify-start"
+                className="w-full min-w-0 max-w-full justify-start overflow-hidden"
                 onClick={() => void handleOpenFile(attachment.filePath, attachment.originalFilename)}
               >
                 <FileText className="mr-2 h-4 w-4 text-red-600" />
-                {attachment.originalFilename}
+                <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">{attachment.originalFilename}</span>
               </Button>
             ))}
           </div>
