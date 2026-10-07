@@ -55,6 +55,18 @@ function normalizeSections(subject) {
   return [...new Set(sections.map((value) => String(value || "").trim()).filter(Boolean))];
 }
 
+function getMistralMessageContent(payload) {
+  const content = payload?.choices?.[0]?.message?.content;
+  if (typeof content === "string") return content.trim();
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => typeof part === "string" ? part : typeof part?.text === "string" ? part.text : "")
+      .join("")
+      .trim();
+  }
+  return "";
+}
+
 function scheduleSections(schedule) {
   return String(schedule.section || "")
     .split(",")
@@ -107,7 +119,7 @@ async function addUnplacedSuggestions(unplaced, rooms, requestedClassSize) {
     });
     if (!response.ok) return { items: unplaced, available: false };
     const payload = await response.json();
-    const text = payload.choices?.[0]?.message?.content?.trim();
+    const text = getMistralMessageContent(payload);
     const parsed = JSON.parse(text || "{}");
     const suggestions = Array.isArray(parsed) ? parsed : parsed.suggestions;
     if (!Array.isArray(suggestions)) return { items: unplaced, available: false };
@@ -166,7 +178,8 @@ async function generateFullScheduleWithMistral({ assignments, facultyById, windo
 
       if (response.ok) {
         const payload = await response.json();
-        const text = payload.choices?.[0]?.message?.content?.trim();
+        const text = getMistralMessageContent(payload);
+        if (!text) throw new Error("Mistral returned an empty or unsupported message content.");
         const result = JSON.parse(text || "{}");
         if (!Array.isArray(result.schedule) || result.schedule.length < requestedClasses.length) throw new Error(`Mistral returned an incomplete schedule (${result.schedule?.length || 0}/${requestedClasses.length} classes).`);
         return { requestedClasses, proposals: result.schedule };
