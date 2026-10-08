@@ -77,6 +77,14 @@ const calculateEndTime = (startTime: string, hours: number | null | undefined, f
   return `${String(Math.floor(totalMinutes / 60)).padStart(2, '0')}:${String(totalMinutes % 60).padStart(2, '0')}`;
 };
 
+const timeToMinutes = (value: string) => {
+  const [hours, minutes] = value.split(':').map(Number);
+  return Number.isFinite(hours) && Number.isFinite(minutes) ? hours * 60 + minutes : null;
+};
+
+const formatAvailabilityWindow = (row: { startTime: string; endTime: string }) =>
+  `${formatTimeToTwelveHour(row.startTime)} - ${formatTimeToTwelveHour(row.endTime)}`;
+
 type LocalUser = {
   id: string;
   role: string;
@@ -163,6 +171,8 @@ function ScheduleLoadingContent() {
   const [selectedFacultyAvailability, setSelectedFacultyAvailability] = useState<Array<{ day: string; startTime: string; endTime: string }>>([]);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editSchedule, setEditSchedule] = useState<EditScheduleFormState | null>(null);
+  const [editFacultyAvailability, setEditFacultyAvailability] = useState<Array<{ day: string; startTime: string; endTime: string }>>([]);
+  const [editAvailabilityLoading, setEditAvailabilityLoading] = useState(false);
   const [editError, setEditError] = useState('');
 
   const canApprove = APPROVAL_ROLES.has(user?.role || '');
@@ -210,6 +220,49 @@ function ScheduleLoadingContent() {
       setSelectedFacultyId(nextSelectedFacultyId);
     }
   }, [meta.faculties, selectedFacultyId]);
+
+  useEffect(() => {
+    if (!editSchedule?.facultyId) {
+      setEditFacultyAvailability([]);
+      return;
+    }
+
+    let cancelled = false;
+    setEditAvailabilityLoading(true);
+    void scheduleService.getFacultyAvailability(editSchedule.facultyId)
+      .then((entries) => {
+        if (!cancelled) {
+          const availability = entries.map((entry) => ({
+            day: entry.day,
+            startTime: entry.startTime,
+            endTime: entry.endTime,
+          }));
+          setEditFacultyAvailability(availability);
+          if (availability.length > 0) {
+            setEditSchedule((previous) => {
+              if (!previous || availability.some((window) => window.day === previous.day)) return previous;
+              const firstWindow = availability[0];
+              return {
+                ...previous,
+                day: firstWindow.day,
+                startTime: firstWindow.startTime,
+                endTime: calculateEndTime(firstWindow.startTime, getContactHours(previous.startTime, previous.endTime), firstWindow.endTime),
+              };
+            });
+          }
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setEditFacultyAvailability([]);
+      })
+      .finally(() => {
+        if (!cancelled) setEditAvailabilityLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editSchedule?.facultyId]);
 
   useEffect(() => {
     if (!selectedFacultyId) return;
@@ -654,6 +707,26 @@ function ScheduleLoadingContent() {
       return;
     }
 
+    const matchingWindows = editFacultyAvailability.filter((window) => window.day === editSchedule.day);
+    const fitsAvailability = matchingWindows.some((window) => {
+      const start = timeToMinutes(editSchedule.startTime);
+      const end = timeToMinutes(editSchedule.endTime);
+      const windowStart = timeToMinutes(window.startTime);
+      const windowEnd = timeToMinutes(window.endTime);
+      return start !== null && end !== null && windowStart !== null && windowEnd !== null && start >= windowStart && end <= windowEnd;
+    });
+    if (editFacultyAvailability.length === 0) {
+      setEditError('This faculty member has no saved availability. Save availability before editing this schedule.');
+      return;
+    }
+    if (!fitsAvailability) {
+      const windows = matchingWindows.map(formatAvailabilityWindow).join(', ');
+      setEditError(windows
+        ? `Choose a time within the faculty availability: ${windows}.`
+        : `Choose one of the available days: ${[...new Set(editFacultyAvailability.map((window) => window.day))].join(', ')}.`);
+      return;
+    }
+
     setEditError('');
     setSaving(true);
     try {
@@ -680,7 +753,13 @@ function ScheduleLoadingContent() {
       toast({ title: 'Done', description: 'Schedule updated.', type: 'success' });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not update schedule.';
-      setEditError(message);
+      const suggestions = error instanceof Error
+        ? (error as Error & { suggestions?: { suggested_time_slots?: Array<{ day: string; startTime: string; endTime: string }> } }).suggestions
+        : undefined;
+      const suggestedTimes = suggestions?.suggested_time_slots ?? [];
+      setEditError(suggestedTimes.length > 0
+        ? `${message} Try: ${suggestedTimes.slice(0, 3).map((slot) => `${slot.day} ${formatTimeToTwelveHour(slot.startTime)}-${formatTimeToTwelveHour(slot.endTime)}`).join('; ')}.`
+        : message);
       toast({ title: 'Update Failed', description: message, type: 'error' });
     } finally {
       setSaving(false);
@@ -944,12 +1023,23 @@ function ScheduleLoadingContent() {
                     </SelectTrigger>
                     <SelectContent>
                       {DAYS.map((day) => (
-                        <SelectItem key={day} value={day}>
+                        <SelectItem
+                          key={day}
+                          value={day}
+                          disabled={!editFacultyAvailability.some((window) => window.day === day)}
+                        >
                           {day}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {editAvailabilityLoading
+                      ? 'Loading faculty availability...'
+                      : editFacultyAvailability.length > 0
+                        ? `Available days: ${[...new Set(editFacultyAvailability.map((window) => window.day))].join(', ')}`
+                        : 'No saved availability found for this faculty member.'}
+                  </p>
                 </div>
                 <div>
                   <div className="text-sm font-medium">Start Time</div>
@@ -970,6 +1060,29 @@ function ScheduleLoadingContent() {
                     }
                   />
                 </div>
+
+                {editFacultyAvailability.length > 0 && (
+                  <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
+                    <div className="font-semibold">Suggested valid placement windows</div>
+                    <div className="mt-1 grid gap-1 sm:grid-cols-2">
+                      {editFacultyAvailability.map((window) => (
+                        <button
+                          key={`${window.day}-${window.startTime}-${window.endTime}`}
+                          type="button"
+                          className="rounded border border-sky-200 bg-white px-2 py-1 text-left text-xs hover:border-sky-400"
+                          onClick={() => setEditSchedule((prev) => prev ? {
+                            ...prev,
+                            day: window.day,
+                            startTime: window.startTime,
+                            endTime: calculateEndTime(window.startTime, getContactHours(prev.startTime, prev.endTime), window.endTime),
+                          } : prev)}
+                        >
+                          {window.day}: {formatAvailabilityWindow(window)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <div className="text-sm font-medium">End Time</div>
                   <Input type="time" value={editSchedule.endTime} readOnly className="bg-slate-50" />

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Loader2, RotateCcw, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -226,6 +226,8 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
   const [subjectsByFaculty, setSubjectsByFaculty] = useState<Record<string, SubjectAssignment[]>>({});
   const [activeFacultyId, setActiveFacultyId] = useState('');
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
+  const [subjectSelectOpen, setSubjectSelectOpen] = useState(false);
+  const keepSubjectSelectOpen = useRef(false);
   const [isMinimized, setIsMinimized] = useState(true);
   const [activeFacultyAvailability, setActiveFacultyAvailability] = useState<Array<{ day: string; startTime: string; endTime: string; deliveryMode: DeliveryMode }>>([]);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
@@ -418,6 +420,14 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
     const hasMissingSections = selectedAssignments.some((assignment) => assignment.subjects.some((subject) => subject.sectionIds.length === 0));
     const onlineRoom = rooms.find((room) => !isPhysicalRoom(room.name)) || { id: 'online', name: 'Online', capacity: 0 };
     const onlinePlacement = buildOnlinePlacements(onlineAssignments, sections, onlineFacultyAvailability, savedRows, onlineRoom);
+    if (onlinePlacement.unplaced.length > 0) {
+      setUnplaced(onlinePlacement.unplaced);
+      setRecommendations([]);
+      setSelectedRecommendationId(null);
+      setGenerationMessage('No complete conflict-free schedule was generated. Nothing was placed because one or more online classes do not fit the saved faculty availability.');
+      toast({ title: 'Schedule needs more availability', description: 'Add a valid online availability window for every unplaced class, then generate again.', type: 'warning' });
+      return;
+    }
     const assignments = selectedAssignments.map(({ facultyId, subjects: facultySubjects }) => ({ facultyId, subjects: facultySubjects.filter((subject) => subject.deliveryMode === 'on-campus').map((subject) => ({ subjectId: subject.id, code: subject.code, name: subject.name, requiredEquipmentType: subject.required_equipment_type || null, sections: subject.sectionIds.map((sectionId) => sections.find((section) => section.id === sectionId)?.name || sectionId), classType: (subject.lab_units ?? 0) > 0 && (subject.lecture_units ?? 0) === 0 ? 'lab' : 'lecture', durationMinutes: Number(subject.hours) > 0 ? Number(subject.hours) * 60 : undefined })) })).filter((assignment) => assignment.subjects.length > 0);
     if (hasMissingSections || selectedAssignments.some((assignment) => assignment.subjects.length === 0)) {
       toast({ title: 'A few details are missing', description: 'Select at least one section for every subject and assign at least one subject to each faculty member.', type: 'warning' });
@@ -604,11 +614,21 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
         <div className="space-y-2">
           <label htmlFor="ai-subject-code" className="text-sm font-medium text-slate-700">Subject code</label>
           <Select
+            open={subjectSelectOpen}
+            onOpenChange={(open) => {
+              if (!open && keepSubjectSelectOpen.current) {
+                keepSubjectSelectOpen.current = false;
+                setSubjectSelectOpen(true);
+                return;
+              }
+              setSubjectSelectOpen(open);
+            }}
             value={selectedSubjectId}
             onValueChange={(value) => {
               const subject = subjects.find((item) => item.id === value);
               if (subject) toggleSubject(activeFacultyId, subject);
               setSelectedSubjectId('');
+              keepSubjectSelectOpen.current = true;
             }}
           >
             <SelectTrigger id="ai-subject-code" className="h-10">

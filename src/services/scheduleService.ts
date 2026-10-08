@@ -137,8 +137,12 @@ export const scheduleService = {
     });
 
     if (!res.ok) {
-      const { error } = await res.json();
-      throw new Error(error ?? 'Could not update schedule.');
+      const payload = await res.json();
+      const updateError = new Error(payload.error ?? 'Could not update schedule.') as Error & {
+        suggestions?: { suggested_rooms?: Array<{ id: string; name: string }>; suggested_time_slots?: Array<{ day: string; startTime: string; endTime: string }> };
+      };
+      updateError.suggestions = payload.suggestions;
+      throw updateError;
     }
 
     return res.json();

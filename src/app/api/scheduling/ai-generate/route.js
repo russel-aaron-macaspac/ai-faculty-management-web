@@ -27,6 +27,22 @@ function isOnlineRoom(name) {
   return ONLINE_ROOM_PATTERN.test(String(name || ""));
 }
 
+function getMistralMessageText(payload) {
+  const content = payload?.choices?.[0]?.message?.content;
+  if (typeof content === "string") return content.trim();
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => (typeof part === "string" ? part : part?.text))
+      .filter((part) => typeof part === "string")
+      .join("")
+      .trim();
+  }
+  if (content && typeof content === "object") {
+    return JSON.stringify(content);
+  }
+  return "";
+}
+
 function normalizeRoomName(value) {
   const name = String(value || "").trim();
   return /^(tba|tbd)(\s*[-: ].*)?$/i.test(name) ? "TBA" : name;
@@ -107,7 +123,7 @@ async function addUnplacedSuggestions(unplaced, rooms, requestedClassSize) {
     });
     if (!response.ok) return { items: unplaced, available: false };
     const payload = await response.json();
-    const text = payload.choices?.[0]?.message?.content?.trim();
+    const text = getMistralMessageText(payload);
     const parsed = JSON.parse(text || "{}");
     const suggestions = Array.isArray(parsed) ? parsed : parsed.suggestions;
     if (!Array.isArray(suggestions)) return { items: unplaced, available: false };
@@ -166,7 +182,8 @@ async function generateFullScheduleWithMistral({ assignments, facultyById, windo
 
       if (response.ok) {
         const payload = await response.json();
-        const text = payload.choices?.[0]?.message?.content?.trim();
+        const text = getMistralMessageText(payload);
+        if (!text) throw new Error("Mistral returned an empty or unsupported message content.");
         const result = JSON.parse(text || "{}");
         if (!Array.isArray(result.schedule) || result.schedule.length < requestedClasses.length) throw new Error(`Mistral returned an incomplete schedule (${result.schedule?.length || 0}/${requestedClasses.length} classes).`);
         return { requestedClasses, proposals: result.schedule };
@@ -403,7 +420,18 @@ export async function POST(request) {
         },
       });
     }
-    return NextResponse.json({ recommendations, unavailable });
+    const conflictFreeRecommendations = recommendations.filter((recommendation) => recommendation.unplaced.length === 0);
+    if (conflictFreeRecommendations.length === 0) {
+      return NextResponse.json(
+        {
+          error: "No complete conflict-free schedule could be generated. Nothing was placed because one or more classes could not be assigned legally.",
+          unavailable: recommendations.flatMap((recommendation) => recommendation.unplaced),
+        },
+        { status: 422 }
+      );
+    }
+
+    return NextResponse.json({ recommendations: conflictFreeRecommendations, unavailable });
   } catch (error) {
     console.error("[AI SCHEDULING GENERATE ERROR]", error);
     const status = Number.isInteger(error?.status) ? error.status : 500;
