@@ -32,7 +32,8 @@ function getMistralMessageText(payload) {
   if (typeof content === "string") return content.trim();
   if (Array.isArray(content)) {
     return content
-      .map((part) => (typeof part === "string" ? part : part?.text))
+      .filter((part) => typeof part === "string" || part?.type === "text")
+      .map((part) => (typeof part === "string" ? part : part.text))
       .filter((part) => typeof part === "string")
       .join("")
       .trim();
@@ -76,7 +77,8 @@ function getMistralMessageContent(payload) {
   if (typeof content === "string") return content.trim();
   if (Array.isArray(content)) {
     return content
-      .map((part) => typeof part === "string" ? part : typeof part?.text === "string" ? part.text : "")
+      .filter((part) => typeof part === "string" || part?.type === "text")
+      .map((part) => typeof part === "string" ? part : typeof part.text === "string" ? part.text : "")
       .join("")
       .trim();
   }
