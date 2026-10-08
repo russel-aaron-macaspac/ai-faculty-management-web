@@ -71,6 +71,18 @@ function normalizeSections(subject) {
   return [...new Set(sections.map((value) => String(value || "").trim()).filter(Boolean))];
 }
 
+function getMistralMessageContent(payload) {
+  const content = payload?.choices?.[0]?.message?.content;
+  if (typeof content === "string") return content.trim();
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => typeof part === "string" ? part : typeof part?.text === "string" ? part.text : "")
+      .join("")
+      .trim();
+  }
+  return "";
+}
+
 function scheduleSections(schedule) {
   return String(schedule.section || "")
     .split(",")
