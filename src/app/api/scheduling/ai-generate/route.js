@@ -160,7 +160,7 @@ async function generateFullScheduleWithMistral({ assignments, facultyById, windo
     throw error;
   }
 
-  const model = process.env.MISTRAL_MODEL || "mistral-large-latest";
+  const model = process.env.MISTRAL_MODEL || "labs-leanstral-1-5";
   const facultyAvailability = assignments.map((assignment) => ({
     facultyId: String(assignment.facultyId),
     appointmentStatus: isPartTimeStatus(assignment.appointmentStatus) ? "part-time" : "full-time",
