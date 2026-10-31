@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { CheckCircle2, AlertTriangle, FileText, Loader2, Search, Check, X, Clock, MessageSquare, Trash2 } from 'lucide-react';
 import { StoredUser } from '@/lib/stringUtils';
 import { toast } from '@/lib/toast';
+import { PopupDialog } from '@/components/ui/popup-dialog';
 
 const PROGRAM_CHAIR_OFFICE_NAME = 'Program Chair';
 
@@ -32,6 +33,8 @@ function ProgramChairApprovalsContent() {
   const [documentRecord, setDocumentRecord] = useState<Clearance | null>(null);
   const [remarkText, setRemarkText] = useState('');
   const [remarkSaving, setRemarkSaving] = useState(false);
+  const [rejectionPrompt, setRejectionPrompt] = useState<{ record: Clearance; reason: string } | null>(null);
+  const [deleteReminder, setDeleteReminder] = useState<{ record: Clearance; noteId: string } | null>(null);
 
   const loadData = async (actor?: StoredUser | null) => {
     setLoading(true);
@@ -85,10 +88,15 @@ function ProgramChairApprovalsContent() {
     if (!currentUser) return;
     if (!record.id) return;
 
-    let reason: string | undefined;
     if (decision === 'rejected') {
-      reason = prompt('Enter rejection reason:') || undefined;
+      setRejectionPrompt({ record, reason: '' });
+      return;
     }
+    await saveDecision(record, decision);
+  };
+
+  const saveDecision = async (record: Clearance, decision: 'approved' | 'rejected' | 'pending', reason?: string) => {
+    if (!currentUser) return;
 
     setActionLoadingId(record.id);
     try {
@@ -136,10 +144,14 @@ function ProgramChairApprovalsContent() {
   };
 
   const handleDeleteRemark = async (record: Clearance, noteId: string) => {
-    if (!window.confirm('Delete this requirement reminder?')) return;
+    setDeleteReminder({ record, noteId });
+  };
 
+  const deleteReminderNote = async () => {
+    if (!deleteReminder) return;
     try {
-      await clearanceService.deleteClearanceNote(record.id, noteId);
+      await clearanceService.deleteClearanceNote(deleteReminder.record.id, deleteReminder.noteId);
+      setDeleteReminder(null);
       await loadData(currentUser);
       toast({ title: 'Remark deleted', description: 'The requirement reminder was removed.', type: 'success' });
     } catch (err) {
@@ -306,6 +318,34 @@ function ProgramChairApprovalsContent() {
           </div>
         </DialogContent>
       </Dialog>
+      <PopupDialog
+        open={Boolean(rejectionPrompt)}
+        onOpenChange={(open) => !open && setRejectionPrompt(null)}
+        title="Reject clearance"
+        description="Provide the reason this faculty clearance needs to be corrected before approval."
+        confirmLabel="Reject clearance"
+        destructive
+        prompt
+        required
+        value={rejectionPrompt?.reason ?? ''}
+        onValueChange={(reason) => rejectionPrompt && setRejectionPrompt({ ...rejectionPrompt, reason })}
+        placeholder="Enter rejection reason"
+        onConfirm={() => {
+          if (!rejectionPrompt) return;
+          const { record, reason } = rejectionPrompt;
+          setRejectionPrompt(null);
+          void saveDecision(record, 'rejected', reason.trim());
+        }}
+      />
+      <PopupDialog
+        open={Boolean(deleteReminder)}
+        onOpenChange={(open) => !open && setDeleteReminder(null)}
+        title="Delete requirement reminder?"
+        description="This reminder will be removed from the clearance record."
+        confirmLabel="Delete reminder"
+        destructive
+        onConfirm={() => void deleteReminderNote()}
+      />
 
       <Dialog open={Boolean(documentRecord)} onOpenChange={(open) => !open && setDocumentRecord(null)}>
         <DialogContent className="min-w-0 overflow-hidden sm:max-w-lg">

@@ -11,6 +11,7 @@ import { clearanceService } from '@/services/clearanceService';
 import { Clearance } from '@/types/clearance';
 import { StoredUser } from '@/lib/stringUtils';
 import { toast } from '@/lib/toast';
+import { PopupDialog } from '@/components/ui/popup-dialog';
 
 type Office = { id: string; name: string };
 
@@ -24,6 +25,7 @@ export default function ClearanceUploadPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<string | null>(null);
 
   useEffect(() => {
     const raw = localStorage.getItem('user');
@@ -93,17 +95,21 @@ export default function ClearanceUploadPage() {
 
   const handleRemove = async (attachmentId?: string) => {
     if (!record) return;
-    if (!window.confirm('Remove this file from the office clearance?')) return;
+    setRemoveTarget(attachmentId ?? 'primary');
+  };
 
+  const confirmRemove = async () => {
+    if (!record || !removeTarget) return;
     setRemoving(true);
     try {
-      if (attachmentId) {
-        await clearanceService.deleteAttachment(record.id, attachmentId);
-        setRecord({ ...record, attachments: record.attachments?.filter((attachment) => attachment.id !== attachmentId) });
+      if (removeTarget !== 'primary') {
+        await clearanceService.deleteAttachment(record.id, removeTarget);
+        setRecord({ ...record, attachments: record.attachments?.filter((attachment) => attachment.id !== removeTarget) });
       } else {
         await clearanceService.deletePrimaryFile(record.id);
         setRecord({ ...record, originalFilename: undefined, filePath: undefined });
       }
+      setRemoveTarget(null);
       toast({ title: 'File removed', description: 'You can upload a replacement file.', type: 'success' });
     } catch (error) {
       toast({ title: 'Remove failed', description: error instanceof Error ? error.message : 'Could not remove the document.', type: 'error' });
@@ -156,6 +162,15 @@ export default function ClearanceUploadPage() {
           )}
         </CardContent>
       </Card>
+      <PopupDialog
+        open={Boolean(removeTarget)}
+        onOpenChange={(open) => !open && setRemoveTarget(null)}
+        title="Remove this file?"
+        description="The file will be removed from this office clearance and can be replaced with a new upload."
+        confirmLabel="Remove file"
+        destructive
+        onConfirm={() => void confirmRemove()}
+      />
     </div>
   );
 }

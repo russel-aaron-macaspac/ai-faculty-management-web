@@ -17,6 +17,7 @@ import { toast } from '@/lib/toast';
 import { FacultyLoadGrid } from '@/components/Facultyloadgrid';
 import { AIScheduleGenerator } from '@/components/AIScheduleGenerator';
 import { getScheduleStatusClasses, getScheduleStatusLabel, isApprovedSchedule } from '@/lib/scheduleStatus';
+import { PopupDialog } from '@/components/ui/popup-dialog';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const APPROVAL_ROLES = new Set(['dean', 'ovpaa', 'registrar', 'hro']);
@@ -174,6 +175,8 @@ function ScheduleLoadingContent() {
   const [editFacultyAvailability, setEditFacultyAvailability] = useState<Array<{ day: string; startTime: string; endTime: string }>>([]);
   const [editAvailabilityLoading, setEditAvailabilityLoading] = useState(false);
   const [editError, setEditError] = useState('');
+  const [remarksPrompt, setRemarksPrompt] = useState<{ scheduleId: string; remarks: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Schedule | null>(null);
 
   const canApprove = APPROVAL_ROLES.has(user?.role || '');
 
@@ -646,8 +649,15 @@ function ScheduleLoadingContent() {
 
   const handleApprovalDecision = async (scheduleId: string, action: 'approve' | 'reject') => {
     if (!user) return;
-    const remarks = action === 'reject' ? prompt('Please provide rejection remarks:', '') || '' : '';
+    if (action === 'reject') {
+      setRemarksPrompt({ scheduleId, remarks: '' });
+      return;
+    }
+    await saveApprovalDecision(scheduleId, action, '');
+  };
 
+  const saveApprovalDecision = async (scheduleId: string, action: 'approve' | 'reject', remarks: string) => {
+    if (!user) return;
     setSaving(true);
     try {
       await scheduleService.submitApprovalDecision({ scheduleId, role: user.role, action, remarks, actorId: String(user.id) });
@@ -773,15 +783,18 @@ function ScheduleLoadingContent() {
       return;
     }
 
-    const confirmed = globalThis.confirm(`Delete this schedule for ${item.facultyName} on ${item.day}?`);
-    if (!confirmed) return;
+    setDeleteTarget(item);
+  };
 
+  const confirmDeleteSchedule = async () => {
+    if (!user || !deleteTarget) return;
     setSaving(true);
     try {
-      await scheduleService.deleteSchedule(item.id, {
+      await scheduleService.deleteSchedule(deleteTarget.id, {
         actorId: String(user.id),
         actorRole: user.role,
       });
+      setDeleteTarget(null);
       await loadData(user);
       toast({ title: 'Done', description: 'Schedule deleted.', type: 'success' });
     } catch (error) {
@@ -1124,6 +1137,33 @@ function ScheduleLoadingContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <PopupDialog
+        open={Boolean(remarksPrompt)}
+        onOpenChange={(open) => !open && setRemarksPrompt(null)}
+        title="Reject schedule"
+        description="Add remarks to explain why this schedule cannot move forward."
+        confirmLabel="Reject schedule"
+        destructive
+        prompt
+        value={remarksPrompt?.remarks ?? ''}
+        onValueChange={(remarks) => remarksPrompt && setRemarksPrompt({ ...remarksPrompt, remarks })}
+        placeholder="Enter rejection remarks (optional)"
+        onConfirm={() => {
+          if (!remarksPrompt) return;
+          const prompt = remarksPrompt;
+          setRemarksPrompt(null);
+          void saveApprovalDecision(prompt.scheduleId, 'reject', prompt.remarks.trim());
+        }}
+      />
+      <PopupDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Delete schedule?"
+        description={deleteTarget ? `Delete this schedule for ${deleteTarget.facultyName} on ${deleteTarget.day}?` : ''}
+        confirmLabel="Delete schedule"
+        destructive
+        onConfirm={() => void confirmDeleteSchedule()}
+      />
 
       <Dialog
         open={isConsultationDialogOpen}

@@ -17,6 +17,7 @@ import { FACULTY_REQUIRED_OFFICES } from '@/lib/clearanceOffices';
 import { isApprovalOfficer, getClearancePageInfo, isFacultyLikeRole } from '@/lib/roleConfig';
 import { StoredUser, normalize } from '@/lib/stringUtils';
 import { toast } from '@/lib/toast';
+import { PopupDialog } from '@/components/ui/popup-dialog';
 
 const OFFICER_OFFICE_MAP: Record<string, number> = {
   dlrc:         1,
@@ -74,6 +75,8 @@ export default function ClearancePage() {
   const [semester] = useState(() => (new Date().getMonth() >= 5 ? '1st Semester' : '2nd Semester'));
   const [remarkText, setRemarkText] = useState('');
   const [remarkSaving, setRemarkSaving] = useState(false);
+  const [rejectionPrompt, setRejectionPrompt] = useState<{ record: Clearance; reason: string } | null>(null);
+  const [deleteReminder, setDeleteReminder] = useState<{ record: Clearance; noteId: string } | null>(null);
 
   const isFacultyUser = isFacultyLikeRole(currentUser?.role);
   const isApprovalOfficer_ = isApprovalOfficer(currentUser?.role);
@@ -415,11 +418,15 @@ export default function ClearancePage() {
     if (!currentUser) return;
     if (!record.id) return;
 
-    let reason: string | undefined;
     if (decision === 'rejected') {
-      reason = prompt('Enter rejection reason:') || undefined;
+      setRejectionPrompt({ record, reason: '' });
+      return;
     }
+    await saveDecision(record, decision);
+  };
 
+  const saveDecision = async (record: Clearance, decision: 'approved' | 'rejected' | 'pending', reason?: string) => {
+    if (!currentUser) return;
     // reviewed_by is an integer column (matches users.user_id), not a uuid,
     // so always send the numeric id here — never supabase_id.
     const reviewerId = currentUser.id != null ? String(currentUser.id) : undefined;
@@ -466,10 +473,14 @@ export default function ClearancePage() {
   };
 
   const handleDeleteRemark = async (record: Clearance, noteId: string) => {
-    if (!window.confirm('Delete this requirement reminder?')) return;
+    setDeleteReminder({ record, noteId });
+  };
 
+  const deleteReminderNote = async () => {
+    if (!deleteReminder) return;
     try {
-      await clearanceService.deleteClearanceNote(record.id, noteId);
+      await clearanceService.deleteClearanceNote(deleteReminder.record.id, deleteReminder.noteId);
+      setDeleteReminder(null);
       await loadData(currentUser ?? undefined);
       toast({ title: 'Remark deleted', description: 'The requirement reminder was removed.', type: 'success' });
     } catch (err) {
@@ -1035,6 +1046,34 @@ export default function ClearancePage() {
         </div>
       </section>
     )}
+    <PopupDialog
+      open={Boolean(rejectionPrompt)}
+      onOpenChange={(open) => !open && setRejectionPrompt(null)}
+      title="Reject clearance"
+      description="Provide the reason this faculty clearance needs to be corrected before approval."
+      confirmLabel="Reject clearance"
+      destructive
+      prompt
+      required
+      value={rejectionPrompt?.reason ?? ''}
+      onValueChange={(reason) => rejectionPrompt && setRejectionPrompt({ ...rejectionPrompt, reason })}
+      placeholder="Enter rejection reason"
+      onConfirm={() => {
+        if (!rejectionPrompt) return;
+        const { record, reason } = rejectionPrompt;
+        setRejectionPrompt(null);
+        void saveDecision(record, 'rejected', reason.trim());
+      }}
+    />
+    <PopupDialog
+      open={Boolean(deleteReminder)}
+      onOpenChange={(open) => !open && setDeleteReminder(null)}
+      title="Delete requirement reminder?"
+      description="This reminder will be removed from the clearance record."
+      confirmLabel="Delete reminder"
+      destructive
+      onConfirm={() => void deleteReminderNote()}
+    />
     </>
   );
 }

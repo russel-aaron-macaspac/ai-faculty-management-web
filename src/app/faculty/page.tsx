@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/pagination';
 import { ArrowUpDown, ChevronDown, ChevronUp, Loader2, Pencil, Search, Trash2, Users } from 'lucide-react';
 import { toast } from '@/lib/toast';
+import { PopupDialog } from '@/components/ui/popup-dialog';
 
 const facultySchema = z.object({
   fullName: z.string().trim().min(1, { message: 'Enter the faculty member’s full name.' }).min(2, { message: 'Full name should include at least 2 characters.' }),
@@ -64,6 +65,7 @@ function FacultyPageContent() {
   const [sortKey, setSortKey] = useState<SortKey>('fullName');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [currentPage, setCurrentPage] = useState(1);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof facultySchema>>({
     resolver: zodResolver(facultySchema),
@@ -129,15 +131,19 @@ function FacultyPageContent() {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this faculty member?')) {
-      try {
-        await facultyService.deleteFaculty(id);
-        toast({ title: 'Deleted', description: 'Faculty record deleted.', type: 'info' });
-      } catch (err) {
-        toast({ title: 'Delete Failed', description: err instanceof Error ? err.message : 'Delete failed.', type: 'error' });
-      }
-      loadData();
+    setDeleteTarget(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await facultyService.deleteFaculty(deleteTarget);
+      setDeleteTarget(null);
+      toast({ title: 'Deleted', description: 'Faculty record deleted.', type: 'info' });
+    } catch (err) {
+      toast({ title: 'Delete Failed', description: err instanceof Error ? err.message : 'Delete failed.', type: 'error' });
     }
+    loadData();
   };
 
   const filteredFaculty = useMemo(() => {
@@ -398,7 +404,15 @@ function FacultyPageContent() {
             </Form>
           </DialogContent>
         </Dialog>
-
+        <PopupDialog
+          open={Boolean(deleteTarget)}
+          onOpenChange={(open) => !open && setDeleteTarget(null)}
+          title="Delete faculty member?"
+          description="This faculty record will be permanently removed."
+          confirmLabel="Delete faculty"
+          destructive
+          onConfirm={() => void confirmDelete()}
+        />
       </div>
 
       <div className="surface-panel space-y-5 rounded-3xl p-5 sm:p-6">

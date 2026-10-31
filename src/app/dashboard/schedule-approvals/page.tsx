@@ -10,6 +10,7 @@ import { scheduleService } from '@/services/scheduleService';
 import { Schedule } from '@/types/schedule';
 import { formatTimeToTwelveHour } from '@/lib/timeUtils';
 import { toast } from '@/lib/toast';
+import { PopupDialog } from '@/components/ui/popup-dialog';
 import { CheckCircle2, Clock, Loader2, XCircle, CalendarCheck2 } from 'lucide-react';
 
 type LocalUser = {
@@ -36,6 +37,11 @@ function ScheduleApprovalsContent() {
   const [saving, setSaving] = useState(false);
   const [pendingSchedules, setPendingSchedules] = useState<Schedule[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [remarksPrompt, setRemarksPrompt] = useState<
+    { type: 'single'; item: Schedule; remarks: string } |
+    { type: 'group'; schedules: Schedule[]; remarks: string } |
+    null
+  >(null);
 
   // Determine role for this approval step
   let approvalRole: 'dean' | 'ovpaa' | 'registrar' = 'dean';
@@ -115,8 +121,15 @@ function ScheduleApprovalsContent() {
   const handleDecision = async (item: Schedule, action: 'approve' | 'reject') => {
     if (!user) return;
 
-    const remarks = action === 'reject' ? globalThis.prompt('Enter rejection remarks (optional):', '') || '' : '';
+    if (action === 'reject') {
+      setRemarksPrompt({ type: 'single', item, remarks: '' });
+      return;
+    }
+    await saveDecision(item, action, '');
+  };
 
+  const saveDecision = async (item: Schedule, action: 'approve' | 'reject', remarks: string) => {
+    if (!user) return;
     setSaving(true);
     try {
       await scheduleService.submitApprovalDecision({
@@ -144,8 +157,15 @@ function ScheduleApprovalsContent() {
   const handleGroupDecision = async (groupSchedules: Schedule[], action: 'approve' | 'reject') => {
     if (!user || groupSchedules.length === 0) return;
 
-    const remarks = action === 'reject' ? globalThis.prompt(`Enter rejection remarks for this faculty group (optional):`, '') || '' : '';
+    if (action === 'reject') {
+      setRemarksPrompt({ type: 'group', schedules: groupSchedules, remarks: '' });
+      return;
+    }
+    await saveGroupDecision(groupSchedules, action, '');
+  };
 
+  const saveGroupDecision = async (groupSchedules: Schedule[], action: 'approve' | 'reject', remarks: string) => {
+    if (!user) return;
     setSaving(true);
     try {
       const results = await Promise.allSettled(
@@ -305,6 +325,30 @@ function ScheduleApprovalsContent() {
           {queueContent}
         </CardContent>
       </Card>
+      <PopupDialog
+        open={Boolean(remarksPrompt)}
+        onOpenChange={(open) => !open && setRemarksPrompt(null)}
+        title={remarksPrompt?.type === 'group' ? 'Reject faculty schedule group' : 'Reject schedule'}
+        description="Add optional remarks to explain why this schedule cannot move forward."
+        confirmLabel="Reject schedule"
+        destructive
+        prompt
+        value={remarksPrompt?.remarks ?? ''}
+        onValueChange={(remarks) => {
+          if (remarksPrompt) setRemarksPrompt({ ...remarksPrompt, remarks });
+        }}
+        placeholder="Enter rejection remarks (optional)"
+        onConfirm={() => {
+          if (!remarksPrompt) return;
+          const prompt = remarksPrompt;
+          setRemarksPrompt(null);
+          if (prompt.type === 'group') {
+            void saveGroupDecision(prompt.schedules, 'reject', prompt.remarks.trim());
+          } else {
+            void saveDecision(prompt.item, 'reject', prompt.remarks.trim());
+          }
+        }}
+      />
     </div>
   );
 }
