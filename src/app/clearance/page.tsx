@@ -9,10 +9,10 @@ import { facultyService } from '@/services/facultyService';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
-import { UploadCloud, CheckCircle2, AlertTriangle, FileText, Loader2, Search, Check, X, Clock, Users, ClipboardCheck, ShieldCheck, MessageSquare, Trash2, Printer } from 'lucide-react';
+import { UploadCloud, CheckCircle2, AlertTriangle, FileText, Loader2, Search, Check, X, Users, ClipboardCheck, ShieldCheck, MessageSquare, Trash2, Printer } from 'lucide-react';
 import { FACULTY_REQUIRED_OFFICES } from '@/lib/clearanceOffices';
 import { isApprovalOfficer, getClearancePageInfo, isFacultyLikeRole } from '@/lib/roleConfig';
 import { StoredUser, normalize } from '@/lib/stringUtils';
@@ -57,14 +57,14 @@ export default function ClearancePage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [submittingOfficeId, setSubmittingOfficeId] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<StoredUser | null>(null);
   const [facultyMembers, setFacultyMembers] = useState<Faculty[]>([]);
   const [docName, setDocName] = useState('Safety Training Certificate');
   const [uploadError, setUploadError] = useState('');
   const [remarkRecord, setRemarkRecord] = useState<Clearance | null>(null);
-  const [documentRecord, setDocumentRecord] = useState<Clearance | null>(null);
+  const [selectedRecord, setSelectedRecord] = useState<Clearance | null>(null);
+  const [selectedFaculty, setSelectedFaculty] = useState<AdminFacultyProgress | null>(null);
   const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false);
   const [shouldPrintAfterPreviewClose, setShouldPrintAfterPreviewClose] = useState(false);
   const [academicYear] = useState(() => {
@@ -81,9 +81,6 @@ export default function ClearancePage() {
   const isFacultyUser = isFacultyLikeRole(currentUser?.role);
   const isApprovalOfficer_ = isApprovalOfficer(currentUser?.role);
   const canReviewFaculty = isApprovalOfficer_;
-  const showActionColumn = isApprovalOfficer_;
-  const showRemarkColumn = canReviewFaculty;
-  const showSubmitColumn = isFacultyUser;
 
   const officeIdMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -196,31 +193,6 @@ export default function ClearancePage() {
     }
   };
 
-  const handleFacultySubmit = async (officeName: string) => {
-    if (!currentUser) return;
-
-    const employeeId = currentUser.supabase_id ?? '';
-    const officeId = officeIdMap.get(normalize(officeName));
-    if (!employeeId || !officeId) {
-      toast({ title: 'Submission Failed', description: 'Please sign in again or select a valid office.', type: 'error' });
-      return;
-    }
-
-    setSubmittingOfficeId(officeId);
-    try {
-      await clearanceService.uploadDocument(employeeId, Number(officeId), officeName, undefined, {
-        name: currentUser.name ?? currentUser.full_name,
-        role: currentUser.role,
-      });
-      await loadData(currentUser);
-      toast({ title: 'Clearance Submitted', description: `${officeName} has been submitted for review.`, type: 'success' });
-    } catch (error) {
-      toast({ title: 'Submission Failed', description: error instanceof Error ? error.message : 'Submission failed. Please try again.', type: 'error' });
-    } finally {
-      setSubmittingOfficeId(null);
-    }
-  };
-
   const facultyStepRecords = useMemo<FacultyStepRecord[]>(() => {
     if (!currentUser || !isFacultyLikeRole(currentUser.role)) return [];
 
@@ -278,7 +250,7 @@ export default function ClearancePage() {
         const latest = recs[0];
         return {
           ...latest,
-          requiredDocument: `Clearance Request (${recs.length} documents)`,
+          requiredDocument: 'Clearance Request',
           _allRecords: recs,
         };
       }).filter((faculty) => (faculty.employeeName ?? '').toLowerCase().includes(term));
@@ -464,7 +436,7 @@ export default function ClearancePage() {
       setRemarkRecord(null);
       setRemarkText('');
       await loadData(currentUser);
-      toast({ title: 'Remark sent', description: 'The faculty member was notified of the requirement reminder.', type: 'success' });
+      toast({ title: 'Office remark sent', description: 'The faculty member was notified of the office remark.', type: 'success' });
     } catch (err) {
       toast({ title: 'Remark failed', description: err instanceof Error ? err.message : 'Could not send the remark.', type: 'error' });
     } finally {
@@ -472,19 +444,16 @@ export default function ClearancePage() {
     }
   };
 
-  const handleDeleteRemark = async (record: Clearance, noteId: string) => {
-    setDeleteReminder({ record, noteId });
-  };
-
   const deleteReminderNote = async () => {
     if (!deleteReminder) return;
     try {
       await clearanceService.deleteClearanceNote(deleteReminder.record.id, deleteReminder.noteId);
       setDeleteReminder(null);
+      setSelectedRecord((record) => record ? { ...record, notes: record.notes?.filter((note) => note.id !== deleteReminder.noteId) } : record);
       await loadData(currentUser ?? undefined);
-      toast({ title: 'Remark deleted', description: 'The requirement reminder was removed.', type: 'success' });
+      toast({ title: 'Office remark deleted', description: 'The office remark was removed.', type: 'success' });
     } catch (err) {
-      toast({ title: 'Delete failed', description: err instanceof Error ? err.message : 'Could not delete the remark.', type: 'error' });
+      toast({ title: 'Delete failed', description: err instanceof Error ? err.message : 'Could not delete the office remark.', type: 'error' });
     }
   };
 
@@ -529,18 +498,20 @@ export default function ClearancePage() {
 
   const getStatusLabel = (status: Clearance['status']) => status === 'submitted' ? 'pending' : status;
 
-  const getFacultySubmitLabel = (record: Clearance & { _isRequiredPlaceholder?: boolean }) => {
-    if (record.status === 'rejected') {
-      return 'Re-request';
-    }
-    return record._isRequiredPlaceholder ? 'Request' : 'Requested';
+  const formatRemarkDate = (value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
   };
 
   let tableRows: React.ReactNode;
-  let tableColumnCount = 3;
-  if (currentUser?.role === 'admin' || showActionColumn || showRemarkColumn || showSubmitColumn) {
-    tableColumnCount = 4;
-  }
+  const tableColumnCount = currentUser?.role === 'admin' ? 4 : 3;
   const adminRows = currentUser?.role === 'admin'
     ? adminFacultyProgress.filter((faculty) => faculty.name.toLowerCase().includes(searchTerm.toLowerCase()) || faculty.department.toLowerCase().includes(searchTerm.toLowerCase()))
     : [];
@@ -578,9 +549,11 @@ export default function ClearancePage() {
       }
 
       return (
-        <TableRow key={faculty.id}>
+        <TableRow key={faculty.id} className="cursor-pointer hover:bg-slate-50" onClick={() => setSelectedFaculty(faculty)}>
         <TableCell>
-          <div className="font-medium text-slate-800">{faculty.name}</div>
+          <button type="button" className="text-left font-medium text-slate-800 underline-offset-4 hover:text-red-700 hover:underline" onClick={() => setSelectedFaculty(faculty)}>
+            {faculty.name}
+          </button>
           <div className="text-xs text-slate-500">{faculty.department || 'Department not assigned'}</div>
         </TableCell>
         <TableCell className="text-sm text-slate-600">{faculty.submitted} / {monitoredOfficeCount} submitted</TableCell>
@@ -602,16 +575,21 @@ export default function ClearancePage() {
     tableRows = filtered.map((record: Clearance & { _hasRecord?: boolean; _isRequiredPlaceholder?: boolean }) => (
       <TableRow
         key={record.id}
-        className={canReviewFaculty ? 'cursor-pointer hover:bg-slate-50' : ''}
+        className={canReviewFaculty || isFacultyUser ? 'cursor-pointer hover:bg-slate-50' : ''}
+        onClick={() => (canReviewFaculty || isFacultyUser) && setSelectedRecord(record)}
       >
         <TableCell>
           <div className="flex items-start justify-between gap-4">
             <div className="text-sm font-medium flex items-center gap-2">
               <FileText className="h-4 w-4 text-slate-400" />
               {canReviewFaculty ? (
-                <span className="text-slate-800 font-semibold">{record.employeeName}</span>
+                <button type="button" className="text-left font-semibold text-slate-800 underline-offset-4 hover:text-red-700 hover:underline" onClick={() => setSelectedRecord(record)}>
+                  {record.employeeName}
+                </button>
               ) : (
-                <span className="text-slate-800">{record.requiredDocument}</span>
+                <button type="button" className="text-left text-slate-800 underline-offset-4 hover:text-red-700 hover:underline" onClick={() => setSelectedRecord(record)}>
+                  {record.requiredDocument}
+                </button>
               )}
             </div>
 
@@ -623,21 +601,15 @@ export default function ClearancePage() {
             </div>
           )}
           {(record.filePath || record.attachments?.length) && (
-            <Button type="button" variant="link" className="h-auto px-0 text-xs text-red-700" onClick={() => setDocumentRecord(record)}>
-              <FileText className="mr-1 h-3.5 w-3.5" />
-              View documents ({(record.filePath ? 1 : 0) + (record.attachments?.length ?? 0)})
-            </Button>
+            <p className="mt-1 text-xs text-slate-500">
+              {(record.filePath ? 1 : 0) + (record.attachments?.length ?? 0)} document{(record.filePath ? 1 : 0) + (record.attachments?.length ?? 0) === 1 ? '' : 's'} uploaded
+            </p>
           )}
-          {record.notes?.map((note) => (
-            <div key={note.id} className="mt-2 flex items-start justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-900">
-              <span><span className="font-semibold">Requirement reminder:</span> {note.content}</span>
-              {canReviewFaculty && (
-                <Button type="button" size="icon-sm" variant="ghost" className="shrink-0 text-amber-800 hover:bg-amber-100" onClick={() => void handleDeleteRemark(record, note.id)} aria-label="Delete requirement reminder">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              )}
-            </div>
-          ))}
+          {record.notes?.length ? (
+            <p className="mt-1 text-xs text-slate-500">
+              {record.notes.length} office remark{record.notes.length === 1 ? '' : 's'} available
+            </p>
+          ) : null}
         </TableCell>
         <TableCell className="text-sm text-slate-600">{record.submissionDate || 'Not submitted'}</TableCell>
         <TableCell>
@@ -646,81 +618,6 @@ export default function ClearancePage() {
             {getStatusLabel(record.status)}
           </span>
         </TableCell>
-        {showSubmitColumn && (
-          <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-            {record.status !== 'approved' && (() => {
-              const officeId = officeIdMap.get(normalize(record.requiredDocument));
-              if (!officeId) return null;
-              return (
-                <div className="flex flex-wrap justify-end gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={record.status === 'rejected' || record._isRequiredPlaceholder ? 'default' : 'secondary'}
-                    className={record.status === 'rejected' || record._isRequiredPlaceholder ? '' : 'bg-slate-200 text-slate-500 hover:bg-slate-200 hover:text-slate-500'}
-                    disabled={!currentUser?.supabase_id || submittingOfficeId === officeId || (!record._isRequiredPlaceholder && record.status !== 'rejected')}
-                    onClick={() => void handleFacultySubmit(record.requiredDocument)}
-                  >
-                    {submittingOfficeId === officeId ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <UploadCloud className="mr-1 h-3.5 w-3.5" />}
-                    {getFacultySubmitLabel(record)}
-                  </Button>
-                  <Link href={`/clearance/upload/${officeId}`} className="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50">
-                    {record.filePath ? 'Manage file' : 'Upload file'}
-                  </Link>
-                </div>
-              );
-            })()}
-          </TableCell>
-        )}
-        {showRemarkColumn && (
-          <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-            <div className="inline-flex flex-col gap-1 sm:gap-2 sm:flex-row">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={record._hasRecord === false || actionLoadingId === record.id}
-                onClick={() => {
-                  setRemarkRecord(record);
-                  setRemarkText('');
-                }}
-              >
-                <MessageSquare className="mr-1 h-3.5 w-3.5" />
-                Add remark
-              </Button>
-              {showActionColumn && <Button
-                type="button"
-                size="sm"
-                className="bg-emerald-600 hover:bg-emerald-700"
-                disabled={record._hasRecord === false || actionLoadingId === record.id || record.status === 'approved'}
-                onClick={() => void handleDecision(record, 'approved')}
-              >
-                {actionLoadingId === record.id ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />}
-                Approve
-              </Button>}
-              {showActionColumn && <Button
-                type="button"
-                size="sm"
-                variant="destructive"
-                disabled={record._hasRecord === false || actionLoadingId === record.id || record.status === 'rejected'}
-                onClick={() => void handleDecision(record, 'rejected')}
-              >
-                <X className="mr-1 h-3.5 w-3.5" />
-                Reject
-              </Button>}
-              {showActionColumn && <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={record._hasRecord === false || actionLoadingId === record.id || record.status === 'pending'}
-                onClick={() => void handleDecision(record, 'pending')}
-              >
-                <Clock className="mr-1 h-3.5 w-3.5" />
-                Pending
-              </Button>}
-            </div>
-          </TableCell>
-        )}
       </TableRow>
     ));
   }
@@ -776,24 +673,24 @@ export default function ClearancePage() {
           <Dialog open={Boolean(remarkRecord)} onOpenChange={(open) => !open && setRemarkRecord(null)}>
             <DialogContent className="sm:max-w-lg">
               <DialogHeader>
-                <DialogTitle>Requirement reminder for {remarkRecord?.employeeName}</DialogTitle>
+                <DialogTitle>Office remarks for {remarkRecord?.employeeName}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 pt-4">
                 <p className="text-sm text-slate-500">
-                  Add the specific requirement this faculty member must submit before approval.
+                  Add an office remark or follow-up for this clearance.
                 </p>
                 <textarea
                   className="min-h-28 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#D4A017]/40"
                   value={remarkText}
                   onChange={(event) => setRemarkText(event.target.value)}
                   placeholder="Example: Submit the updated laboratory clearance certificate."
-                  aria-label="Requirement reminder"
+                  aria-label="Office remarks"
                 />
                 <div className="flex justify-end gap-2">
                   <Button type="button" variant="outline" onClick={() => setRemarkRecord(null)}>Cancel</Button>
                   <Button type="button" onClick={() => void handleAddRemark()} disabled={remarkSaving || !remarkText.trim()}>
                     {remarkSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Send reminder
+                    Save office remark
                   </Button>
                 </div>
               </div>
@@ -801,26 +698,73 @@ export default function ClearancePage() {
           </Dialog>
         )}
 
-        <Dialog open={Boolean(documentRecord)} onOpenChange={(open) => !open && setDocumentRecord(null)}>
-          <DialogContent className="min-w-0 overflow-hidden sm:max-w-lg">
-            <DialogHeader className="min-w-0">
-              <DialogTitle className="min-w-0 break-words">Uploaded documents for {documentRecord?.employeeName}</DialogTitle>
+        <Dialog open={Boolean(selectedRecord)} onOpenChange={(open) => !open && setSelectedRecord(null)}>
+          <DialogContent className="max-h-[90vh] max-w-[calc(100vw-2rem)] overflow-x-hidden overflow-y-auto sm:max-w-xl">
+            <DialogHeader>
+              <DialogTitle className="break-words">{selectedRecord?.requiredDocument}</DialogTitle>
+              <DialogDescription>{selectedRecord?.employeeName}</DialogDescription>
             </DialogHeader>
-            <div className="min-w-0 space-y-2 pt-4">
-              {documentRecord?.filePath && (
-                <Button type="button" variant="outline" className="w-full min-w-0 max-w-full justify-start overflow-hidden" onClick={() => void handleOpenFile(documentRecord.filePath!, documentRecord.originalFilename || 'submitted document')}>
-                  <FileText className="mr-2 h-4 w-4 text-red-600" />
-                  <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">
-                    {documentRecord.originalFilename || 'Submitted document'}
-                  </span>
-                </Button>
-              )}
-              {documentRecord?.attachments?.map((attachment) => (
-                <Button key={attachment.id} type="button" variant="outline" className="w-full min-w-0 max-w-full justify-start overflow-hidden" onClick={() => void handleOpenFile(attachment.filePath, attachment.originalFilename)}>
-                  <FileText className="mr-2 h-4 w-4 text-red-600" />
-                  <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">{attachment.originalFilename}</span>
-                </Button>
-              ))}
+            {selectedRecord && (
+              <div className="space-y-5">
+                <div className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm sm:grid-cols-2">
+                  <div><p className="text-xs text-slate-500">Status</p><span className={`mt-1 inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${getStatusClass(selectedRecord.status)}`}>{getStatusLabel(selectedRecord.status)}</span></div>
+                  <div><p className="text-xs text-slate-500">Submitted</p><p className="mt-1 font-medium text-slate-800">{selectedRecord.submissionDate || 'Not submitted'}</p></div>
+                  {selectedRecord.reviewedBy && <div><p className="text-xs text-slate-500">Reviewed by</p><p className="mt-1 font-medium text-slate-800">{selectedRecord.reviewedBy}</p></div>}
+                  {selectedRecord.reviewedAt && <div><p className="text-xs text-slate-500">Reviewed at</p><p className="mt-1 font-medium text-slate-800">{selectedRecord.reviewedAt}</p></div>}
+                </div>
+
+                {(selectedRecord.rejectionReason || selectedRecord.validationWarning) && (
+                  <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">
+                    <p className="font-semibold">Follow-up needed</p>
+                    <p className="mt-1">{selectedRecord.rejectionReason || selectedRecord.validationWarning}</p>
+                  </div>
+                )}
+
+                <div className="min-w-0 space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-slate-900">Uploaded files</h3>
+                    {isFacultyUser && (() => {
+                      const officeId = officeIdMap.get(normalize(selectedRecord.requiredDocument));
+                      return officeId ? <Link href={`/clearance/upload/${officeId}`} className="text-sm font-medium text-red-700 hover:underline">{selectedRecord.filePath ? 'Manage files' : 'Upload file'}</Link> : null;
+                    })()}
+                  </div>
+                  {selectedRecord.filePath || selectedRecord.attachments?.length ? (
+                    <div className="min-w-0 space-y-2">
+                      {selectedRecord.filePath && <Button type="button" variant="outline" className="flex w-full max-w-full min-w-0 justify-start overflow-hidden text-left" onClick={() => void handleOpenFile(selectedRecord.filePath!, selectedRecord.originalFilename || 'Submitted document')} title={selectedRecord.originalFilename || 'Submitted document'}><FileText className="mr-2 h-4 w-4 shrink-0 text-red-600" /><span className="block w-0 min-w-0 flex-1 overflow-hidden text-left text-ellipsis whitespace-nowrap">{selectedRecord.originalFilename || 'Submitted document'}</span></Button>}
+                      {selectedRecord.attachments?.map((attachment) => <Button key={attachment.id} type="button" variant="outline" className="flex w-full max-w-full min-w-0 justify-start overflow-hidden text-left" onClick={() => void handleOpenFile(attachment.filePath, attachment.originalFilename)} title={attachment.originalFilename}><FileText className="mr-2 h-4 w-4 shrink-0 text-red-600" /><span className="block w-0 min-w-0 flex-1 overflow-hidden text-left text-ellipsis whitespace-nowrap">{attachment.originalFilename}</span></Button>)}
+                    </div>
+                  ) : <p className="text-sm text-slate-500">No files uploaded yet.</p>}
+                </div>
+
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-slate-900">Remarks</h3>
+                  {selectedRecord.notes?.length ? selectedRecord.notes.map((note) => <div key={note.id} className="flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"><div><p>{note.content}</p><p className="mt-1 text-xs text-amber-800">{note.author_name} · {formatRemarkDate(note.created_at)}</p></div>{canReviewFaculty && <Button type="button" size="icon-sm" variant="ghost" className="shrink-0 text-amber-800 hover:bg-amber-100" onClick={() => setDeleteReminder({ record: selectedRecord, noteId: note.id })} aria-label="Delete office remark"><Trash2 className="h-3.5 w-3.5" /></Button>}</div>) : <p className="text-sm text-slate-500">No remarks yet.</p>}
+                </div>
+              </div>
+            )}
+            {selectedRecord && (
+              <DialogFooter>
+                {canReviewFaculty && <Button type="button" variant="outline" onClick={() => { setRemarkRecord(selectedRecord); setRemarkText(''); setSelectedRecord(null); }}><MessageSquare className="mr-2 h-4 w-4" />Remarks</Button>}
+                {canReviewFaculty && <Button type="button" variant="destructive" disabled={selectedRecord.status === 'rejected' || actionLoadingId === selectedRecord.id} onClick={() => { setSelectedRecord(null); void handleDecision(selectedRecord, 'rejected'); }}><X className="mr-2 h-4 w-4" />Reject</Button>}
+                {canReviewFaculty && <Button type="button" disabled={selectedRecord.status === 'approved' || actionLoadingId === selectedRecord.id} onClick={() => { setSelectedRecord(null); void handleDecision(selectedRecord, 'approved'); }}><Check className="mr-2 h-4 w-4" />Approve</Button>}
+              </DialogFooter>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={Boolean(selectedFaculty)} onOpenChange={(open) => !open && setSelectedFaculty(null)}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>{selectedFaculty?.name}</DialogTitle>
+              <DialogDescription>{selectedFaculty?.department || 'Department not assigned'} · {selectedFaculty?.approved} of {monitoredOfficeCount} offices approved</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              {selectedFaculty?.records.length ? selectedFaculty.records.map((record) => (
+                <button key={record.id} type="button" className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 p-3 text-left hover:border-red-300 hover:bg-slate-50" onClick={() => { setSelectedFaculty(null); setSelectedRecord(record); }}>
+                  <span><span className="block font-medium text-slate-800">{record.requiredDocument}</span><span className="text-xs text-slate-500">{record.originalFilename || 'No file uploaded'}</span></span>
+                  <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${getStatusClass(record.status)}`}>{getStatusLabel(record.status)}</span>
+                </button>
+              )) : <p className="text-sm text-slate-500">No clearance records have been submitted.</p>}
             </div>
           </DialogContent>
         </Dialog>
@@ -991,8 +935,6 @@ export default function ClearancePage() {
                     <TableHead>Status</TableHead>
                   </>
                 )}
-                {showSubmitColumn && <TableHead className="text-right">Action</TableHead>}
-                {showRemarkColumn && <TableHead className="text-right">{showActionColumn ? 'Decision' : 'Remark'}</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1068,9 +1010,9 @@ export default function ClearancePage() {
     <PopupDialog
       open={Boolean(deleteReminder)}
       onOpenChange={(open) => !open && setDeleteReminder(null)}
-      title="Delete requirement reminder?"
-      description="This reminder will be removed from the clearance record."
-      confirmLabel="Delete reminder"
+      title="Delete office remark?"
+      description="This office remark will be removed from the clearance record."
+      confirmLabel="Delete office remark"
       destructive
       onConfirm={() => void deleteReminderNote()}
     />
