@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { ArrowLeft, FileText, Loader2, Trash2, UploadCloud } from 'lucide-react';
+import { ArrowLeft, FileText, Link as LinkIcon, Loader2, Trash2, UploadCloud } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -22,6 +22,7 @@ export default function ClearanceUploadPage() {
   const [office, setOffice] = useState<Office | null>(null);
   const [record, setRecord] = useState<Clearance | null>(null);
   const [files, setFiles] = useState<File[]>([]);
+  const [documentLink, setDocumentLink] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -63,11 +64,40 @@ export default function ClearanceUploadPage() {
   }, [params.officeId, user]);
 
   const handleUpload = async () => {
-    if (!user || files.length === 0 || !office) return;
+    if (!user || !office || (files.length === 0 && !documentLink.trim())) return;
+
+    let link: URL | null = null;
+    if (documentLink.trim()) {
+      try {
+        link = new URL(documentLink.trim());
+        if (!['http:', 'https:'].includes(link.protocol)) throw new Error();
+      } catch {
+        toast({ title: 'Invalid link', description: 'Enter a valid http:// or https:// document link.', type: 'error' });
+        return;
+      }
+    }
 
     setSaving(true);
     try {
       let clearanceId = record?.id;
+      if (link && record?.id) {
+        await clearanceService.addExternalLink(record.id, link.toString());
+        toast({ title: 'Document link submitted', description: `The external document link was added for ${office.name}.`, type: 'success' });
+        router.push('/clearance');
+        return;
+      }
+      if (!record?.filePath && link) {
+        await clearanceService.uploadDocument(
+          user.supabase_id ?? String(user.id ?? ''),
+          Number(office.id),
+          'External document link',
+          link.toString(),
+          { name: user.name ?? user.full_name, role: user.role }
+        );
+        toast({ title: 'Document link submitted', description: `The external document link was added for ${office.name}.`, type: 'success' });
+        router.push('/clearance');
+        return;
+      }
       if (!record?.filePath) {
         await clearanceService.uploadDocument(
           user.supabase_id ?? String(user.id ?? ''),
@@ -142,12 +172,23 @@ export default function ClearanceUploadPage() {
                 {record.filePath && <div className="flex items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><FileText className="h-5 w-5 shrink-0 text-red-600" /><p className="truncate text-sm font-medium text-slate-800">{record.originalFilename || 'Submitted document'}</p></div><Button type="button" size="icon-sm" variant="ghost" onClick={() => void handleRemove()} disabled={removing || record.status === 'approved'} aria-label="Delete primary file"><Trash2 className="h-4 w-4 text-rose-600" /></Button></div>}
                 {record.attachments?.map((attachment) => <div key={attachment.id} className="flex items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><FileText className="h-5 w-5 shrink-0 text-red-600" /><p className="truncate text-sm font-medium text-slate-800">{attachment.originalFilename}</p></div><Button type="button" size="icon-sm" variant="ghost" onClick={() => void handleRemove(attachment.id)} disabled={removing || record.status === 'approved'} aria-label={`Delete ${attachment.originalFilename}`}><Trash2 className="h-4 w-4 text-rose-600" /></Button></div>)}
               </div>
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="space-y-3">
                 <Input type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={(event) => setFiles(Array.from(event.target.files ?? []))} aria-label="Choose clearance documents" />
-                <Button type="button" onClick={() => void handleUpload()} disabled={files.length === 0 || saving || record.status === 'approved'} className="bg-primary text-primary-foreground hover:bg-blue-700">
-                  {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
-                  Add files
-                </Button>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button type="button" onClick={() => void handleUpload()} disabled={files.length === 0 || saving} className="bg-primary text-primary-foreground hover:bg-blue-700">
+                    {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
+                    Add files
+                  </Button>
+                </div>
+                <div className="space-y-2 border-t border-slate-200 pt-3">
+                  <label htmlFor="clearance-document-link" className="flex items-center gap-2 text-sm font-medium text-slate-700"><LinkIcon className="h-4 w-4" />Or add a link for a large document</label>
+                  <Input id="clearance-document-link" type="url" value={documentLink} onChange={(event) => setDocumentLink(event.target.value)} placeholder="https://drive.google.com/..." disabled={saving} />
+                  <p className="text-xs text-slate-500">Use a shareable Google Drive or other https link when the file is too large to upload.</p>
+                  <Button type="button" variant="outline" onClick={() => void handleUpload()} disabled={!documentLink.trim() || saving}>
+                    {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LinkIcon className="mr-2 h-4 w-4" />}
+                    Submit document link
+                  </Button>
+                </div>
               </div>
             </div>
           ) : (
@@ -158,6 +199,15 @@ export default function ClearanceUploadPage() {
                 {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
                 Upload file
               </Button>
+              <div className="space-y-2 border-t border-slate-200 pt-4">
+                <label htmlFor="clearance-document-link" className="flex items-center gap-2 text-sm font-medium text-slate-700"><LinkIcon className="h-4 w-4" />Or add a link for a large document</label>
+                <Input id="clearance-document-link" type="url" value={documentLink} onChange={(event) => setDocumentLink(event.target.value)} placeholder="https://drive.google.com/..." disabled={saving} />
+                <p className="text-xs text-slate-500">Use a shareable Google Drive or other https link when the file is too large to upload.</p>
+                <Button type="button" variant="outline" onClick={() => void handleUpload()} disabled={!documentLink.trim() || saving}>
+                  {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LinkIcon className="mr-2 h-4 w-4" />}
+                  Submit document link
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>

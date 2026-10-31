@@ -4,10 +4,28 @@ import { NextResponse } from "next/server";
 export async function POST(request, { params }) {
   try {
     const { id } = await params;
-    const form = await request.formData();
-    const files = form.getAll("files").filter((file) => file && typeof file.arrayBuffer === "function");
-    if (files.length === 0) {
-      return NextResponse.json({ error: "No files provided" }, { status: 400 });
+    const contentType = request.headers.get("content-type") || "";
+    let files = [];
+    let externalLink = null;
+    let externalFilename = "External document link";
+    if (contentType.includes("application/json")) {
+      const body = await request.json();
+      externalLink = typeof body?.link === "string" ? body.link.trim() : null;
+      externalFilename = typeof body?.filename === "string" && body.filename.trim()
+        ? body.filename.trim()
+        : externalFilename;
+      try {
+        const parsedLink = new URL(externalLink || "");
+        if (!["http:", "https:"].includes(parsedLink.protocol)) throw new Error();
+      } catch {
+        return NextResponse.json({ error: "A valid http:// or https:// link is required" }, { status: 400 });
+      }
+    } else {
+      const form = await request.formData();
+      files = form.getAll("files").filter((file) => file && typeof file.arrayBuffer === "function");
+      if (files.length === 0) {
+        return NextResponse.json({ error: "No files provided" }, { status: 400 });
+      }
     }
 
     const supabase = createSupabaseAdminClient();
@@ -20,8 +38,21 @@ export async function POST(request, { params }) {
     if (clearanceError || !clearance) {
       return NextResponse.json({ error: "Clearance request not found" }, { status: 404 });
     }
-    if (clearance.status === "approved") {
-      return NextResponse.json({ error: "Cannot add files to an approved clearance" }, { status: 422 });
+    if (externalLink) {
+      const { data, error } = await supabase
+        .from("clearance_attachments")
+        .insert({ clearance_id: Number(id), original_filename: externalFilename, file_path: externalLink })
+        .select("attachment_id, clearance_id, original_filename, file_path, uploaded_at");
+      if (error) {
+        return NextResponse.json({ error: "Failed to save document link", details: error.message }, { status: 500 });
+      }
+      return NextResponse.json({ data: data.map((attachment) => ({
+        id: String(attachment.attachment_id),
+        clearanceId: String(attachment.clearance_id),
+        originalFilename: attachment.original_filename,
+        filePath: attachment.file_path,
+        uploadedAt: attachment.uploaded_at,
+      })) });
     }
 
     const attachments = [];
@@ -86,7 +117,7 @@ export async function DELETE(request, { params }) {
         return NextResponse.json({ error: "Cannot delete a file from an approved clearance" }, { status: 422 });
       }
 
-      if (clearance.file_path) {
+      if (clearance.file_path && !/^https?:\/\//i.test(clearance.file_path)) {
         await supabase.storage.from("clearance-files").remove([clearance.file_path]);
       }
       const { error: updateError } = await supabase
@@ -111,7 +142,9 @@ export async function DELETE(request, { params }) {
       return NextResponse.json({ error: "Attachment not found" }, { status: 404 });
     }
 
-    await supabase.storage.from("clearance-files").remove([attachment.file_path]);
+    if (!/^https?:\/\//i.test(attachment.file_path)) {
+      await supabase.storage.from("clearance-files").remove([attachment.file_path]);
+    }
     const { error: deleteError } = await supabase
       .from("clearance_attachments")
       .delete()

@@ -138,6 +138,17 @@ export const clearanceService = {
     return json.data || [];
   },
 
+  async addExternalLink(clearanceId: string, link: string, filename = 'External document link') {
+    const res = await fetch(`/api/clearances/${clearanceId}/attachments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ link, filename }),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error ?? 'Could not add document link.');
+    return json.data || [];
+  },
+
   async deleteAttachment(clearanceId: string, attachmentId: string) {
     const res = await fetch(`/api/clearances/${clearanceId}/attachments`, {
       method: 'DELETE',

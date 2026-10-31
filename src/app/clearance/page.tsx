@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
-import { UploadCloud, CheckCircle2, AlertTriangle, FileText, Loader2, Search, Check, X, Users, ClipboardCheck, ShieldCheck, MessageSquare, Trash2, Printer } from 'lucide-react';
+import { UploadCloud, CheckCircle2, AlertTriangle, FileText, Loader2, Search, Check, X, Clock, Users, ClipboardCheck, ShieldCheck, MessageSquare, Trash2, Printer } from 'lucide-react';
 import { FACULTY_REQUIRED_OFFICES } from '@/lib/clearanceOffices';
 import { isApprovalOfficer, getClearancePageInfo, isFacultyLikeRole } from '@/lib/roleConfig';
 import { StoredUser, normalize } from '@/lib/stringUtils';
@@ -459,6 +459,10 @@ export default function ClearancePage() {
 
   const handleOpenFile = async (filePath: string, filename: string) => {
     try {
+      if (/^https?:\/\//i.test(filePath)) {
+        window.open(filePath, '_blank', 'noopener,noreferrer');
+        return;
+      }
       const url = await clearanceService.getFileUrl(filePath);
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (error) {
@@ -747,6 +751,7 @@ export default function ClearancePage() {
                 {canReviewFaculty && <Button type="button" variant="outline" onClick={() => { setRemarkRecord(selectedRecord); setRemarkText(''); setSelectedRecord(null); }}><MessageSquare className="mr-2 h-4 w-4" />Remarks</Button>}
                 {canReviewFaculty && <Button type="button" variant="destructive" disabled={selectedRecord.status === 'rejected' || actionLoadingId === selectedRecord.id} onClick={() => { setSelectedRecord(null); void handleDecision(selectedRecord, 'rejected'); }}><X className="mr-2 h-4 w-4" />Reject</Button>}
                 {canReviewFaculty && <Button type="button" disabled={selectedRecord.status === 'approved' || actionLoadingId === selectedRecord.id} onClick={() => { setSelectedRecord(null); void handleDecision(selectedRecord, 'approved'); }}><Check className="mr-2 h-4 w-4" />Approve</Button>}
+                {canReviewFaculty && <Button type="button" variant="outline" disabled={selectedRecord.status === 'pending' || actionLoadingId === selectedRecord.id} onClick={() => { setSelectedRecord(null); void handleDecision(selectedRecord, 'pending'); }}><Clock className="mr-2 h-4 w-4" />Pending</Button>}
               </DialogFooter>
             )}
           </DialogContent>
