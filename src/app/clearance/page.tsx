@@ -50,11 +50,22 @@ type AdminFacultyProgress = {
   completion: number;
 };
 
+type ClearanceStatusFilter = 'all' | 'approved' | 'rejected' | 'pending';
+
+function matchesClearanceFilters(record: Clearance, yearFilter: string, statusFilter: ClearanceStatusFilter) {
+  const matchesYear = yearFilter === 'all' || record.submissionDate?.startsWith(yearFilter) === true;
+  const normalizedStatus = record.status === 'submitted' ? 'pending' : record.status;
+  const matchesStatus = statusFilter === 'all' || normalizedStatus === statusFilter;
+  return matchesYear && matchesStatus;
+}
+
 export default function ClearancePage() {
   const [records, setRecords] = useState<Clearance[]>([]);
   const [offices, setOffices] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [yearFilter, setYearFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<ClearanceStatusFilter>('all');
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -231,8 +242,9 @@ export default function ClearancePage() {
     const term = searchTerm.toLowerCase();
     if (isFacultyLikeRole(currentUser.role)) {
       return facultyStepRecords.filter((row) =>
-        (row.requiredDocument ?? '').toLowerCase().includes(term) ||
-        (row.employeeName ?? '').toLowerCase().includes(term)
+        ((row.requiredDocument ?? '').toLowerCase().includes(term) ||
+        (row.employeeName ?? '').toLowerCase().includes(term)) &&
+        matchesClearanceFilters(row, yearFilter, statusFilter)
       );
     }
 
@@ -253,14 +265,23 @@ export default function ClearancePage() {
           requiredDocument: 'Clearance Request',
           _allRecords: recs,
         };
-      }).filter((faculty) => (faculty.employeeName ?? '').toLowerCase().includes(term));
+      }).filter((faculty) => {
+        const matchesSearch = (faculty.employeeName ?? '').toLowerCase().includes(term);
+        const matchesYear = yearFilter === 'all' || faculty._allRecords.some((record) => record.submissionDate?.startsWith(yearFilter));
+        const matchesStatus = statusFilter === 'all'
+          || (statusFilter === 'approved' && faculty._allRecords.some((record) => record.status === 'approved'))
+          || (statusFilter === 'rejected' && faculty._allRecords.some((record) => record.status === 'rejected'))
+          || (statusFilter === 'pending' && faculty._allRecords.some((record) => record.status === 'pending' || record.status === 'submitted'));
+        return matchesSearch && matchesYear && matchesStatus;
+      });
     }
 
     return records.filter((record) =>
-      (record.employeeName ?? '').toLowerCase().includes(term) ||
-      (record.requiredDocument ?? '').toLowerCase().includes(term)
+      ((record.employeeName ?? '').toLowerCase().includes(term) ||
+      (record.requiredDocument ?? '').toLowerCase().includes(term)) &&
+      matchesClearanceFilters(record, yearFilter, statusFilter)
     );
-  }, [records, searchTerm, currentUser, facultyStepRecords, canReviewFaculty]);
+  }, [records, searchTerm, currentUser, facultyStepRecords, canReviewFaculty, yearFilter, statusFilter]);
 
   const adminFacultyProgress = useMemo<AdminFacultyProgress[]>(() => {
     if (currentUser?.role !== 'admin') return [];
@@ -385,6 +406,15 @@ export default function ClearancePage() {
       nextStep,
     };
   }, [facultyStepRecords, isFacultyUser]);
+
+  const clearanceYears = useMemo(() => {
+    const years = new Set(
+      records
+        .map((record) => record.submissionDate?.slice(0, 4))
+        .filter((year): year is string => Boolean(year && /^\d{4}$/.test(year)))
+    );
+    return Array.from(years).sort((a, b) => Number(b) - Number(a));
+  }, [records]);
 
   const handleDecision = async (record: Clearance, decision: 'approved' | 'rejected' | 'pending') => {
     if (!currentUser) return;
@@ -517,7 +547,15 @@ export default function ClearancePage() {
   let tableRows: React.ReactNode;
   const tableColumnCount = currentUser?.role === 'admin' ? 4 : 3;
   const adminRows = currentUser?.role === 'admin'
-    ? adminFacultyProgress.filter((faculty) => faculty.name.toLowerCase().includes(searchTerm.toLowerCase()) || faculty.department.toLowerCase().includes(searchTerm.toLowerCase()))
+    ? adminFacultyProgress.filter((faculty) => {
+      const matchesSearch = faculty.name.toLowerCase().includes(searchTerm.toLowerCase()) || faculty.department.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesYear = yearFilter === 'all' || faculty.records.some((record) => record.submissionDate?.startsWith(yearFilter));
+      const matchesStatus = statusFilter === 'all'
+        || (statusFilter === 'approved' && faculty.completion === 100)
+        || (statusFilter === 'rejected' && faculty.rejected > 0)
+        || (statusFilter === 'pending' && faculty.completion < 100 && faculty.rejected === 0);
+      return matchesSearch && matchesYear && matchesStatus;
+    })
     : [];
   const hasNoRows = currentUser?.role === 'admin' ? adminRows.length === 0 : filtered.length === 0;
   const monitoredOfficeCount = offices.length > 0 ? offices.length : FACULTY_REQUIRED_OFFICES.length;
@@ -913,14 +951,36 @@ export default function ClearancePage() {
       )}
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 p-4">
           <Search className="h-5 w-5 text-slate-400" />
           <Input
             placeholder="Search by faculty or department"
-            className="hidden md:block max-w-sm border-0 focus-visible:ring-0 px-0"
+            className="max-w-sm border-0 px-0 focus-visible:ring-0"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
+          <label className="sr-only" htmlFor="clearance-year-filter">Filter by year</label>
+          <select
+            id="clearance-year-filter"
+            className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700"
+            value={yearFilter}
+            onChange={(event) => setYearFilter(event.target.value)}
+          >
+            <option value="all">All years</option>
+            {clearanceYears.map((year) => <option key={year} value={year}>{year}</option>)}
+          </select>
+          <label className="sr-only" htmlFor="clearance-status-filter">Filter by status</label>
+          <select
+            id="clearance-status-filter"
+            className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm capitalize text-slate-700"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value as ClearanceStatusFilter)}
+          >
+            <option value="all">All statuses</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+            <option value="pending">Pending</option>
+          </select>
         </div>
 
         <div className="max-h-128 overflow-y-auto">
