@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { clearanceService } from '@/services/clearanceService';
-import { Clearance } from '@/types/clearance';
+import { Clearance, ClearanceCategory } from '@/types/clearance';
 import { Faculty } from '@/types/faculty';
 import { facultyService } from '@/services/facultyService';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,7 @@ import { isApprovalOfficer, getClearancePageInfo, isFacultyLikeRole } from '@/li
 import { StoredUser, normalize } from '@/lib/stringUtils';
 import { toast } from '@/lib/toast';
 import { PopupDialog } from '@/components/ui/popup-dialog';
+import { ClearanceRequirementsPanel } from '@/components/ClearanceRequirementsPanel';
 
 const OFFICER_OFFICE_MAP: Record<string, number> = {
   dlrc:         1,
@@ -62,6 +63,7 @@ function matchesClearanceFilters(record: Clearance, yearFilter: string, statusFi
 export default function ClearancePage() {
   const [records, setRecords] = useState<Clearance[]>([]);
   const [offices, setOffices] = useState<{ id: string; name: string }[]>([]);
+  const [requirements, setRequirements] = useState<ClearanceCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [yearFilter, setYearFilter] = useState('all');
@@ -102,6 +104,11 @@ export default function ClearancePage() {
     });
     return map;
   }, [offices]);
+
+  const getRequirementsForRecord = (record: Clearance) => {
+    const officeId = record.officeId || officeIdMap.get(normalize(record.requiredDocument));
+    return requirements.filter((requirement) => String(requirement.officeId) === String(officeId));
+  };
 
   const getOfficeId = (role?: string): string | undefined => {
     if (!role) return undefined;
@@ -144,11 +151,18 @@ export default function ClearancePage() {
   };
 
   useEffect(() => {
-    void clearanceService.getOffices().then((data) => {
-      if (Array.isArray(data)) {
-        setOffices(data);
-      }
-    });
+    void Promise.all([clearanceService.getOffices(), clearanceService.getCategories()])
+      .then(([officeData, categoryData]) => {
+        if (Array.isArray(officeData)) setOffices(officeData);
+        if (Array.isArray(categoryData)) setRequirements(categoryData as ClearanceCategory[]);
+      })
+      .catch((error) => {
+        toast({
+          title: 'Requirements unavailable',
+          description: error instanceof Error ? error.message : 'Could not load office requirements.',
+          type: 'error',
+        });
+      });
   }, []);
 
   useEffect(() => {
@@ -647,9 +661,14 @@ export default function ClearancePage() {
               {(record.filePath ? 1 : 0) + (record.attachments?.length ?? 0)} document{(record.filePath ? 1 : 0) + (record.attachments?.length ?? 0) === 1 ? '' : 's'} uploaded
             </p>
           )}
-          {record.notes?.length ? (
+          {isFacultyUser && getRequirementsForRecord(record).length > 0 && (
             <p className="mt-1 text-xs text-slate-500">
-              {record.notes.length} office remark{record.notes.length === 1 ? '' : 's'} available
+              {getRequirementsForRecord(record).length} office requirement{getRequirementsForRecord(record).length === 1 ? '' : 's'}
+            </p>
+          )}
+          {record.notes?.length ? (
+            <p className="mt-1 text-xs font-medium text-amber-700">
+              {record.notes.length} office remark{record.notes.length === 1 ? '' : 's'}
             </p>
           ) : null}
         </TableCell>
@@ -667,6 +686,8 @@ export default function ClearancePage() {
   return (
     <>
     <div className="space-y-6 print:hidden">
+      <ClearanceRequirementsPanel user={currentUser} offices={offices} />
+
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-2">
           <h1 className="text-3xl font-semibold tracking-tight text-slate-900">{pageTitle}</h1>
@@ -759,6 +780,20 @@ export default function ClearancePage() {
                   <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">
                     <p className="font-semibold">Follow-up needed</p>
                     <p className="mt-1">{selectedRecord.rejectionReason || selectedRecord.validationWarning}</p>
+                  </div>
+                )}
+
+                {isFacultyUser && getRequirementsForRecord(selectedRecord).length > 0 && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                    <h3 className="text-sm font-semibold text-amber-900">Office requirements</h3>
+                    <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                      {getRequirementsForRecord(selectedRecord).map((requirement) => (
+                        <li key={requirement.id}>
+                          <span className="font-medium">{requirement.name}</span>
+                          {requirement.description && <span className="text-slate-500"> — {requirement.description}</span>}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
 

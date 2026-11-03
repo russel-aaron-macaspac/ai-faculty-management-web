@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { clearanceService } from '@/services/clearanceService';
-import { Clearance } from '@/types/clearance';
+import { Clearance, ClearanceCategory } from '@/types/clearance';
 import { StoredUser } from '@/lib/stringUtils';
 import { toast } from '@/lib/toast';
 import { PopupDialog } from '@/components/ui/popup-dialog';
@@ -20,6 +20,7 @@ export default function ClearanceUploadPage() {
   const router = useRouter();
   const [user, setUser] = useState<StoredUser | null>(null);
   const [office, setOffice] = useState<Office | null>(null);
+  const [requirements, setRequirements] = useState<ClearanceCategory[]>([]);
   const [record, setRecord] = useState<Clearance | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [documentLink, setDocumentLink] = useState('');
@@ -49,12 +50,22 @@ export default function ClearanceUploadPage() {
     const load = async () => {
       setLoading(true);
       try {
-        const [offices, records] = await Promise.all([
+        const [offices, records, categories] = await Promise.all([
           clearanceService.getOffices(),
           clearanceService.getClearances(user.supabase_id ?? String(user.id ?? ''), params.officeId),
+          clearanceService.getCategories(),
         ]);
         setOffice((offices as Office[]).find((item) => String(item.id) === params.officeId) ?? null);
         setRecord((records as Clearance[])[0] ?? null);
+        setRequirements(
+          (categories as ClearanceCategory[]).filter((category) => String(category.officeId) === params.officeId),
+        );
+      } catch (error) {
+        toast({
+          title: 'Unable to load clearance',
+          description: error instanceof Error ? error.message : 'Could not load the clearance requirements.',
+          type: 'error',
+        });
       } finally {
         setLoading(false);
       }
@@ -162,9 +173,21 @@ export default function ClearanceUploadPage() {
         <CardHeader>
           <p className="text-sm font-medium text-slate-600">Faculty clearance</p>
           <h1 className="text-2xl font-semibold text-slate-900">{office?.name ?? 'Office document'}</h1>
-          <p className="text-sm text-slate-500">Upload the document required by this office. The office will see it after submission.</p>
         </CardHeader>
         <CardContent className="space-y-5">
+          {requirements.length > 0 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm font-semibold text-amber-900">Office requirements</p>
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                {requirements.map((requirement) => (
+                  <li key={requirement.id}>
+                    <span className="font-medium">{requirement.name}</span>
+                    {requirement.description && <span className="text-slate-500"> — {requirement.description}</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {record?.filePath || record?.attachments?.length ? (
             <div className="space-y-4">
               <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-4">

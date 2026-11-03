@@ -44,7 +44,16 @@ export const clearanceService = {
 
   async getCategories() {
     const res = await fetch('/api/clearances/categories');
-    if (!res.ok) return [];
+    if (!res.ok) {
+      let message = 'Could not load clearance requirements.';
+      try {
+        const body = await res.json();
+        if (typeof body?.error === 'string') message = body.error;
+      } catch {
+        // Keep the user-facing fallback when the server does not return JSON.
+      }
+      throw new Error(message);
+    }
     const { data } = await res.json();
     return data || [];
   },
