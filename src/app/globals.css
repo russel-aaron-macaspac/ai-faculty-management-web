@@ -251,7 +251,7 @@ div.overflow-x-auto.rounded-lg.border-sky-300 tbody td > div > div > div:nth-chi
     height: 297mm !important;
     max-height: 297mm !important;
     margin: 0 !important;
-    padding: 8mm !important;
+    padding: 5mm 10mm !important;
     background: #fff !important;
     color: #000 !important;
     overflow: hidden !important;
@@ -265,38 +265,32 @@ div.overflow-x-auto.rounded-lg.border-sky-300 tbody td > div > div > div:nth-chi
   .printable-clearance-content {
     display: flex !important;
     flex-direction: column !important;
-    width: 100% !important;
+    width: 113.64% !important;
     max-width: none !important;
-    height: 100% !important;
-    min-height: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
     background: #fff !important;
     color: #000 !important;
-    font-size: 10px !important;
-    line-height: 1.25 !important;
+    transform: scale(0.84);
+    transform-origin: top left;
   }
 
-  .printable-clearance-content,
-  .printable-clearance-content *,
-  .printable-clearance-content > div,
-  .printable-clearance-content > p,
-  .printable-clearance-content > table,
-  .printable-clearance-content th,
-  .printable-clearance-content td {
-    background-color: #fff !important;
+  .printable-clearance-content header {
+    display: block !important;
+    visibility: visible !important;
   }
 
-  .printable-clearance-signatures {
-    margin-top: auto !important;
+  .printable-clearance-content header img {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
   }
 
   .printable-clearance-content table {
     page-break-inside: avoid;
-  }
-
-  .printable-clearance-content th,
-  .printable-clearance-content td {
-    padding-top: 3px !important;
-    padding-bottom: 3px !important;
   }
 
 }

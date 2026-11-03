@@ -19,6 +19,7 @@ import { StoredUser, normalize } from '@/lib/stringUtils';
 import { toast } from '@/lib/toast';
 import { PopupDialog } from '@/components/ui/popup-dialog';
 import { ClearanceRequirementsPanel } from '@/components/ClearanceRequirementsPanel';
+import { AcademicClearanceForm, ClearanceFormRow } from '@/components/AcademicClearanceForm';
 
 const OFFICER_OFFICE_MAP: Record<string, number> = {
   dlrc:         1,
@@ -526,12 +527,28 @@ export default function ClearancePage() {
   useEffect(() => {
     if (!shouldPrintAfterPreviewClose || isPrintPreviewOpen) return;
 
+    let cancelled = false;
     const frameId = window.requestAnimationFrame(() => {
-      window.print();
-      setShouldPrintAfterPreviewClose(false);
+      const masthead = document.querySelector<HTMLImageElement>('.printable-clearance-content img');
+      const print = () => {
+        if (cancelled) return;
+        window.print();
+        setShouldPrintAfterPreviewClose(false);
+      };
+
+      if (!masthead || masthead.complete) {
+        print();
+        return;
+      }
+
+      masthead.addEventListener('load', print, { once: true });
+      masthead.addEventListener('error', print, { once: true });
     });
 
-    return () => window.cancelAnimationFrame(frameId);
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frameId);
+    };
   }, [shouldPrintAfterPreviewClose, isPrintPreviewOpen]);
 
   const { title: pageTitle, subtitle: pageSubtitle } = getClearancePageInfo(currentUser?.role);
@@ -557,6 +574,24 @@ export default function ClearancePage() {
       minute: '2-digit',
     });
   };
+
+  const clearanceFormRows: ClearanceFormRow[] = facultyStepRecords.map((record) => ({
+    signature: record._isRequiredPlaceholder ? '' : getStatusLabel(record.status),
+    date: record.reviewedAt || record.submissionDate || '',
+    remarks: record.rejectionReason || (record.status === 'approved' ? 'Approved' : record._isRequiredPlaceholder ? '' : 'Pending review'),
+  }));
+
+  const clearanceFormProps = {
+    academicYear,
+    semester,
+    name: currentUser?.full_name || currentUser?.name || 'Faculty User',
+    position: 'Faculty',
+    department: facultyDepartment,
+    date: new Date().toLocaleDateString(),
+    status: currentUser?.statusOfAppointment,
+    rows: clearanceFormRows,
+    logoSrc: '/masthead.jpg',
+  } satisfies React.ComponentProps<typeof AcademicClearanceForm>;
 
   let tableRows: React.ReactNode;
   const tableColumnCount = currentUser?.role === 'admin' ? 4 : 3;
@@ -853,53 +888,8 @@ export default function ClearancePage() {
               <DialogTitle>Academic clearance preview</DialogTitle>
               <p className="text-sm text-slate-500">Review every office before printing the clearance form for Human Resources.</p>
             </DialogHeader>
-            <div className="border border-slate-400 bg-white p-5 text-slate-900 shadow-sm sm:p-8">
-              <div className="border-b-2 border-slate-700 pb-4 text-center">
-                <p className="text-lg font-bold tracking-wide">ST. DOMINIC COLLEGE OF ASIA</p>
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-600">Human Resources Office</p>
-                <h2 className="mt-4 text-xl font-bold">ACADEMIC CLEARANCE FORM</h2>
-                <p className="mt-1 text-sm text-slate-600">Clearance status: {facultyProgress?.completion === 100 ? 'Complete' : 'Incomplete'}</p>
-              </div>
-              <div className="mt-5 grid gap-x-8 gap-y-2 border-b border-slate-300 pb-4 text-sm sm:grid-cols-2">
-                <p><span className="font-semibold">Name:</span> {currentUser?.full_name || currentUser?.name || 'Faculty User'}</p>
-                <p><span className="font-semibold">Date:</span> {new Date().toLocaleDateString()}</p>
-                <p><span className="font-semibold">Position:</span> Faculty</p>
-                <p><span className="font-semibold">Department:</span> {facultyDepartment}</p>
-                <p><span className="font-semibold">Academic year:</span> {academicYear}</p>
-                <p><span className="font-semibold">Semester:</span> {semester}</p>
-                <p className="sm:col-span-2"><span className="font-semibold">Status:</span> [ {currentUser?.statusOfAppointment === 'full-time' ? 'x' : ' '} ] Full-Time&nbsp;&nbsp;&nbsp;[ {currentUser?.statusOfAppointment === 'part-time' ? 'x' : ' '} ] Part-Time</p>
-              </div>
-              <p className="my-5 text-center text-sm text-slate-700">This form shows the approval status of each office requirement.</p>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[680px] border-collapse text-sm">
-                  <thead>
-                    <tr className="bg-slate-200 text-left">
-                      <th className="border border-slate-400 px-3 py-2">Office / Department</th>
-                      <th className="border border-slate-400 px-3 py-2">Status</th>
-                      <th className="border border-slate-400 px-3 py-2">Date</th>
-                      <th className="border border-slate-400 px-3 py-2">Remarks</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {facultyStepRecords.map((record) => (
-                      <tr key={record.id}>
-                        <td className="border border-slate-400 px-3 py-2 font-medium">{record.requiredDocument}</td>
-                        <td className={`border border-slate-400 px-3 py-2 font-semibold ${record.status === 'approved' ? 'text-emerald-700' : record.status === 'rejected' ? 'text-rose-700' : 'text-amber-700'}`}>
-                          {record._isRequiredPlaceholder ? 'Not submitted' : getStatusLabel(record.status)}
-                        </td>
-                        <td className="border border-slate-400 px-3 py-2">{record.reviewedAt || record.submissionDate || '-'}</td>
-                        <td className="border border-slate-400 px-3 py-2">{record.rejectionReason || (record.status === 'approved' ? 'Approved' : 'Follow up with this office')}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-300 pt-4 text-sm">
-                <p><span className="font-semibold">Approved:</span> {facultyProgress?.approved ?? 0} of {facultyProgress?.total ?? 0}</p>
-                <p className={facultyProgress?.completion === 100 ? 'font-semibold text-emerald-700' : 'font-semibold text-amber-700'}>
-                  {facultyProgress?.completion === 100 ? 'Ready for HR submission' : 'Complete the missing office approvals before printing'}
-                </p>
-              </div>
+            <div className="overflow-x-auto border border-slate-400 bg-slate-100 p-3 shadow-sm sm:p-5">
+              <AcademicClearanceForm {...clearanceFormProps} />
             </div>
             <div className="flex flex-wrap justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setIsPrintPreviewOpen(false)}>Close preview</Button>
@@ -1046,46 +1036,7 @@ export default function ClearancePage() {
     </div>
     {isFacultyUser && (
       <section className="printable-clearance hidden print:block" aria-label="Printable faculty clearance">
-        <div className="printable-clearance-content mx-auto max-w-4xl text-slate-900">
-          <div className="border-b-2 border-slate-900 pb-2 text-center">
-            <p className="text-base font-bold tracking-wide">ST. DOMINIC COLLEGE OF ASIA</p>
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-600">Human Resources Office</p>
-            <h1 className="mt-2 text-xl font-bold">ACADEMIC CLEARANCE FORM</h1>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-b border-slate-300 pb-3 text-xs">
-            <p><span className="font-semibold">Faculty name:</span> {currentUser?.full_name || currentUser?.name || 'Faculty User'}</p>
-            <p><span className="font-semibold">Printed:</span> {new Date().toLocaleDateString()}</p>
-            <p><span className="font-semibold">Position:</span> Faculty</p>
-            <p><span className="font-semibold">Department:</span> {facultyDepartment}</p>
-            <p><span className="font-semibold">Requirements approved:</span> {facultyProgress?.approved ?? 0} of {facultyProgress?.total ?? 0}</p>
-            <p><span className="font-semibold">Academic year:</span> {academicYear}</p>
-            <p><span className="font-semibold">Semester:</span> {semester}</p>
-            <p className="col-span-2"><span className="font-semibold">Status:</span> [ {currentUser?.statusOfAppointment === 'full-time' ? 'x' : ' '} ] Full-Time&nbsp;&nbsp;&nbsp;[ {currentUser?.statusOfAppointment === 'part-time' ? 'x' : ' '} ] Part-Time</p>
-          </div>
-          <p className="my-2 text-center text-xs text-slate-700">This is to certify that the faculty member has completed the required office clearances.</p>
-          <table className="mt-3 w-full border-collapse text-xs">
-            <thead>
-              <tr className="border-b-2 border-slate-900 text-left">
-                <th className="py-2 pr-4">Office / Department</th>
-                <th className="py-2 pr-4">Date</th>
-                <th className="py-2 text-right">Remarks</th>
-              </tr>
-            </thead>
-            <tbody>
-              {facultyStepRecords.map((record) => (
-                <tr key={record.id} className="border-b border-slate-300">
-                  <td className="py-1 pr-4">{record.requiredDocument}</td>
-                  <td className="py-1 pr-4">{record.reviewedAt || record.submissionDate || 'N/A'}</td>
-                  <td className="py-1 text-right font-semibold uppercase">{record.status === 'approved' ? 'Approved' : getStatusLabel(record.status)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="printable-clearance-signatures mt-auto grid grid-cols-2 gap-16 text-center text-xs">
-            <div className="border-t border-slate-900 pt-2">Faculty signature</div>
-            <div className="border-t border-slate-900 pt-2">HR received by / date</div>
-          </div>
-        </div>
+        <AcademicClearanceForm {...clearanceFormProps} className="printable-clearance-content" />
       </section>
     )}
     <PopupDialog
