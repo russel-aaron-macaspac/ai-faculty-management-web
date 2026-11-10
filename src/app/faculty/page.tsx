@@ -1,7 +1,7 @@
 'use client';
 
 import { RouteGuard } from '@/components/RouteGuard';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { facultyService } from '@/services/facultyService';
 import { Faculty } from '@/types/faculty';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,7 @@ import {
 import { ArrowUpDown, ChevronDown, ChevronUp, Loader2, Pencil, Search, Trash2, Users } from 'lucide-react';
 import { toast } from '@/lib/toast';
 import { PopupDialog } from '@/components/ui/popup-dialog';
+import { useRoleBasedAccess } from '@/hooks/useRoleBasedAccess';
 
 const facultySchema = z.object({
   fullName: z.string().trim().min(1, { message: 'Enter the faculty member’s full name.' }).min(2, { message: 'Full name should include at least 2 characters.' }),
@@ -49,13 +50,15 @@ const PAGE_SIZE = 8;
 
 export default function FacultyPage() {
   return (
-    <RouteGuard requiredRoles={['hro', 'admin']} fallbackPath="/dashboard/faculty">
+    <RouteGuard requiredRoles={['hro', 'admin', 'dean']} fallbackPath="/dashboard/faculty">
       <FacultyPageContent />
     </RouteGuard>
   );
 }
 
 function FacultyPageContent() {
+  const { user, loading: userLoading } = useRoleBasedAccess();
+  const isDean = user?.role === 'dean';
   const [faculty, setFaculty] = useState<Faculty[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -79,19 +82,25 @@ function FacultyPageContent() {
     },
   });
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    if (userLoading || !user) return;
     setLoading(true);
     try {
-      const data = await facultyService.getFaculty();
+      if (isDean && user.department_id == null) {
+        setFaculty([]);
+        return;
+      }
+
+      const data = await facultyService.getFaculty(isDean ? user.department_id ?? undefined : undefined);
       setFaculty(data);
     } finally {
       setLoading(false);
     }
-  };
+  }, [isDean, user, userLoading]);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   const onSubmit = async (values: z.infer<typeof facultySchema>) => {
     setFormError(null);
@@ -258,16 +267,18 @@ function FacultyPageContent() {
               <div className="text-xs text-slate-500">{record.phone}</div>
             </TableCell>
             <TableCell>{getStatusBadge(record.status)}</TableCell>
-            <TableCell className="text-right">
-              <div className="flex justify-end gap-2">
-                <Button variant="ghost" size="icon" onClick={() => handleEdit(record)} aria-label={`Edit ${record.fullName}`}>
-                  <Pencil className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" onClick={() => handleDelete(record.id)} aria-label={`Delete ${record.fullName}`}>
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </TableCell>
+            {!isDean && (
+              <TableCell className="text-right">
+                <div className="flex justify-end gap-2">
+                  <Button variant="ghost" size="icon" onClick={() => handleEdit(record)} aria-label={`Edit ${record.fullName}`}>
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => handleDelete(record.id)} aria-label={`Delete ${record.fullName}`}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </TableCell>
+            )}
           </TableRow>
         ))}
       </>
@@ -282,7 +293,7 @@ function FacultyPageContent() {
           <p className="max-w-2xl text-slate-500">Manage faculty records, search by name or email, sort the roster, and keep records up to date.</p>
         </div>
 
-        <Dialog open={isAddOpen} onOpenChange={openChange}>
+        {!isDean && <Dialog open={isAddOpen} onOpenChange={openChange}>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Edit Faculty</DialogTitle>
@@ -403,8 +414,8 @@ function FacultyPageContent() {
               </form>
             </Form>
           </DialogContent>
-        </Dialog>
-        <PopupDialog
+        </Dialog>}
+        {!isDean && <PopupDialog
           open={Boolean(deleteTarget)}
           onOpenChange={(open) => !open && setDeleteTarget(null)}
           title="Delete faculty member?"
@@ -412,7 +423,7 @@ function FacultyPageContent() {
           confirmLabel="Delete faculty"
           destructive
           onConfirm={() => void confirmDelete()}
-        />
+        />}
       </div>
 
       <div className="surface-panel space-y-5 rounded-3xl p-5 sm:p-6">
@@ -460,7 +471,7 @@ function FacultyPageContent() {
                     {renderSortIcon('status')}
                   </Button>
                 </TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                {!isDean && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>{tableBody}</TableBody>

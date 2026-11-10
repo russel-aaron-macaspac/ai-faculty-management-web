@@ -2,17 +2,28 @@ import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import crypto from 'crypto';
 import { NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(request) {
   try {
     const supabase = createSupabaseAdminClient();
+    const departmentIdParam = new URL(request.url).searchParams.get("departmentId");
+    const departmentId = departmentIdParam === null ? null : Number(departmentIdParam);
 
-    const { data, error } = await supabase
+    if (departmentIdParam !== null && (!Number.isInteger(departmentId) || departmentId < 1)) {
+      return NextResponse.json({ error: "Invalid department ID" }, { status: 400 });
+    }
+
+    let facultyQuery = supabase
       .from("users")
       .select("user_id, first_name, middle_name, last_name, email, role, status, status_of_appointment, department_id")
       .in("role", ["faculty", "program_chair"])
       .eq("status", "active")
       .order("last_name", { ascending: true })
       .order("first_name", { ascending: true });
+    if (departmentId !== null) {
+      facultyQuery = facultyQuery.eq("department_id", departmentId);
+    }
+
+    const { data, error } = await facultyQuery;
 
     if (error) {
       console.error("[FACULTY USERS GET ERROR]", error);

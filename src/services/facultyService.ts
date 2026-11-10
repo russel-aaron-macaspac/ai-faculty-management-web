@@ -7,17 +7,28 @@ let mockFacultyData: Faculty[] = [
   { id: 'f3', fullName: 'Dr. Charlie Davis', email: 'charlie@university.edu', department: 'Physics', phone: '+1122334455', status: 'active', statusOfAppointment: 'full-time' },
 ];
 
+type FacultyApiUser = {
+  id: string | number;
+  name?: string | null;
+  email?: string | null;
+  department?: string | null;
+  phone?: string | null;
+  status?: Faculty['status'];
+  statusOfAppointment?: Faculty['statusOfAppointment'];
+};
+
 export const facultyService = {
   // Fetch faculty list from server if available. Falls back to in-memory mock data.
-  getFaculty: async (): Promise<Faculty[]> => {
+  getFaculty: async (departmentId?: number): Promise<Faculty[]> => {
     try {
-      const res = await fetch('/api/users/faculty');
+      const query = departmentId === undefined ? '' : `?departmentId=${encodeURIComponent(departmentId)}`;
+      const res = await fetch(`/api/users/faculty${query}`);
       if (!res.ok) throw new Error('Network response was not ok');
       const payload = await res.json();
       const data = payload?.data || [];
 
       // Map server result to local Faculty shape (fill missing fields with sensible defaults)
-      const mapped: Faculty[] = data.map((u: any) => ({
+      const mapped: Faculty[] = data.map((u: FacultyApiUser) => ({
         id: String(u.id),
         fullName: u.name || '',
         email: u.email || '',
@@ -31,6 +42,7 @@ export const facultyService = {
     } catch (err) {
       // On any failure, return the mock dataset so UI remains functional.
       console.warn('[facultyService.getFaculty] fetch failed', err);
+      if (departmentId !== undefined) return [];
       await delay(300);
       return [...mockFacultyData];
     }

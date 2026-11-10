@@ -91,7 +91,7 @@ export function Sidebar({ user, collapsed = false, onToggle }: Readonly<SidebarP
         { href: '/dashboard/profile', label: 'My Profile', icon: UserSquare2 },
         ...(user?.role === 'dean' ? [{ href: '/schedules', label: 'My Schedule', icon: Calendar }] : []),
         { href: '/attendance', label: user?.role === 'hro' ? 'Faculty Attendance' : 'Attendance', icon: Clock },
-        ...(user?.role === 'hro' ? [{ href: '/faculty', label: 'Faculty List', icon: Users }] : []),
+        ...(['hro', 'dean'].includes(user?.role ?? '') ? [{ href: '/faculty', label: 'Faculty List', icon: Users }] : []),
         { href: '/clearance', label: officerConfig.label, icon: FileCheck2 },
         { href: '/dashboard/changepassword', label: 'Change Password', icon: LockIcon },
       ];
