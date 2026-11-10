@@ -22,7 +22,7 @@ import { PopupDialog } from '@/components/ui/popup-dialog';
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const APPROVAL_ROLES = new Set(['dean', 'ovpaa', 'registrar', 'hro']);
 const MASTER_BOARD_START = 7 * 60;
-const MASTER_BOARD_END = 20 * 60;
+const MASTER_BOARD_END = 21 * 60;
 const MASTER_BOARD_SLOTS = Array.from(
   { length: (MASTER_BOARD_END - MASTER_BOARD_START) / 30 },
   (_, index) => MASTER_BOARD_START + index * 30
@@ -61,7 +61,11 @@ const getClassType = (schedule: Schedule) => {
 
 const formatBoardTime = (minutes: number) => {
   const hours = Math.floor(minutes / 60);
-  return `${hours % 12 || 12}:${String(minutes % 60).padStart(2, '0')} ${hours >= 12 ? 'PM' : 'AM'}`;
+  const start = `${hours % 12 || 12}:${String(minutes % 60).padStart(2, '0')} ${hours >= 12 ? 'PM' : 'AM'}`;
+  const endMinutes = minutes + 30;
+  const endHours = Math.floor(endMinutes / 60);
+  const end = `${endHours % 12 || 12}:${String(endMinutes % 60).padStart(2, '0')} ${endHours >= 12 ? 'PM' : 'AM'}`;
+  return `${start} - ${end}`;
 };
 
 const calculateEndTime = (startTime: string, hours: number | null | undefined, fallbackEndTime = '') => {
@@ -434,7 +438,7 @@ function ScheduleLoadingContent() {
           <table className="w-full min-w-[960px] table-fixed border-collapse text-xs">
             <thead>
               <tr className="bg-slate-100 text-slate-800">
-                <th className="w-32 border border-slate-300 px-2 py-3 text-center font-bold uppercase">Time</th>
+                <th className="w-40 min-w-[10rem] whitespace-nowrap border border-slate-300 px-2 py-3 text-center font-bold uppercase">Time</th>
                 {DAYS.slice(0, 6).map((day) => (
                   <th key={day} className="border border-slate-300 px-2 py-3 text-center font-bold uppercase">
                     {day}
@@ -445,7 +449,7 @@ function ScheduleLoadingContent() {
             <tbody>
               {MASTER_BOARD_SLOTS.map((slot) => (
                 <tr key={slot} className="h-10">
-                  <th className="border border-slate-300 bg-slate-50 px-2 text-center font-semibold text-slate-600">
+                  <th className="whitespace-nowrap border border-slate-300 bg-slate-50 px-2 text-center font-semibold text-slate-600">
                     {formatBoardTime(slot)}
                   </th>
                   {DAYS.slice(0, 6).map((day) => {

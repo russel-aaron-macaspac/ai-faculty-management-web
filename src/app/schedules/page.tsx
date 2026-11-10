@@ -32,7 +32,7 @@ type DeliveryMode = 'on-campus' | 'online';
 type AvailabilityRow = { day: string; startTime: string; endTime: string; deliveryMode: DeliveryMode };
 
 const FACULTY_BOARD_START = 7 * 60;
-const FACULTY_BOARD_END = 20 * 60;
+const FACULTY_BOARD_END = 21 * 60;
 const FACULTY_BOARD_SLOTS = Array.from(
   { length: (FACULTY_BOARD_END - FACULTY_BOARD_START) / 30 },
   (_, index) => FACULTY_BOARD_START + index * 30
@@ -46,7 +46,11 @@ const formatStatus = (status: Schedule['status']) =>
 
 const formatBoardTime = (minutes: number) => {
   const hours = Math.floor(minutes / 60);
-  return `${hours % 12 || 12}:${String(minutes % 60).padStart(2, '0')} ${hours >= 12 ? 'PM' : 'AM'}`;
+  const start = `${hours % 12 || 12}:${String(minutes % 60).padStart(2, '0')} ${hours >= 12 ? 'PM' : 'AM'}`;
+  const endMinutes = minutes + 30;
+  const endHours = Math.floor(endMinutes / 60);
+  const end = `${endHours % 12 || 12}:${String(endMinutes % 60).padStart(2, '0')} ${endHours >= 12 ? 'PM' : 'AM'}`;
+  return `${start} - ${end}`;
 };
 
 export default function SchedulesPage() {
@@ -131,7 +135,7 @@ function SchedulesContent() {
         <table className="w-full min-w-[960px] table-fixed border-collapse text-xs">
           <thead>
             <tr className="bg-slate-100 text-slate-800">
-              <th className="w-32 border border-slate-300 px-2 py-3 text-center font-bold uppercase">Time</th>
+              <th className="w-40 min-w-[10rem] whitespace-nowrap border border-slate-300 px-2 py-3 text-center font-bold uppercase">Time</th>
               {DAYS.map((day) => (
                 <th key={day} className="border border-slate-300 px-2 py-3 text-center font-bold uppercase">
                   {day}
@@ -142,7 +146,7 @@ function SchedulesContent() {
           <tbody>
             {FACULTY_BOARD_SLOTS.map((slot) => (
               <tr key={slot} className="h-10">
-                <th className="border border-slate-300 bg-slate-50 px-2 text-center font-semibold text-slate-600">
+                <th className="whitespace-nowrap border border-slate-300 bg-slate-50 px-2 text-center font-semibold text-slate-600">
                   {formatBoardTime(slot)}
                 </th>
                 {DAYS.map((day) => {

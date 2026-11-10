@@ -10,7 +10,7 @@ import { getScheduleStatusClasses, getScheduleStatusLabel } from '@/lib/schedule
 
 const ROOM_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const ROOM_BOARD_START = 7 * 60;
-const ROOM_BOARD_END = 20 * 60;
+const ROOM_BOARD_END = 21 * 60;
 const ROOM_BOARD_SLOTS = Array.from({ length: (ROOM_BOARD_END - ROOM_BOARD_START) / 30 }, (_, index) => ROOM_BOARD_START + index * 30);
 
 type LocalUser = { id: string; role: string };
@@ -27,7 +27,11 @@ const boardMinutes = (value: string) => {
 
 const formatBoardTime = (minutes: number) => {
   const hours = Math.floor(minutes / 60);
-  return `${hours % 12 || 12}:${String(minutes % 60).padStart(2, '0')} ${hours >= 12 ? 'PM' : 'AM'}`;
+  const start = `${hours % 12 || 12}:${String(minutes % 60).padStart(2, '0')} ${hours >= 12 ? 'PM' : 'AM'}`;
+  const endMinutes = minutes + 30;
+  const endHours = Math.floor(endMinutes / 60);
+  const end = `${endHours % 12 || 12}:${String(endMinutes % 60).padStart(2, '0')} ${endHours >= 12 ? 'PM' : 'AM'}`;
+  return `${start} - ${end}`;
 };
 
 function RoomScheduleBoard({ schedules }: Readonly<{ schedules: Schedule[] }>) {
@@ -36,14 +40,14 @@ function RoomScheduleBoard({ schedules }: Readonly<{ schedules: Schedule[] }>) {
       <table className="w-full min-w-[960px] table-fixed border-collapse text-xs">
         <thead>
           <tr className="bg-slate-100 text-slate-800">
-            <th className="w-32 border border-slate-300 px-2 py-3 text-center font-bold uppercase">Time</th>
+            <th className="w-40 min-w-[10rem] whitespace-nowrap border border-slate-300 px-2 py-3 text-center font-bold uppercase">Time</th>
             {ROOM_DAYS.map((day) => <th key={day} className="border border-slate-300 px-2 py-3 text-center font-bold uppercase">{day}</th>)}
           </tr>
         </thead>
         <tbody>
           {ROOM_BOARD_SLOTS.map((slot) => (
             <tr key={slot} className="h-10">
-              <th className="border border-slate-300 bg-slate-50 px-2 text-center font-semibold text-slate-600">{formatBoardTime(slot)}</th>
+              <th className="whitespace-nowrap border border-slate-300 bg-slate-50 px-2 text-center font-semibold text-slate-600">{formatBoardTime(slot)}</th>
               {ROOM_DAYS.map((day) => {
                 const schedule = schedules.find((candidate) => candidate.day === day && boardMinutes(candidate.startTime) === slot);
                 const active = schedules.some((candidate) => candidate.day === day && boardMinutes(candidate.startTime) < slot && boardMinutes(candidate.endTime) > slot);
