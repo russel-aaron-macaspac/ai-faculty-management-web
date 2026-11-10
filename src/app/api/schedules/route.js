@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { NextResponse } from "next/server";
+import { notifyAllUsers } from "@/lib/notifications";
 
 export async function GET() {
   try {
@@ -162,6 +163,13 @@ export async function POST(request) {
         { status: 500 }
       );
     }
+
+    await notifyAllUsers(supabase, {
+      title: "Schedule created",
+      message: `A new schedule was created for employee #${employeeId}.`,
+      type: "schedule_created",
+      relatedId: String(newSchedule.schedule_id),
+    });
 
     return NextResponse.json(
       { message: "Schedule created successfully", id: String(newSchedule.schedule_id) },

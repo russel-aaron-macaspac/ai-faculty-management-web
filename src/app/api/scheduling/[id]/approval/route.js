@@ -1,6 +1,7 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { NextResponse } from "next/server";
 import { canRoleActOnStatus, resolveNextStatus } from "@/lib/scheduling/approvalWorkflow";
+import { notifyAllUsers } from "@/lib/notifications";
 
 export async function POST(request, { params }) {
   try {
@@ -68,6 +69,13 @@ export async function POST(request, { params }) {
     if (logError) {
       console.error("[SCHEDULING APPROVAL LOG ERROR]", logError);
     }
+
+    await notifyAllUsers(supabase, {
+      title: `Schedule ${action === "approve" ? "approved" : "rejected"}`,
+      message: `Schedule #${id} was ${action === "approve" ? "approved" : "rejected"} by ${role}.`,
+      type: action === "approve" ? "schedule_approved" : "schedule_updated",
+      relatedId: String(id),
+    });
 
     return NextResponse.json({ message: "Schedule updated", data: updated });
   } catch (err) {

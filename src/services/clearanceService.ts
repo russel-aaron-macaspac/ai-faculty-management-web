@@ -272,8 +272,8 @@ export const clearanceService = {
     return res.json();
   },
 
-  async getNotifications(userId: string, unreadOnly: boolean = false) {
-    if (!clearanceService.isUuid(userId)) {
+  async getNotifications(userId: string | number, unreadOnly: boolean = false) {
+    if (userId == null || !String(userId).trim()) {
       return [];
     }
 
@@ -300,8 +300,8 @@ export const clearanceService = {
     return res.json();
   },
 
-  async markAllNotificationsAsRead(userId: string) {
-    if (!clearanceService.isUuid(userId)) {
+  async markAllNotificationsAsRead(userId: string | number) {
+    if (userId == null || !String(userId).trim()) {
       return null;
     }
 

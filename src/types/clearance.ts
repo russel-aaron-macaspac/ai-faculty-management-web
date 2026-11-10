@@ -50,6 +50,11 @@ export interface ClearanceNotification {
     | 'clearance_approved'
     | 'clearance_rejected'
     | 'clearance_note_added'
+    | 'clearance_deleted'
+    | 'schedule_created'
+    | 'schedule_updated'
+    | 'schedule_deleted'
+    | 'schedule_approved'
     | 'schedule_anomaly'
     | 'unauthorized_access';
   related_id?: string;

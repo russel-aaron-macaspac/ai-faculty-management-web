@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from '@/lib/supabase/server-client';
+import { notifyAllUsers } from '@/lib/notifications';
 
 /**
  * GET /api/clearances/[id]/notes
@@ -64,34 +65,12 @@ export async function POST(request, { params }) {
       return Response.json({ error: error.message }, { status: 500 });
     }
 
-    const { data: clearance } = await supabase
-      .from('clearances')
-      .select('user_id, office:offices(name)')
-      .eq('document_id', id)
-      .maybeSingle();
-
-    if (clearance?.user_id) {
-      const { data: faculty } = await supabase
-        .from('users')
-        .select('user_id, supabase_id')
-        .or(`user_id.eq.${clearance.user_id},supabase_id.eq.${clearance.user_id}`)
-        .maybeSingle();
-      const notificationUserId = faculty?.supabase_id || faculty?.user_id || clearance.user_id;
-      const officeLabel = clearance.office?.name ? ' for ' + clearance.office.name : '';
-      const { error: notificationError } = await supabase.from('notifications').insert({
-        user_id: String(notificationUserId),
-        title: 'Clearance requirement reminder',
-        message: `${authorName} added a reminder${officeLabel}: ${content}`,
-        type: 'clearance_note_added',
-        related_id: String(id),
-        is_read: false,
-        created_at: new Date().toISOString(),
-      });
-
-      if (notificationError) {
-        console.warn('Could not create clearance note notification:', notificationError);
-      }
-    }
+    await notifyAllUsers(supabase, {
+      title: 'Clearance updated',
+      message: `${authorName} added a reminder to clearance #${id}: ${content}`,
+      type: 'clearance_note_added',
+      relatedId: String(id),
+    });
 
     return Response.json(
       { message: 'Note added successfully', note: data?.[0] },

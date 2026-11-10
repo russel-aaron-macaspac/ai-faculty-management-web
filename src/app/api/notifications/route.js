@@ -1,5 +1,27 @@
 import { createSupabaseAdminClient } from '@/lib/supabase/server-client';
 
+const isUuid = (value) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(value)
+  );
+
+async function resolveNotificationUserId(supabase, userId) {
+  if (isUuid(userId)) return userId;
+
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('user_id, supabase_id')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[NOTIFICATIONS] Failed to resolve user:', error);
+    return null;
+  }
+
+  return user?.supabase_id || user?.user_id || null;
+}
+
 /**
  * GET /api/notifications?userId=...
  * Fetch notifications for a user
@@ -15,10 +37,15 @@ export async function GET(request) {
       return Response.json({ error: 'Missing userId parameter' }, { status: 400 });
     }
 
+    const notificationUserId = await resolveNotificationUserId(supabase, userId);
+    if (!notificationUserId) {
+      return Response.json({ notifications: [] }, { status: 200 });
+    }
+
     let query = supabase
       .from('notifications')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', notificationUserId)
       .order('created_at', { ascending: false });
 
     if (unreadOnly) {
@@ -63,10 +90,15 @@ export async function PATCH(request) {
         .eq('id', notificationId)
         .select();
     } else {
+      const notificationUserId = await resolveNotificationUserId(supabase, userId);
+      if (!notificationUserId) {
+        return Response.json({ message: 'No matching user', updated: [] }, { status: 200 });
+      }
+
       updateQuery = supabase
         .from('notifications')
         .update({ is_read: markAsRead })
-        .eq('user_id', userId)
+        .eq('user_id', notificationUserId)
         .select();
     }
 

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { detectScheduleConflicts, generateConflictSuggestions } from "@/lib/scheduling/conflictDetection";
 import { getInitialStatusForCreator } from "@/lib/scheduling/approvalWorkflow";
 import { getDepartmentScope, hasDepartmentAccess } from "@/lib/scheduling/departmentAccess";
+import { notifyAllUsers } from "@/lib/notifications";
 
 function isMissingSectionColumnError(error) {
   const message = `${error?.message || ""} ${error?.details || ""}`.toLowerCase();
@@ -200,6 +201,13 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: "Failed to update schedule" }, { status: 500 });
     }
 
+    await notifyAllUsers(supabase, {
+      title: "Schedule updated",
+      message: `Schedule #${id} was updated.`,
+      type: "schedule_updated",
+      relatedId: String(id),
+    });
+
     return NextResponse.json({ message: "Schedule updated successfully" });
   } catch (err) {
     console.error("[SCHEDULING UPDATE ERROR]", err);
@@ -255,6 +263,13 @@ export async function DELETE(request, { params }) {
       console.error("[SCHEDULING DELETE ERROR]", deleteError);
       return NextResponse.json({ error: "Failed to delete schedule" }, { status: 500 });
     }
+
+    await notifyAllUsers(supabase, {
+      title: "Schedule deleted",
+      message: `Schedule #${id} was deleted.`,
+      type: "schedule_deleted",
+      relatedId: String(id),
+    });
 
     return NextResponse.json({ message: "Schedule deleted successfully" });
   } catch (err) {

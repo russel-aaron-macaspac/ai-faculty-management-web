@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { NextResponse } from "next/server";
+import { notifyAllUsers } from "@/lib/notifications";
 
 const SELECT_FIELDS = `
   document_id,
@@ -132,6 +133,17 @@ export async function PATCH(request, { params }) {
       );
     }
 
+    await notifyAllUsers(supabase, {
+      title: "Clearance updated",
+      message: `Clearance #${id} status changed to ${status}${reviewedByName ? ` by ${reviewedByName}` : ""}.`,
+      type: status === "approved"
+        ? "clearance_approved"
+        : status === "rejected"
+        ? "clearance_rejected"
+        : "clearance_submitted",
+      relatedId: String(id),
+    });
+
     return NextResponse.json({
       message: "Clearance status updated successfully",
       data:    formatRow(row),
@@ -197,6 +209,13 @@ export async function DELETE(request, { params }) {
         { status: 500 }
       );
     }
+
+    await notifyAllUsers(supabase, {
+      title: "Clearance deleted",
+      message: `Clearance #${id} was deleted.`,
+      type: "clearance_deleted",
+      relatedId: String(id),
+    });
 
     return NextResponse.json({ message: "Document deleted successfully" });
   } catch (err) {

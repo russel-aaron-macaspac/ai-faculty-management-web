@@ -5,6 +5,7 @@ import { detectScheduleConflicts, generateConflictSuggestions } from "@/lib/sche
 import { getInitialStatusForCreator } from "@/lib/scheduling/approvalWorkflow";
 import { getDepartmentScope, hasDepartmentAccess } from "@/lib/scheduling/departmentAccess";
 import { recordAuditEvent } from "@/lib/auditLog";
+import { notifyAllUsers } from "@/lib/notifications";
 
 function normalizeRoomName(value) {
   const name = String(value || "").trim();
@@ -615,6 +616,12 @@ export async function POST(request) {
       action: "generated",
       target: `Schedule #${inserted.id}`,
       details: `${day} ${normalizedStart}-${normalizedEnd}`,
+    });
+    await notifyAllUsers(supabase, {
+      title: "Schedule created",
+      message: `A new schedule was created for faculty #${resolvedFaculty.userId}.`,
+      type: "schedule_created",
+      relatedId: String(inserted.id),
     });
 
     return NextResponse.json({ message: "Schedule created", id: inserted.id }, { status: 201 });

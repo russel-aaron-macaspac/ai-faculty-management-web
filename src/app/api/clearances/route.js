@@ -2,6 +2,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { getDepartmentScope } from "@/lib/scheduling/departmentAccess";
 import { NextResponse } from "next/server";
 import { recordClearanceAuditEvent } from "@/lib/auditLog";
+import { notifyAllUsers } from "@/lib/notifications";
 
 const SELECT_FIELDS = `
   document_id,
@@ -294,6 +295,12 @@ async function handleClearanceInsertError(
       target: `Clearance #${existing.document_id}`,
       details: `Document resubmitted by user #${user_id}`,
     });
+    await notifyAllUsers(supabase, {
+      title: "Clearance resubmitted",
+      message: `Clearance #${existing.document_id} was resubmitted by user #${user_id}.`,
+      type: "clearance_submitted",
+      relatedId: String(existing.document_id),
+    });
 
     return NextResponse.json({ data: formatRow(updated) });
   }
@@ -337,6 +344,12 @@ async function handleClearanceInsertError(
         action: "resubmitted",
         target: `Clearance #${existing.document_id}`,
         details: `Document resubmitted by user #${user_id}`,
+      });
+      await notifyAllUsers(supabase, {
+        title: "Clearance resubmitted",
+        message: `Clearance #${existing.document_id} was resubmitted by user #${user_id}.`,
+        type: "clearance_submitted",
+        relatedId: String(existing.document_id),
       });
 
       return NextResponse.json({ data: formatRow(updated) });
@@ -443,6 +456,12 @@ export async function POST(req) {
             target: `Clearance #${data.document_id}`,
             details: `Document submitted by user #${user_id}`,
           });
+          await notifyAllUsers(supabase, {
+            title: "New clearance submitted",
+            message: `User #${user_id} submitted a new clearance for review.`,
+            type: "clearance_submitted",
+            relatedId: String(data.document_id),
+          });
 
           results.push({ success: true, data });
         } catch (err) {
@@ -503,6 +522,12 @@ export async function POST(req) {
       action: "submitted",
       target: `Clearance #${data.document_id}`,
       details: `Document submitted by user #${user_id}`,
+    });
+    await notifyAllUsers(supabase, {
+      title: "New clearance submitted",
+      message: `User #${user_id} submitted a new clearance for review.`,
+      type: "clearance_submitted",
+      relatedId: String(data.document_id),
     });
 
     return NextResponse.json({ data: formatted });

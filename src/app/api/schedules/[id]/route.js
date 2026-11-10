@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { NextResponse } from "next/server";
+import { notifyAllUsers } from "@/lib/notifications";
 
 export async function PUT(request, { params }) {
   try {
@@ -83,6 +84,13 @@ export async function PUT(request, { params }) {
       );
     }
 
+    await notifyAllUsers(supabase, {
+      title: "Schedule updated",
+      message: `Schedule #${id} was updated.`,
+      type: "schedule_updated",
+      relatedId: String(id),
+    });
+
     return NextResponse.json({ message: "Schedule updated successfully", data: updatedSchedule });
   } catch (err) {
     console.error("[SCHEDULE PUT ERROR]", err);
@@ -128,6 +136,13 @@ export async function DELETE(request, { params }) {
       .from("shifts")
       .delete()
       .eq("shift_id", schedule.shift_id);
+
+    await notifyAllUsers(supabase, {
+      title: "Schedule deleted",
+      message: `Schedule #${id} was deleted.`,
+      type: "schedule_deleted",
+      relatedId: String(id),
+    });
 
     return NextResponse.json({ message: "Schedule deleted successfully" });
   } catch (err) {

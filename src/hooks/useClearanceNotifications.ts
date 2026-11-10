@@ -2,23 +2,22 @@ import { useState, useEffect, useCallback } from 'react';
 import { clearanceService } from '@/services/clearanceService';
 import { ClearanceNotification } from '@/types/clearance';
 
-const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-
-export const useClearanceNotifications = (userId: string | null) => {
+export const useClearanceNotifications = (userId: string | number | null) => {
   const [notifications, setNotifications] = useState<ClearanceNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
 
   // Fetch notifications
   const fetchNotifications = useCallback(async (unreadOnly: boolean = false) => {
-    if (!userId || !isUuid(userId)) {
+    if (userId == null || !String(userId).trim()) {
       setNotifications([]);
       setUnreadCount(0);
       return;
     }
+    const currentUserId = userId;
     setLoading(true);
     try {
-      const data = await clearanceService.getNotifications(userId, unreadOnly);
+      const data = await clearanceService.getNotifications(currentUserId, unreadOnly);
       setNotifications(data);
       setUnreadCount(data.filter((n: ClearanceNotification) => !n.is_read).length);
     } catch (error) {
@@ -43,9 +42,10 @@ export const useClearanceNotifications = (userId: string | null) => {
 
   // Mark all as read
   const markAllAsRead = useCallback(async () => {
-    if (!userId || !isUuid(userId)) return;
+    if (userId == null || !String(userId).trim()) return;
+    const currentUserId = userId;
     try {
-      await clearanceService.markAllNotificationsAsRead(userId);
+      await clearanceService.markAllNotificationsAsRead(currentUserId);
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
       setUnreadCount(0);
     } catch (error) {
@@ -55,7 +55,7 @@ export const useClearanceNotifications = (userId: string | null) => {
 
   // Fetch on mount
   useEffect(() => {
-    if (userId && isUuid(userId)) {
+    if (userId != null && String(userId).trim()) {
       fetchNotifications();
       // Set up polling for new notifications every 30 seconds
       const interval = setInterval(() => fetchNotifications(), 30000);

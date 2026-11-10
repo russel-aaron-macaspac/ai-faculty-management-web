@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from '@/lib/supabase/server-client';
+import { notifyAllUsers } from '@/lib/notifications';
 
 // reviewed_by is an integer column (matches users.user_id), not a uuid.
 const isInteger = (value) => /^-?\d+$/.test(String(value ?? '').trim());
@@ -59,27 +60,12 @@ export async function POST(request, { params }) {
       console.error('[CLEARANCES APPROVE] audit log failed:', auditErr);
     }
 
-    // Notification — also non-critical
-    try {
-      const clearance = updateData?.[0];
-      if (clearance?.user_id) {
-        await supabase
-          .from('notifications')
-          .insert([
-            {
-              user_id: clearance.user_id,
-              title: 'Clearance Approved',
-              message: `Your ${clearance.document_type || 'clearance'} has been approved by ${reviewedByName}.`,
-              type: 'clearance_approved',
-              related_id: id,
-              is_read: false,
-              created_at: new Date().toISOString(),
-            },
-          ]);
-      }
-    } catch (notifErr) {
-      console.error('[CLEARANCES APPROVE] notification failed:', notifErr);
-    }
+    await notifyAllUsers(supabase, {
+      title: 'Clearance approved',
+      message: `Clearance #${id} was approved by ${reviewedByName}.`,
+      type: 'clearance_approved',
+      relatedId: String(id),
+    });
 
     return Response.json(
       { message: 'Clearance approved successfully', clearance: updateData?.[0] },
