@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CalendarDays, Loader2 } from 'lucide-react';
+import { CalendarDays, Download, Loader2 } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
 import { Schedule } from '@/types/schedule';
 import { formatTimeToTwelveHour, parseTimeToMinutes } from '@/lib/timeUtils';
@@ -19,6 +19,7 @@ const getRoomDisplayName = (roomName?: string | null) => {
 import { isFacultyLikeRole } from '@/lib/roleConfig';
 import { toast } from '@/lib/toast';
 import { getScheduleStatusClasses, getScheduleStatusLabel } from '@/lib/scheduleStatus';
+import { exportScheduleMatrix } from '@/lib/scheduleExport';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -286,11 +287,14 @@ function SchedulesContent() {
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
           <CardTitle className="flex items-center gap-2">
             <CalendarDays className="h-5 w-5 text-[#D4A017]" />
             {isFacultyLikeRole(user?.role) ? 'Faculty Timetable' : 'Schedule Overview'}
           </CardTitle>
+          <Button type="button" variant="outline" onClick={() => exportScheduleMatrix(visibleSchedules, { filename: 'faculty-schedule-matrix.xls', title: 'Faculty Class Schedule' })} disabled={visibleSchedules.length === 0}>
+            <Download className="mr-2 h-4 w-4" /> Export Matrix
+          </Button>
         </CardHeader>
         <CardContent className="space-y-4">
           {scheduleContent}

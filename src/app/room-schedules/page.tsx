@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { RouteGuard } from '@/components/RouteGuard';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Download } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
 import { Schedule } from '@/types/schedule';
 import { getScheduleStatusClasses, getScheduleStatusLabel } from '@/lib/scheduleStatus';
+import { exportScheduleMatrix } from '@/lib/scheduleExport';
 
 const ROOM_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const ROOM_BOARD_START = 7 * 60;
@@ -112,7 +114,6 @@ function RoomSchedulesContent() {
       <Card>
         <CardHeader>
           <CardTitle>Room Schedule Matrices</CardTitle>
-          <p className="text-sm text-slate-500">Saved physical-room schedules shown by room.</p>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -127,7 +128,23 @@ function RoomSchedulesContent() {
                 const roomRows = roomSchedules.filter((schedule) => (schedule.room?.id || schedule.room?.name || 'room') === roomKey);
                 return (
                   <div key={roomKey} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
-                    <div className="px-2 py-2 text-sm font-semibold text-slate-700">{getRoomDisplayName(roomRows[0]?.room?.name)}</div>
+                    <div className="flex items-center justify-between gap-2 px-2 py-2">
+                      <div className="text-sm font-semibold text-slate-700">{getRoomDisplayName(roomRows[0]?.room?.name)}</div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const roomName = getRoomDisplayName(roomRows[0]?.room?.name);
+                          exportScheduleMatrix(roomRows, {
+                            filename: `${roomName.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'room'}-schedule-matrix.xls`,
+                            title: `${roomName} Schedule Matrix`,
+                          });
+                        }}
+                      >
+                        <Download className="mr-1 h-3.5 w-3.5" /> Export
+                      </Button>
+                    </div>
                     <div className="mt-2"><RoomScheduleBoard schedules={roomRows} /></div>
                   </div>
                 );

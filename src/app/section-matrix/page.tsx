@@ -6,11 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, Printer } from 'lucide-react';
+import { Download, Loader2 } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
 import { Schedule } from '@/types/schedule';
 import { formatTimeToTwelveHour } from '@/lib/timeUtils';
 import { getScheduleStatusClasses, getScheduleStatusLabel } from '@/lib/scheduleStatus';
+import { exportScheduleMatrix } from '@/lib/scheduleExport';
 
 const DAY_ABBREVIATIONS: Record<string, string> = {
   Monday: 'M',
@@ -180,7 +181,6 @@ function SectionMatrixContent() {
     [schedules]
   );
 
-  const handlePrint = () => window.print();
   const emptySectionMessage = sections.length === 0
     ? 'No saved subjects are assigned to a section yet.'
     : !selectedSection
@@ -203,8 +203,8 @@ function SectionMatrixContent() {
             Compiled subjects and class meetings from saved schedules.
           </p>
         </div>
-        <Button type="button" variant="outline" onClick={handlePrint} disabled={matrixRows.length === 0}>
-          <Printer className="mr-2 h-4 w-4" /> Print Schedule
+        <Button type="button" variant="outline" onClick={() => exportScheduleMatrix(sectionSchedules, { filename: `section-${selectedSection || 'schedule'}-matrix.xls`, section: selectedSection || 'All Sections' })} disabled={matrixRows.length === 0}>
+          Export Matrix
         </Button>
       </div>
 
@@ -299,11 +299,6 @@ function SectionMatrixContent() {
       {user?.role !== 'registrar' && <Card className="room-matrix-card print:hidden">
         <CardHeader>
           <CardTitle>{user?.role === 'registrar' ? 'Room Schedule Matrices' : 'Saved room matrix'}</CardTitle>
-          <p className="text-sm text-slate-500">
-            {user?.role === 'registrar'
-              ? 'All saved physical-room schedules shown by room in the automatic scheduler layout.'
-              : 'Saved physical-room schedules shown in the automatic scheduler layout.'}
-          </p>
         </CardHeader>
         <CardContent className="print:p-0">
           {loading ? (
@@ -321,7 +316,20 @@ function SectionMatrixContent() {
                 const roomName = getRoomDisplayName(roomRows[0]?.room?.name);
                 return (
                   <div key={roomKey} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
-                    <div className="px-2 py-2 text-sm font-semibold text-slate-700">{roomName} <span className="ml-1 text-xs font-normal text-slate-500">({roomRows.length} schedule{roomRows.length === 1 ? '' : 's'})</span></div>
+                    <div className="flex items-center justify-between gap-2 px-2 py-2">
+                      <div className="text-sm font-semibold text-slate-700">{roomName} <span className="ml-1 text-xs font-normal text-slate-500">({roomRows.length} schedule{roomRows.length === 1 ? '' : 's'})</span></div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => exportScheduleMatrix(roomRows, {
+                          filename: `${roomName.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'room'}-schedule-matrix.xls`,
+                          title: `${roomName} Schedule Matrix`,
+                        })}
+                      >
+                        <Download className="mr-1 h-3.5 w-3.5" /> Export
+                      </Button>
+                    </div>
                     <div className="mt-2"><RoomScheduleBoard schedules={roomRows} /></div>
                   </div>
                 );

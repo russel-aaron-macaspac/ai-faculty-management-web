@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { CheckCircle2, Loader2, XCircle, ChevronDown, ChevronUp, Pencil, Trash2, Plus } from 'lucide-react';
+import { CheckCircle2, Download, Loader2, XCircle, ChevronDown, ChevronUp, Pencil, Trash2, Plus } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
 import { Schedule } from '@/types/schedule';
 import { formatTimeToTwelveHour, parseTimeToMinutes } from '@/lib/timeUtils';
@@ -18,6 +18,7 @@ import { FacultyLoadGrid } from '@/components/Facultyloadgrid';
 import { AIScheduleGenerator } from '@/components/AIScheduleGenerator';
 import { getScheduleStatusClasses, getScheduleStatusLabel, isApprovedSchedule } from '@/lib/scheduleStatus';
 import { PopupDialog } from '@/components/ui/popup-dialog';
+import { exportFacultyLoad } from '@/lib/scheduleExport';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const APPROVAL_ROLES = new Set(['dean', 'ovpaa', 'registrar', 'hro']);
@@ -611,19 +612,15 @@ function ScheduleLoadingContent() {
                 const isOpen = Boolean(expanded[faculty.id]);
           return (
             <div key={faculty.id} className="rounded-md border border-slate-200 bg-white">
-              <button
-                type="button"
-                onClick={() => toggleFaculty(faculty.id)}
-                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-50"
-              >
-                <div className="flex items-center gap-3">
+              <div className="flex w-full items-center gap-3 px-4 py-3 text-left">
+                <button type="button" onClick={() => toggleFaculty(faculty.id)} className="flex min-w-0 flex-1 items-center gap-3 text-left hover:bg-slate-50">
                   <div className="text-sm font-medium text-slate-900">{faculty.name}</div>
                   <div className="text-xs text-slate-500">{facultySchedules.length} schedule(s)</div>
-                </div>
-                <div className="text-slate-500">
+                </button>
+                <button type="button" aria-label={isOpen ? 'Collapse faculty schedule' : 'Expand faculty schedule'} onClick={() => toggleFaculty(faculty.id)} className="text-slate-500">
                   {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                </div>
-              </button>
+                </button>
+              </div>
 
               {isOpen && (
                 <div>
@@ -631,6 +628,16 @@ function ScheduleLoadingContent() {
                     <div><span className="font-semibold">Name of Faculty:</span> {faculty.name}</div>
                     <div><span className="font-semibold">Status of Appointment:</span> {(facultyMeta?.statusOfAppointment || faculty.statusOfAppointment || 'Not set').replace(/^\w/, (letter) => letter.toUpperCase())}</div>
                     <div><span className="font-semibold">Designation:</span> {facultyMeta?.role === 'program_chair' ? 'Program Chair' : facultyMeta?.role === 'dean' ? 'Dean' : 'Faculty'}</div>
+                  </div>
+                  <div className="flex justify-end px-4 pt-3">
+                    <Button type="button" size="sm" variant="outline" onClick={() => exportFacultyLoad(facultySchedules, consultationByFaculty[faculty.id] ?? [], {
+                      facultyName: faculty.name,
+                      filename: `${faculty.name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'faculty'}-load-schedule.xls`,
+                      appointmentStatus: String(facultyMeta?.statusOfAppointment || faculty.statusOfAppointment || 'Not set'),
+                      designation: facultyMeta?.role === 'program_chair' ? 'Program Chair' : facultyMeta?.role === 'dean' ? 'Dean' : 'Faculty',
+                    })}>
+                      <Download className="mr-1 h-3.5 w-3.5" /> Export Faculty Load
+                    </Button>
                   </div>
                   {renderLoadMatrix('Regular Load', regularSchedules)}
                   {renderConsultationMatrix(faculty.id, consultationByFaculty[faculty.id] ?? [])}
@@ -971,7 +978,9 @@ function ScheduleLoadingContent() {
 
       <Card className={isMasterScheduleMinimized ? 'cursor-pointer' : undefined} onClick={isMasterScheduleMinimized ? () => setIsMasterScheduleMinimized(false) : undefined}>
         <CardHeader className="cursor-pointer" onClick={() => setIsMasterScheduleMinimized((current) => !current)}>
-          <CardTitle>Master Schedule</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle>Master Schedule</CardTitle>
+          </div>
           <div className="flex flex-wrap gap-3 text-xs text-slate-600" aria-label="Schedule status legend">
             <span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm border border-emerald-700/40 bg-emerald-200" /> Approved</span>
             <span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm border border-orange-700/40 bg-orange-200" /> Pending</span>
