@@ -21,12 +21,15 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { User } from '@/types/user';
+import type { ClearanceNotificationState } from '@/hooks/useClearanceNotifications';
 import { authService } from '@/services/authService';
 import { isApprovalOfficer, getApprovalOfficerConfig, isFacultyLikeRole } from '@/lib/roleConfig';
 import { Badge } from '@/components/ui/badge';
+import type { ClearanceNotification } from '@/types/clearance';
 
 interface SidebarProps {
   user: User | null;
+  notificationState: ClearanceNotificationState;
   collapsed?: boolean;
   onToggle?: () => void;
 }
@@ -43,9 +46,32 @@ const createMenuLinks = (dashboardPath: string, label: string) => [
 // separated from primary navigation by a divider + section label.
 const ACCOUNT_LABELS = new Set(['Change Password']);
 
-export function Sidebar({ user, collapsed = false, onToggle }: Readonly<SidebarProps>) {
+type SidebarLink = {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+};
+
+const CLEARANCE_NOTIFICATION_TYPES: ClearanceNotification['type'][] = [
+  'clearance_submitted',
+  'clearance_approved',
+  'clearance_rejected',
+  'clearance_note_added',
+  'clearance_deleted',
+];
+
+const SCHEDULE_NOTIFICATION_TYPES: ClearanceNotification['type'][] = [
+  'schedule_created',
+  'schedule_updated',
+  'schedule_deleted',
+  'schedule_approved',
+  'schedule_anomaly',
+];
+
+export function Sidebar({ user, notificationState, collapsed = false, onToggle }: Readonly<SidebarProps>) {
   const pathname = usePathname();
   const router = useRouter();
+  const { notifications } = notificationState;
 
   // Admin Links
   const adminLinks = [
@@ -132,8 +158,21 @@ export function Sidebar({ user, collapsed = false, onToggle }: Readonly<SidebarP
     router.push('/login');
   };
 
-  const renderLink = (link: { href: string; label: string; icon: typeof LayoutDashboard }, index: number) => {
+  const getNotificationCount = (link: SidebarLink) => {
+    const notificationTypes = link.href === '/clearance' || link.href === '/dashboard/program-chair-approvals'
+      ? CLEARANCE_NOTIFICATION_TYPES
+      : ['/schedules', '/dashboard/schedule-approvals', '/schedule-loading'].includes(link.href)
+        ? SCHEDULE_NOTIFICATION_TYPES
+        : [];
+
+    return notifications.filter(
+      (notification) => !notification.is_read && notificationTypes.includes(notification.type)
+    ).length;
+  };
+
+  const renderLink = (link: SidebarLink, index: number) => {
     const Icon = link.icon;
+    const notificationCount = getNotificationCount(link);
     const isActive = pathname === link.href || (
       link.label !== 'Dashboard' &&
       pathname.startsWith(link.href) &&
@@ -166,6 +205,18 @@ export function Sidebar({ user, collapsed = false, onToggle }: Readonly<SidebarP
         />
         <Icon className={cn('h-[18px] w-[18px] shrink-0 transition-colors', isActive ? 'text-[#D4A017]' : 'text-slate-500 group-hover:text-slate-300')} />
         {!collapsed && <span className="truncate">{link.label}</span>}
+        {notificationCount > 0 && (
+          <Badge
+            variant="info"
+            className={cn(
+              'ml-auto min-w-5 justify-center border-amber-300 bg-amber-300 px-1.5 py-0.5 text-[10px] font-bold leading-4 text-amber-950 shadow-sm',
+              collapsed && 'absolute -right-1 -top-1 ml-0'
+            )}
+            aria-label={`${notificationCount} unread ${link.label} notification${notificationCount === 1 ? '' : 's'}`}
+          >
+            {notificationCount > 9 ? '9+' : notificationCount}
+          </Badge>
+        )}
       </Link>
     );
   };

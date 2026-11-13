@@ -2,7 +2,16 @@ import { useState, useEffect, useCallback } from 'react';
 import { clearanceService } from '@/services/clearanceService';
 import { ClearanceNotification } from '@/types/clearance';
 
-export const useClearanceNotifications = (userId: string | number | null) => {
+export interface ClearanceNotificationState {
+  notifications: ClearanceNotification[];
+  unreadCount: number;
+  loading: boolean;
+  markAsRead: (notificationId: string) => Promise<void>;
+  markAllAsRead: () => Promise<void>;
+  refresh: (unreadOnly?: boolean) => Promise<void>;
+}
+
+export const useClearanceNotifications = (userId: string | number | null): ClearanceNotificationState => {
   const [notifications, setNotifications] = useState<ClearanceNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);

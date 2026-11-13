@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Sidebar } from './Sidebar';
 import { Navbar } from './Navbar';
 import { User } from '@/types/user';
+import { useClearanceNotifications } from '@/hooks/useClearanceNotifications';
 import { useRouter } from 'next/navigation';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -13,6 +14,7 @@ export function DashboardLayout({ children }: Readonly<{ children: React.ReactNo
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const router = useRouter();
+  const notificationState = useClearanceNotifications(user?.id ?? null);
 
   useEffect(() => {
     const userStr = localStorage.getItem('user');
@@ -108,6 +110,7 @@ export function DashboardLayout({ children }: Readonly<{ children: React.ReactNo
       >
         <Sidebar
           user={user}
+          notificationState={notificationState}
           collapsed={sidebarCollapsed}
           onToggle={() => setSidebarCollapsed((collapsed) => !collapsed)}
         />
@@ -115,7 +118,7 @@ export function DashboardLayout({ children }: Readonly<{ children: React.ReactNo
 
       {/* Main content */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <Navbar onMenuClick={() => setSidebarOpen(true)} user={user} />
+        <Navbar onMenuClick={() => setSidebarOpen(true)} user={user} notificationState={notificationState} />
         <main className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
           <div className="mx-auto max-w-7xl animate-in fade-in slide-in-from-bottom-2 duration-300">
             {children}

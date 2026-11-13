@@ -3,14 +3,16 @@
 import { Menu, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { NotificationCenter } from '@/components/NotificationCenter';
+import type { ClearanceNotificationState } from '@/hooks/useClearanceNotifications';
 import { User } from '@/types/user';
 
 interface NavbarProps {
   onMenuClick?: () => void;
   user?: User | null;
+  notificationState: ClearanceNotificationState;
 }
 
-export function Navbar({ onMenuClick, user = null }: Readonly<NavbarProps>) {
+export function Navbar({ onMenuClick, user = null, notificationState }: Readonly<NavbarProps>) {
   const displayName = user?.name ?? (user as unknown as { full_name?: string })?.full_name ?? 'Workspace';
   const roleLabel = user?.role ? user.role.replaceAll('_', ' ') : 'Active session';
 
@@ -30,7 +32,7 @@ export function Navbar({ onMenuClick, user = null }: Readonly<NavbarProps>) {
       </div>
       
       <div className="flex items-center gap-3 sm:gap-4">
-        <NotificationCenter userId={user?.id ?? null} />
+        <NotificationCenter userId={user?.id ?? null} notificationState={notificationState} />
       </div>
     </header>
   );

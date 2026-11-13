@@ -2,18 +2,19 @@
 
 import { useState } from 'react';
 import { Bell, X, CheckCircle2, XCircle, AlertCircle, Loader2, CalendarDays, ClipboardCheck } from 'lucide-react';
-import { useClearanceNotifications } from '@/hooks/useClearanceNotifications';
+import type { ClearanceNotificationState } from '@/hooks/useClearanceNotifications';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
 interface NotificationCenterProps {
   userId: string | number | null;
+  notificationState: ClearanceNotificationState;
 }
 
-export const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId }) => {
+export const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, notificationState }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const { notifications, unreadCount, loading, markAsRead, markAllAsRead } = useClearanceNotifications(userId);
+  const { notifications, unreadCount, loading, markAsRead, markAllAsRead } = notificationState;
 
   if (!userId) return null;
 
