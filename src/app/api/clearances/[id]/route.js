@@ -133,15 +133,16 @@ export async function PATCH(request, { params }) {
       );
     }
 
+    const clearanceNumber = String(row.document_id);
     await notifyAllUsers(supabase, {
       title: "Clearance updated",
-      message: `Clearance #${id} status changed to ${status}${reviewedByName ? ` by ${reviewedByName}` : ""}.`,
+      message: `Clearance #${clearanceNumber} status changed to ${status}${reviewedByName ? ` by ${reviewedByName}` : ""}.`,
       type: status === "approved"
         ? "clearance_approved"
         : status === "rejected"
         ? "clearance_rejected"
         : "clearance_submitted",
-      relatedId: String(id),
+      relatedId: clearanceNumber,
     });
 
     return NextResponse.json({
@@ -212,9 +213,9 @@ export async function DELETE(request, { params }) {
 
     await notifyAllUsers(supabase, {
       title: "Clearance deleted",
-      message: `Clearance #${id} was deleted.`,
+      message: `Clearance #${String(existing.document_id)} was deleted.`,
       type: "clearance_deleted",
-      relatedId: String(id),
+      relatedId: String(existing.document_id),
     });
 
     return NextResponse.json({ message: "Document deleted successfully" });

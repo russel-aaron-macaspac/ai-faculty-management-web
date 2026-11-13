@@ -58,6 +58,7 @@ export interface ClearanceNotification {
     | 'schedule_anomaly'
     | 'unauthorized_access';
   related_id?: string;
+  relatedId?: string;
   is_read: boolean;
   created_at: string;
 }

@@ -316,4 +316,17 @@ export const clearanceService = {
     }
     return res.json();
   },
+
+  async deleteNotification(notificationId: string, userId: string | number) {
+    const res = await fetch('/api/notifications', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notificationId, userId }),
+    });
+    if (!res.ok) {
+      console.error('[clearanceService.deleteNotification]', await res.text());
+      throw new Error('Could not delete notification.');
+    }
+    return res.json();
+  },
 };

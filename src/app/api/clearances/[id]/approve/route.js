@@ -62,9 +62,9 @@ export async function POST(request, { params }) {
 
     await notifyAllUsers(supabase, {
       title: 'Clearance approved',
-      message: `Clearance #${id} was approved by ${reviewedByName}.`,
+      message: `Clearance #${String(updateData?.[0]?.document_id ?? id)} was approved by ${reviewedByName}.`,
       type: 'clearance_approved',
-      relatedId: String(id),
+      relatedId: String(updateData?.[0]?.document_id ?? id),
     });
 
     return Response.json(

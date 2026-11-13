@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Bell, X, CheckCircle2, XCircle, AlertCircle, Loader2, CalendarDays, ClipboardCheck } from 'lucide-react';
+import { Bell, X, CheckCircle2, XCircle, Info, Loader2, CalendarDays, ClipboardCheck, Trash2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import type { ClearanceNotificationState } from '@/hooks/useClearanceNotifications';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -14,7 +15,8 @@ interface NotificationCenterProps {
 
 export const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, notificationState }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const { notifications, unreadCount, loading, markAsRead, markAllAsRead } = notificationState;
+  const router = useRouter();
+  const { notifications, unreadCount, loading, markAsRead, markAllAsRead, deleteNotification } = notificationState;
 
   if (!userId) return null;
 
@@ -25,9 +27,9 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, 
       case 'clearance_rejected':
         return <XCircle className="h-5 w-5 text-slate-500" />;
       case 'clearance_submitted':
-        return <AlertCircle className="h-5 w-5 text-slate-500" />;
+        return <Info className="h-5 w-5 text-slate-500" />;
       case 'clearance_note_added':
-        return <AlertCircle className="h-5 w-5 text-slate-500" />;
+        return <Info className="h-5 w-5 text-slate-500" />;
       case 'clearance_deleted':
         return <XCircle className="h-5 w-5 text-slate-500" />;
       case 'schedule_created':
@@ -36,7 +38,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, 
       case 'schedule_approved':
         return <CalendarDays className="h-5 w-5 text-slate-500" />;
       case 'schedule_anomaly':
-        return <AlertCircle className="h-5 w-5 text-slate-500" />;
+        return <Info className="h-5 w-5 text-slate-500" />;
       case 'unauthorized_access':
         return <XCircle className="h-5 w-5 text-slate-500" />;
       default:
@@ -66,8 +68,10 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, 
     return (
       <div className="divide-y divide-slate-200">
         {notifications.map((notification) => (
-          <button
+          <div
             key={notification.id}
+            role="button"
+            tabIndex={0}
             className={`group relative w-full px-5 py-4 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 ${
               notification.is_read
                 ? 'bg-white'
@@ -75,7 +79,12 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, 
             }`}
             onClick={() => {
               if (!notification.is_read) {
-                markAsRead(notification.id);
+                void markAsRead(notification.id);
+              }
+              const relatedId = notification.related_id ?? notification.relatedId;
+              if (relatedId && notification.type.startsWith('clearance_')) {
+                router.push(`/clearance?documentId=${encodeURIComponent(relatedId)}`);
+                setIsOpen(false);
               }
             }}
           >
@@ -86,6 +95,18 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, 
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-3">
                   <p className="font-semibold leading-5 text-slate-900">{notification.title}</p>
+                  <button
+                    type="button"
+                    className="shrink-0 rounded-md p-1.5 text-slate-400 opacity-0 transition-opacity hover:bg-slate-200 hover:text-slate-700 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 group-hover:opacity-100"
+                    aria-label={`Delete notification: ${notification.title}`}
+                    title="Delete notification"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void deleteNotification(notification.id);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
                 <p className="mt-1.5 text-sm leading-5 text-slate-600 line-clamp-3">
                   {notification.message}
@@ -95,7 +116,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, 
                 </p>
               </div>
             </div>
-          </button>
+          </div>
         ))}
       </div>
     );

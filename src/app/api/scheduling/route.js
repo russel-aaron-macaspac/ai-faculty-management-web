@@ -6,6 +6,7 @@ import { getInitialStatusForCreator } from "@/lib/scheduling/approvalWorkflow";
 import { getDepartmentScope, hasDepartmentAccess } from "@/lib/scheduling/departmentAccess";
 import { recordAuditEvent } from "@/lib/auditLog";
 import { notifyAllUsers } from "@/lib/notifications";
+import { resolveUserDisplayName } from "@/lib/userDisplay";
 
 function normalizeRoomName(value) {
   const name = String(value || "").trim();
@@ -617,9 +618,10 @@ export async function POST(request) {
       target: `Schedule #${inserted.id}`,
       details: `${day} ${normalizedStart}-${normalizedEnd}`,
     });
+    const facultyDisplayName = await resolveUserDisplayName(supabase, resolvedFaculty.userId);
     await notifyAllUsers(supabase, {
       title: "Schedule created",
-      message: `A new schedule was created for faculty #${resolvedFaculty.userId}.`,
+      message: `A new schedule was created for ${facultyDisplayName}.`,
       type: "schedule_created",
       relatedId: String(inserted.id),
     });

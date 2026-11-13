@@ -63,9 +63,9 @@ export async function POST(request, { params }) {
 
     await notifyAllUsers(supabase, {
       title: 'Clearance rejected',
-      message: `Clearance #${id} was rejected. Reason: ${rejectionReason.substring(0, 100)}`,
+      message: `Clearance #${String(updateData?.[0]?.document_id ?? id)} was rejected. Reason: ${rejectionReason.substring(0, 100)}`,
       type: 'clearance_rejected',
-      relatedId: String(id),
+      relatedId: String(updateData?.[0]?.document_id ?? id),
     });
 
     return Response.json(

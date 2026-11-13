@@ -3,6 +3,7 @@ import { getDepartmentScope } from "@/lib/scheduling/departmentAccess";
 import { NextResponse } from "next/server";
 import { recordClearanceAuditEvent } from "@/lib/auditLog";
 import { notifyAllUsers } from "@/lib/notifications";
+import { resolveUserDisplayName } from "@/lib/userDisplay";
 
 const SELECT_FIELDS = `
   document_id,
@@ -250,6 +251,7 @@ async function handleClearanceInsertError(
   actorRole
 ) {
   console.error("[POST /api/clearances]", error);
+  const userDisplayName = await resolveUserDisplayName(supabase, user_id);
 
   if (!isDuplicateClearanceError(error)) {
     return NextResponse.json(
@@ -293,11 +295,11 @@ async function handleClearanceInsertError(
       category: "Clearance",
       action: "resubmitted",
       target: `Clearance #${existing.document_id}`,
-      details: `Document resubmitted by user #${user_id}`,
+      details: `Document resubmitted by ${userDisplayName}`,
     });
     await notifyAllUsers(supabase, {
       title: "Clearance resubmitted",
-      message: `Clearance #${existing.document_id} was resubmitted by user #${user_id}.`,
+      message: `Clearance #${existing.document_id} was resubmitted by ${userDisplayName}.`,
       type: "clearance_submitted",
       relatedId: String(existing.document_id),
     });
@@ -343,11 +345,11 @@ async function handleClearanceInsertError(
         category: "Clearance",
         action: "resubmitted",
         target: `Clearance #${existing.document_id}`,
-        details: `Document resubmitted by user #${user_id}`,
+        details: `Document resubmitted by ${userDisplayName}`,
       });
       await notifyAllUsers(supabase, {
         title: "Clearance resubmitted",
-        message: `Clearance #${existing.document_id} was resubmitted by user #${user_id}.`,
+        message: `Clearance #${existing.document_id} was resubmitted by ${userDisplayName}.`,
         type: "clearance_submitted",
         relatedId: String(existing.document_id),
       });
@@ -388,7 +390,8 @@ export async function POST(req) {
       }
 
       const results = [];
-      for (const f of files) {
+        const userDisplayName = await resolveUserDisplayName(supabase, user_id);
+        for (const f of files) {
         try {
           // `f` is a File/Blob-like object
           const arrayBuffer = await f.arrayBuffer();
@@ -454,11 +457,11 @@ export async function POST(req) {
             category: "Clearance",
             action: "submitted",
             target: `Clearance #${data.document_id}`,
-            details: `Document submitted by user #${user_id}`,
+            details: `Document submitted by ${userDisplayName}`,
           });
           await notifyAllUsers(supabase, {
             title: "New clearance submitted",
-            message: `User #${user_id} submitted a new clearance for review.`,
+            message: `${userDisplayName} submitted a new clearance for review.`,
             type: "clearance_submitted",
             relatedId: String(data.document_id),
           });
@@ -513,6 +516,7 @@ export async function POST(req) {
     }
 
     const formatted = formatRow(data);
+    const userDisplayName = await resolveUserDisplayName(supabase, user_id);
 
     await recordClearanceAuditEvent(supabase, {
       clearanceId: data.document_id,
@@ -521,11 +525,11 @@ export async function POST(req) {
       category: "Clearance",
       action: "submitted",
       target: `Clearance #${data.document_id}`,
-      details: `Document submitted by user #${user_id}`,
+      details: `Document submitted by ${userDisplayName}`,
     });
     await notifyAllUsers(supabase, {
       title: "New clearance submitted",
-      message: `User #${user_id} submitted a new clearance for review.`,
+      message: `${userDisplayName} submitted a new clearance for review.`,
       type: "clearance_submitted",
       relatedId: String(data.document_id),
     });

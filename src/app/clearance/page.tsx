@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { clearanceService } from '@/services/clearanceService';
 import { Clearance, ClearanceCategory } from '@/types/clearance';
@@ -62,6 +63,7 @@ function matchesClearanceFilters(record: Clearance, yearFilter: string, statusFi
 }
 
 export default function ClearancePage() {
+  const searchParams = useSearchParams();
   const [records, setRecords] = useState<Clearance[]>([]);
   const [offices, setOffices] = useState<{ id: string; name: string }[]>([]);
   const [requirements, setRequirements] = useState<ClearanceCategory[]>([]);
@@ -91,6 +93,7 @@ export default function ClearancePage() {
   const [remarkSaving, setRemarkSaving] = useState(false);
   const [rejectionPrompt, setRejectionPrompt] = useState<{ record: Clearance; reason: string } | null>(null);
   const [deleteReminder, setDeleteReminder] = useState<{ record: Clearance; noteId: string } | null>(null);
+  const requestedDocumentId = searchParams.get('documentId');
 
   const isFacultyUser = isFacultyLikeRole(currentUser?.role);
   const isApprovalOfficer_ = isApprovalOfficer(currentUser?.role);
@@ -170,6 +173,12 @@ export default function ClearancePage() {
     if (!currentUser || (currentUser.role !== 'admin' && !canReviewFaculty && !isFacultyUser)) return;
     void facultyService.getFaculty().then(setFacultyMembers);
   }, [currentUser, canReviewFaculty, isFacultyUser]);
+
+  useEffect(() => {
+    if (!requestedDocumentId || records.length === 0) return;
+    const requestedRecord = records.find((record) => record.id === requestedDocumentId);
+    if (requestedRecord) setSelectedRecord(requestedRecord);
+  }, [records, requestedDocumentId]);
 
   useEffect(() => {
     const raw = localStorage.getItem('user');

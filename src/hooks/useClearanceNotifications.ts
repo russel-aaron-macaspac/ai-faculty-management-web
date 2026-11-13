@@ -7,6 +7,7 @@ export interface ClearanceNotificationState {
   unreadCount: number;
   loading: boolean;
   markAsRead: (notificationId: string) => Promise<void>;
+  deleteNotification: (notificationId: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
   refresh: (unreadOnly?: boolean) => Promise<void>;
 }
@@ -62,6 +63,20 @@ export const useClearanceNotifications = (userId: string | number | null): Clear
     }
   }, [userId]);
 
+  const deleteNotification = useCallback(async (notificationId: string) => {
+    if (userId == null || !String(userId).trim()) return;
+    try {
+      await clearanceService.deleteNotification(notificationId, userId);
+      setNotifications((prev) => prev.filter((notification) => notification.id !== notificationId));
+      setUnreadCount((prev) => {
+        const deleted = notifications.find((notification) => notification.id === notificationId);
+        return deleted && !deleted.is_read ? Math.max(0, prev - 1) : prev;
+      });
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+    }
+  }, [notifications, userId]);
+
   // Fetch on mount
   useEffect(() => {
     if (userId != null && String(userId).trim()) {
@@ -77,6 +92,7 @@ export const useClearanceNotifications = (userId: string | number | null): Clear
     unreadCount,
     loading,
     markAsRead,
+    deleteNotification,
     markAllAsRead,
     refresh: fetchNotifications,
   };

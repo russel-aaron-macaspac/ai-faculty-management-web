@@ -65,11 +65,23 @@ export async function POST(request, { params }) {
       return Response.json({ error: error.message }, { status: 500 });
     }
 
+    const { data: clearance, error: clearanceError } = await supabase
+      .from('clearances')
+      .select('document_id')
+      .eq('document_id', id)
+      .maybeSingle();
+
+    if (clearanceError || !clearance) {
+      console.error('[CLEARANCE NOTES] Failed to resolve clearance number:', clearanceError);
+      return Response.json({ error: 'Clearance not found' }, { status: 404 });
+    }
+
+    const clearanceNumber = String(clearance.document_id);
     await notifyAllUsers(supabase, {
       title: 'Clearance updated',
-      message: `${authorName} added a reminder to clearance #${id}: ${content}`,
+      message: `${authorName} added a reminder to clearance #${clearanceNumber}: ${content}`,
       type: 'clearance_note_added',
-      relatedId: String(id),
+      relatedId: clearanceNumber,
     });
 
     return Response.json(
