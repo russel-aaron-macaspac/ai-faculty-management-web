@@ -8,6 +8,7 @@ export interface User {
   name: string;
   full_name?: string;
   role: Role;
+  mustChangePassword?: boolean;
   statusOfAppointment?: 'full-time' | 'part-time' | null;
   department?: string | null;
   department_id?: number | null;

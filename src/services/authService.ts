@@ -9,6 +9,7 @@ export interface AuthUser {
   email: string;
   role: UserRole;
   full_name: string;
+  mustChangePassword?: boolean;
   statusOfAppointment?: "full-time" | "part-time" | null;
   department?: string | null;
   department_id?: number | null;

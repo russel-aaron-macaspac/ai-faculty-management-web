@@ -15,8 +15,11 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { Eye, EyeOff, KeyRound, CheckCircle2, XCircle } from 'lucide-react';
+import { Eye, EyeOff, KeyRound } from 'lucide-react';
 import { toast } from '@/lib/toast';
+import { getDashboardPathForRole } from '@/lib/roleConfig';
+import { useRouter } from 'next/navigation';
+import type { AuthUser } from '@/services/authService';
 
 const changePasswordSchema = z
   .object({
@@ -35,13 +38,13 @@ const changePasswordSchema = z
 
 type ChangePasswordFormValues = z.infer<typeof changePasswordSchema>;
 
-type Feedback = { type: 'success' | 'error'; message: string } | null;
-
 export default function ChangePasswordPage() {
+  const router = useRouter();
   // userId read from localStorage (fallback if you have an auth context, replace accordingly)
   const [userId, setUserId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [feedback, setFeedback] = useState<Feedback>(null);
+  const [isFirstLogin, setIsFirstLogin] = useState(false);
+  const [storedUser, setStoredUser] = useState<AuthUser | null>(null);
 
   // Track visibility for each field separately
   const [showOld, setShowOld] = useState(false);
@@ -52,7 +55,9 @@ export default function ChangePasswordPage() {
     try {
       const stored = localStorage.getItem('user');
       if (stored) {
-        const parsed = JSON.parse(stored);
+        const parsed = JSON.parse(stored) as AuthUser;
+        setStoredUser(parsed);
+        setIsFirstLogin(parsed?.mustChangePassword === true);
         if (typeof parsed?.id === 'number') {
           setUserId(parsed.id);
         } else if (typeof parsed?.id === 'string') {
@@ -76,7 +81,6 @@ export default function ChangePasswordPage() {
 
   async function onSubmit(values: ChangePasswordFormValues) {
     setIsLoading(true);
-    setFeedback(null);
 
     try {
       const response = await fetch('/api/auth/change-password', {
@@ -98,6 +102,13 @@ export default function ChangePasswordPage() {
       }
 
       toast({ title: 'Password Updated', description: 'Password updated successfully.', type: 'success' });
+      if (storedUser) {
+        const updatedUser = { ...storedUser, mustChangePassword: false };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        if (isFirstLogin && storedUser.role) {
+          router.replace(getDashboardPathForRole(storedUser.role));
+        }
+      }
       form.reset();
     } catch {
       toast({ title: 'Connection Error', description: 'Try again.', type: 'error' });
@@ -108,12 +119,19 @@ export default function ChangePasswordPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold tracking-tight text-slate-900">Change Password</h1>
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+          {isFirstLogin ? 'Create Your Password' : 'Change Password'}
+        </h1>
+        {isFirstLogin && (
+          <p className="mt-2 text-sm text-slate-600">
+            For security, create a new password before accessing your faculty workspace.
+          </p>
+        )}
+      </div>
 
       <Card className="max-w-2xl">
         <div className="p-6 space-y-6">
-          {/* feedback handled by global toast */}
-
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
               {/* Current Password */}

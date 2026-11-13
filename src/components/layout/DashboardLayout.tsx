@@ -6,6 +6,7 @@ import { Navbar } from './Navbar';
 import { User } from '@/types/user';
 import { useClearanceNotifications } from '@/hooks/useClearanceNotifications';
 import { useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export function DashboardLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -14,6 +15,7 @@ export function DashboardLayout({ children }: Readonly<{ children: React.ReactNo
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
   const notificationState = useClearanceNotifications(user?.id ?? null);
 
   useEffect(() => {
@@ -32,6 +34,13 @@ export function DashboardLayout({ children }: Readonly<{ children: React.ReactNo
       }
 
       setUser(parsedUser);
+      if (
+        parsedUser.mustChangePassword &&
+        ['faculty', 'program_chair', 'dean'].includes(parsedUser.role) &&
+        pathname !== '/dashboard/changepassword'
+      ) {
+        router.replace('/dashboard/changepassword');
+      }
     } catch (error) {
       console.error('Invalid stored user session', error);
       localStorage.removeItem('user');
@@ -39,7 +48,7 @@ export function DashboardLayout({ children }: Readonly<{ children: React.ReactNo
     }
 
     setLoading(false);
-  }, [router]);
+  }, [pathname, router]);
 
   if (loading) {
     return (
