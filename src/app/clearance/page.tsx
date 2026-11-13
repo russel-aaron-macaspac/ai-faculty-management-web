@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { UploadCloud, CheckCircle2, AlertTriangle, FileText, Loader2, Search, Check, X, Clock, Users, ClipboardCheck, ShieldCheck, MessageSquare, Trash2, Printer } from 'lucide-react';
-import { FACULTY_REQUIRED_OFFICES } from '@/lib/clearanceOffices';
+import { FACULTY_REQUIRED_OFFICES, hasApprovedOtherOfficeClearances, isHumanResourcesOffice } from '@/lib/clearanceOffices';
 import { isApprovalOfficer, getClearancePageInfo, isFacultyLikeRole } from '@/lib/roleConfig';
 import { StoredUser, normalize } from '@/lib/stringUtils';
 import { toast } from '@/lib/toast';
@@ -846,7 +846,14 @@ export default function ClearancePage() {
                     <h3 className="text-sm font-semibold text-slate-900">Uploaded files</h3>
                     {isFacultyUser && (() => {
                       const officeId = officeIdMap.get(normalize(selectedRecord.requiredDocument));
-                      return officeId ? <Link href={`/clearance/upload/${officeId}`} className="text-sm font-medium text-red-700 hover:underline">{selectedRecord.filePath ? 'Manage files' : 'Upload file'}</Link> : null;
+                      const hrSubmissionBlocked = isHumanResourcesOffice(selectedRecord.requiredDocument)
+                        && (selectedRecord.id.startsWith('required-') || selectedRecord.status === 'rejected')
+                        && !hasApprovedOtherOfficeClearances(facultyStepRecords);
+                      return officeId
+                        ? hrSubmissionBlocked
+                          ? <span className="text-sm text-slate-500">Wait for all other offices to approve</span>
+                          : <Link href={`/clearance/upload/${officeId}`} className="text-sm font-medium text-red-700 hover:underline">{selectedRecord.filePath ? 'Manage files' : 'Upload file'}</Link>
+                        : null;
                     })()}
                   </div>
                   {selectedRecord.filePath || selectedRecord.attachments?.length ? (

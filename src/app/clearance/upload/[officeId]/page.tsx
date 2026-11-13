@@ -12,6 +12,7 @@ import { Clearance, ClearanceCategory } from '@/types/clearance';
 import { StoredUser } from '@/lib/stringUtils';
 import { toast } from '@/lib/toast';
 import { PopupDialog } from '@/components/ui/popup-dialog';
+import { hasApprovedOtherOfficeClearances, isHumanResourcesOffice } from '@/lib/clearanceOffices';
 
 type Office = { id: string; name: string };
 
@@ -20,6 +21,7 @@ export default function ClearanceUploadPage() {
   const router = useRouter();
   const [user, setUser] = useState<StoredUser | null>(null);
   const [office, setOffice] = useState<Office | null>(null);
+  const [userRecords, setUserRecords] = useState<Clearance[]>([]);
   const [requirements, setRequirements] = useState<ClearanceCategory[]>([]);
   const [record, setRecord] = useState<Clearance | null>(null);
   const [files, setFiles] = useState<File[]>([]);
@@ -28,6 +30,11 @@ export default function ClearanceUploadPage() {
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<string | null>(null);
+
+  const hrSubmissionBlocked =
+    Boolean(office && isHumanResourcesOffice(office.name)) &&
+    (!record || record.status === 'rejected') &&
+    !hasApprovedOtherOfficeClearances(userRecords);
 
   useEffect(() => {
     const raw = localStorage.getItem('user');
@@ -52,11 +59,13 @@ export default function ClearanceUploadPage() {
       try {
         const [offices, records, categories] = await Promise.all([
           clearanceService.getOffices(),
-          clearanceService.getClearances(user.supabase_id ?? String(user.id ?? ''), params.officeId),
+          clearanceService.getClearances(user.supabase_id ?? String(user.id ?? '')),
           clearanceService.getCategories(),
         ]);
         setOffice((offices as Office[]).find((item) => String(item.id) === params.officeId) ?? null);
-        setRecord((records as Clearance[])[0] ?? null);
+        const userRecords = records as Clearance[];
+        setUserRecords(userRecords);
+        setRecord(userRecords.find((item) => String(item.officeId) === params.officeId) ?? null);
         setRequirements(
           (categories as ClearanceCategory[]).filter((category) => String(category.officeId) === params.officeId),
         );
@@ -74,13 +83,15 @@ export default function ClearanceUploadPage() {
     void load();
   }, [params.officeId, user]);
 
-  const handleUpload = async () => {
-    if (!user || !office || (files.length === 0 && !documentLink.trim())) return;
+  const handleUpload = async (submitWithoutDocument = false) => {
+    if (!user || !office) return;
 
+    const selectedFiles = submitWithoutDocument ? [] : files;
+    const selectedDocumentLink = submitWithoutDocument ? '' : documentLink.trim();
     let link: URL | null = null;
-    if (documentLink.trim()) {
+    if (selectedDocumentLink) {
       try {
-        link = new URL(documentLink.trim());
+        link = new URL(selectedDocumentLink);
         if (!['http:', 'https:'].includes(link.protocol)) throw new Error();
       } catch {
         toast({ title: 'Invalid link', description: 'Enter a valid http:// or https:// document link.', type: 'error' });
@@ -113,19 +124,24 @@ export default function ClearanceUploadPage() {
         await clearanceService.uploadDocument(
           user.supabase_id ?? String(user.id ?? ''),
           Number(office.id),
-          files[0].name,
+          selectedFiles[0]?.name,
           undefined,
           { name: user.name ?? user.full_name, role: user.role },
-          files[0]
+          selectedFiles[0]
         );
+        if (!selectedFiles[0]) {
+          toast({ title: 'Clearance submitted', description: `Your clearance was submitted to ${office.name} without a document.`, type: 'success' });
+          router.push('/clearance');
+          return;
+        }
         const records = await clearanceService.getClearances(user.supabase_id ?? String(user.id ?? ''), office.id);
         clearanceId = (records as Clearance[])[0]?.id;
       }
 
       if (!clearanceId) throw new Error('The clearance request was created but could not be loaded.');
-      const additionalFiles = record?.filePath ? files : files.slice(1);
+      const additionalFiles = record?.filePath ? selectedFiles : selectedFiles.slice(1);
       if (additionalFiles.length > 0) await clearanceService.addAttachments(clearanceId, additionalFiles);
-      toast({ title: 'Documents uploaded', description: `${files.length} file${files.length === 1 ? '' : 's'} added for ${office.name}.`, type: 'success' });
+      toast({ title: 'Documents uploaded', description: `${selectedFiles.length} file${selectedFiles.length === 1 ? '' : 's'} added for ${office.name}.`, type: 'success' });
       router.push('/clearance');
     } catch (error) {
       toast({ title: 'Upload failed', description: error instanceof Error ? error.message : 'Could not upload the document.', type: 'error' });
@@ -188,7 +204,12 @@ export default function ClearanceUploadPage() {
               </ul>
             </div>
           )}
-          {record?.filePath || record?.attachments?.length ? (
+          {hrSubmissionBlocked ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-semibold">Human Resources is the final clearance office.</p>
+              <p className="mt-1">All other office clearances must be approved before you can submit to the Human Resources Office.</p>
+            </div>
+          ) : record?.filePath || record?.attachments?.length ? (
             <div className="space-y-4">
               <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-4">
                 <p className="text-xs capitalize text-slate-500">Status: {record.status}</p>
@@ -216,11 +237,20 @@ export default function ClearanceUploadPage() {
             </div>
           ) : (
             <div className="space-y-4">
+              {record && record.status !== 'rejected' && (
+                <div className="space-y-1 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-semibold text-slate-800">Clearance submitted without a document</p>
+                  <p className="text-sm text-slate-600">You can still upload a document later if this office needs one. Status: <span className="font-medium capitalize">{record.status}</span>.</p>
+                </div>
+              )}
               <Input type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={(event) => setFiles(Array.from(event.target.files ?? []))} aria-label="Choose clearance documents" />
               <p className="text-xs text-slate-500">Accepted formats: PDF, DOC, DOCX, JPG, JPEG, and PNG.</p>
               <Button type="button" onClick={() => void handleUpload()} disabled={files.length === 0 || saving} className="bg-primary text-primary-foreground hover:bg-blue-700">
                 {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
                 Upload file
+              </Button>
+              <Button type="button" variant="outline" onClick={() => void handleUpload(true)} disabled={saving}>
+                Submit without a document
               </Button>
               <div className="space-y-2 border-t border-slate-200 pt-4">
                 <label htmlFor="clearance-document-link" className="flex items-center gap-2 text-sm font-medium text-slate-700"><LinkIcon className="h-4 w-4" />Or add a link for a large document</label>

@@ -4,6 +4,11 @@ import { NextResponse } from "next/server";
 import { recordClearanceAuditEvent } from "@/lib/auditLog";
 import { notifyAllUsers } from "@/lib/notifications";
 import { resolveUserDisplayName } from "@/lib/userDisplay";
+import {
+  HUMAN_RESOURCES_OFFICE,
+  hasApprovedOtherOfficeClearances,
+  isHumanResourcesOffice,
+} from "@/lib/clearanceOffices";
 
 const SELECT_FIELDS = `
   document_id,
@@ -240,6 +245,50 @@ async function refreshRejectedClearance(supabase, existing, original_filename, f
     .single();
 }
 
+function isFacultyRole(role) {
+  return role === "faculty" || role === "program_chair" || role === "programchair";
+}
+
+async function validateHumanResourcesSubmission(supabase, userId, officeId, actorRole) {
+  let facultyRole = isFacultyRole(actorRole);
+  const userQuery = supabase.from("users").select("role").limit(1);
+  const { data: user } = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(userId))
+    ? await userQuery.eq("supabase_id", String(userId)).maybeSingle()
+    : await userQuery.eq("user_id", Number(userId)).maybeSingle();
+
+  facultyRole = facultyRole || isFacultyRole(user?.role);
+  if (!facultyRole) return null;
+
+  const { data: office, error: officeError } = await supabase
+    .from("offices")
+    .select("name")
+    .eq("office_id", Number(officeId))
+    .maybeSingle();
+
+  if (officeError) throw officeError;
+  if (!isHumanResourcesOffice(office?.name)) return null;
+
+  const { data: records, error: recordsError } = await supabase
+    .from("clearances")
+    .select("status, office:offices(name)")
+    .eq("user_id", String(userId));
+
+  if (recordsError) throw recordsError;
+  if (!hasApprovedOtherOfficeClearances(
+    (records || []).map((record) => ({
+      requiredDocument: record.office?.name,
+      status: record.status,
+    }))
+  )) {
+    return {
+      error: `All other office clearances must be approved before submitting to ${HUMAN_RESOURCES_OFFICE}.`,
+      status: 409,
+    };
+  }
+
+  return null;
+}
+
 async function handleClearanceInsertError(
   supabase,
   error,
@@ -384,6 +433,11 @@ export async function POST(req) {
         return NextResponse.json({ error: 'Missing user_id or office_id' }, { status: 400 });
       }
 
+      const orderingError = await validateHumanResourcesSubmission(supabase, user_id, office_id, actorRole);
+      if (orderingError) {
+        return NextResponse.json({ error: orderingError.error }, { status: orderingError.status });
+      }
+
       const files = form.getAll('files');
       if (!files || files.length === 0) {
         return NextResponse.json({ error: 'No files provided' }, { status: 400 });
@@ -485,6 +539,11 @@ export async function POST(req) {
         { error: "Missing user_id or office_id" },
         { status: 400 }
       );
+    }
+
+    const orderingError = await validateHumanResourcesSubmission(supabase, user_id, office_id, actorRole);
+    if (orderingError) {
+      return NextResponse.json({ error: orderingError.error }, { status: orderingError.status });
     }
 
     const { data, error } = await supabase
