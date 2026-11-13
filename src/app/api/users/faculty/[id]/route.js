@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 export async function PUT(req, { params }) {
   try {
-    const { id } = params || {};
+    const { id } = await params;
     const body = await req.json();
     const { fullName, email, department, phone, status, statusOfAppointment } = body || {};
 
@@ -45,16 +45,24 @@ export async function PUT(req, { params }) {
 
 export async function DELETE(req, { params }) {
   try {
-    const { id } = params || {};
+    const { id } = await params;
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
 
     const supabase = createSupabaseAdminClient();
 
     // Soft-delete: set status to inactive so other parts of the app filtering active users will hide this
-    const { error } = await supabase.from('users').update({ status: 'inactive' }).eq('user_id', id);
+    const { data, error } = await supabase
+      .from('users')
+      .update({ status: 'inactive' })
+      .eq('user_id', id)
+      .select('user_id');
     if (error) {
       console.error('[FACULTY USER DELETE ERROR]', error);
       return NextResponse.json({ error: 'Failed to delete faculty user' }, { status: 500 });
+    }
+
+    if (!data?.length) {
+      return NextResponse.json({ error: 'Faculty user not found' }, { status: 404 });
     }
 
     return NextResponse.json({ success: true });

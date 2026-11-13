@@ -124,15 +124,12 @@ export const facultyService = {
   },
 
   deleteFaculty: async (id: string): Promise<void> => {
-    try {
-      const res = await fetch(`/api/users/faculty/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Could not delete faculty.');
-      // soft-delete on server; remove from local mock as well
-      mockFacultyData = mockFacultyData.filter(f => f.id !== id);
-    } catch (err) {
-      console.warn('[facultyService.deleteFaculty] failed, removing locally', err);
-      await delay(400);
-      mockFacultyData = mockFacultyData.filter(f => f.id !== id);
+    const res = await fetch(`/api/users/faculty/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      throw new Error('Could not delete faculty.');
     }
+
+    // Keep local mock data in sync for environments using the fallback dataset.
+    mockFacultyData = mockFacultyData.filter(f => f.id !== id);
   }
 };
