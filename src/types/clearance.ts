@@ -51,6 +51,7 @@ export interface ClearanceNotification {
     | 'clearance_rejected'
     | 'clearance_note_added'
     | 'clearance_deleted'
+    | 'requirement_added'
     | 'schedule_created'
     | 'schedule_updated'
     | 'schedule_deleted'

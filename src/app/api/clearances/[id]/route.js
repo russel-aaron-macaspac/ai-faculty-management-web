@@ -165,7 +165,7 @@ export async function DELETE(request, { params }) {
 
     const { data: existing, error: findError } = await supabase
       .from("clearances")
-      .select("document_id, status, file_path")
+      .select("document_id, status, file_path, user_id, office_id")
       .eq("document_id", id)
       .maybeSingle();
 
@@ -216,6 +216,8 @@ export async function DELETE(request, { params }) {
       message: `Clearance #${String(existing.document_id)} was deleted.`,
       type: "clearance_deleted",
       relatedId: String(existing.document_id),
+      recipientUserIds: [existing.user_id],
+      officeId: existing.office_id,
     });
 
     return NextResponse.json({ message: "Document deleted successfully" });

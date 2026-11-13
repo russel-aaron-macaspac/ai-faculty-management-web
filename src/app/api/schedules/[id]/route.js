@@ -108,7 +108,7 @@ export async function DELETE(request, { params }) {
 
     const { data: schedule, error: fetchError } = await supabase
       .from("schedules")
-      .select("schedule_id, shift_id")
+      .select("schedule_id, shift_id, user_id")
       .eq("schedule_id", id)
       .single();
 
@@ -142,6 +142,7 @@ export async function DELETE(request, { params }) {
       message: `Schedule #${id} was deleted.`,
       type: "schedule_deleted",
       relatedId: String(id),
+      recipientUserIds: [schedule.user_id],
     });
 
     return NextResponse.json({ message: "Schedule deleted successfully" });

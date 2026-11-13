@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { NextResponse } from "next/server";
+import { notifyAllUsers } from "@/lib/notifications";
 
 export async function GET() {
   try {
@@ -72,6 +73,20 @@ export async function POST(request) {
         { status: 500 }
       );
     }
+
+    const { data: office } = await supabase
+      .from("offices")
+      .select("name")
+      .eq("office_id", Number(officeId))
+      .maybeSingle();
+
+    await notifyAllUsers(supabase, {
+      title: "New clearance requirement",
+      message: `${office?.name ?? "An office"} added a new requirement: ${name}.`,
+      type: "requirement_added",
+      relatedId: String(data.category_id),
+      recipientRoles: ["faculty", "program_chair"],
+    });
 
     return NextResponse.json(
       { message: "Category created successfully", id: String(data.category_id) },
