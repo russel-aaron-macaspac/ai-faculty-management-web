@@ -212,6 +212,12 @@ if (showSplash) {
                   Forgot your password?
                 </Link>
               </div>
+              <div className="text-center text-sm text-slate-600">
+                Need an account?{' '}
+                <Link href="/register" className="font-medium text-slate-900 underline-offset-4 hover:underline">
+                  Register here
+                </Link>
+              </div>
             </form>
           </Form>
         </CardContent>

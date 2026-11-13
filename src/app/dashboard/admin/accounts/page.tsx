@@ -5,10 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from '@/lib/toast';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { CheckCircle2, Eye, EyeOff, Loader2, UserPlus } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 
@@ -58,10 +59,50 @@ function AccountCreationContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createdAccount, setCreatedAccount] = useState<{ name: string; email: string; role: string } | null>(null);
+  const [pendingAccounts, setPendingAccounts] = useState<Array<{ id: string; name: string; email: string; role: string; phone: string; department: string; statusOfAppointment: string }>>([]);
+  const [isLoadingPending, setIsLoadingPending] = useState(true);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<{ id: string; name: string; action: 'approve' | 'reject' } | null>(null);
   const form = useForm<AccountFormValues>({
     resolver: zodResolver(accountSchema),
     defaultValues: { firstName: '', surname: '', middleName: '', email: '', password: '', department: undefined, phone: '', status: 'active', statusOfAppointment: 'full-time', role: 'faculty' },
   });
+
+  const loadPendingAccounts = async () => {
+    try {
+      const response = await fetch('/api/users/accounts/approval');
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error || 'Unable to load account requests.');
+      setPendingAccounts(payload.data || []);
+    } catch (error) {
+      toast({ title: 'Unable to load requests', description: error instanceof Error ? error.message : 'Please try again.', type: 'error' });
+    } finally {
+      setIsLoadingPending(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadPendingAccounts();
+  }, []);
+
+  const updateAccountApproval = async (id: string, action: 'approve' | 'reject') => {
+    setProcessingId(id);
+    try {
+      const response = await fetch('/api/users/accounts/approval', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error || 'Unable to update the account request.');
+      setPendingAccounts((accounts) => accounts.filter((account) => account.id !== id));
+      toast({ title: action === 'approve' ? 'Account approved' : 'Account rejected', description: payload.message, type: 'success' });
+    } catch (error) {
+      toast({ title: 'Approval update failed', description: error instanceof Error ? error.message : 'Please try again.', type: 'error' });
+    } finally {
+      setProcessingId(null);
+    }
+  };
 
   const onSubmit = async (values: AccountFormValues) => {
     setIsSubmitting(true);
@@ -95,6 +136,24 @@ function AccountCreationContent() {
       </div>
 
       <section className="surface-panel rounded-[12px] p-6 md:p-8">
+        <div className="mb-8 border-b border-slate-200 pb-6">
+          <div className="mb-4 flex items-center justify-between">
+            <div><h2 className="text-xl font-semibold text-slate-900">Pending account requests</h2><p className="text-sm text-slate-500">Review registrations before granting access.</p></div>
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-800">{pendingAccounts.length}</span>
+          </div>
+          {isLoadingPending ? <p className="text-sm text-slate-500">Loading requests...</p> : pendingAccounts.length === 0 ? <p className="text-sm text-slate-500">No pending registrations.</p> : (
+            <div className="space-y-3">
+              {pendingAccounts.map((account) => (
+                <div key={account.id} className="rounded-[10px] border border-slate-200 p-4">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div><p className="font-semibold text-slate-900">{account.name}</p><p className="text-sm text-slate-600">{account.email} · {account.phone}</p><p className="text-xs text-slate-500">{account.department} · {account.statusOfAppointment} · {account.role === 'program_chair' ? 'Program Chair' : account.role === 'dean' ? 'Dean' : 'Faculty'}</p></div>
+                    <div className="flex gap-2"><Button type="button" size="sm" disabled={processingId === account.id} onClick={() => setConfirmation({ id: account.id, name: account.name, action: 'reject' })} variant="outline">Reject</Button><Button type="button" size="sm" disabled={processingId === account.id} onClick={() => setConfirmation({ id: account.id, name: account.name, action: 'approve' })}>Approve</Button></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         {createdAccount && (
           <div className="mb-6 flex gap-3 rounded-[10px] border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800" role="status">
             <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
@@ -191,6 +250,34 @@ function AccountCreationContent() {
           </div>
         </form>
       </section>
+      <Dialog open={confirmation !== null} onOpenChange={(open) => { if (!open && !processingId) setConfirmation(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{confirmation?.action === 'approve' ? 'Approve account?' : 'Reject account?'}</DialogTitle>
+            <DialogDescription>
+              {confirmation?.action === 'approve'
+                ? `This will allow ${confirmation?.name} to sign in.`
+                : `This will reject ${confirmation?.name}'s registration. They can submit the same email again later.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
+            <Button
+              type="button"
+              variant={confirmation?.action === 'reject' ? 'destructive' : 'default'}
+              disabled={!confirmation || processingId === confirmation.id}
+              onClick={async () => {
+                if (!confirmation) return;
+                const request = confirmation;
+                setConfirmation(null);
+                await updateAccountApproval(request.id, request.action);
+              }}
+            >
+              {processingId ? 'Processing...' : confirmation?.action === 'approve' ? 'Approve account' : 'Reject account'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -76,7 +76,7 @@ export function Sidebar({ user, notificationState, collapsed = false, onToggle }
   // Admin Links
   const adminLinks = [
     { href: '/dashboard/admin', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/dashboard/admin/accounts', label: 'Account Creation', icon: UserPlus },
+    { href: '/dashboard/admin/accounts', label: 'Accounts & Approvals', icon: UserPlus },
     { href: '/dashboard/admin/subjects', label: 'Subject Management', icon: BookOpen },
     { href: '/faculty', label: 'Faculty Management', icon: Users },
     { href: '/clearance', label: 'Requirements Management', icon: FileCheck2 },

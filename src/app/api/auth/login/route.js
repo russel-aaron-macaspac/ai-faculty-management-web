@@ -18,15 +18,28 @@ export async function POST(request) {
 
     const { data: user, error: userError } = await supabase
       .from("users")
-      .select("user_id, supabase_id, email, role, first_name, middle_name, last_name, password_hash, status, phone_number, address, status_of_appointment, department_id, last_login")
+      .select("user_id, supabase_id, email, role, first_name, middle_name, last_name, password_hash, status, approval_status, phone_number, address, status_of_appointment, department_id, last_login")
       .eq("email", email)
-      .eq("status", "active")
       .single();
 
     if (userError || !user) {
       return NextResponse.json(
         { error: "Invalid email or password." },
         { status: 401 }
+      );
+    }
+
+    if (user.approval_status === 'pending') {
+      return NextResponse.json(
+        { error: 'Your account is waiting for administrator approval.' },
+        { status: 403 }
+      );
+    }
+
+    if (user.status !== 'active') {
+      return NextResponse.json(
+        { error: 'This account is not active.' },
+        { status: 403 }
       );
     }
 
