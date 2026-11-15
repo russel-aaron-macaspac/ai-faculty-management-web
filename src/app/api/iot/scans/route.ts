@@ -297,12 +297,31 @@ export async function GET(request: NextRequest) {
     if (error) throw error;
 
     const normalizedScans = scans || [];
+    const deviceIds = [...new Set(normalizedScans.map((scan) => scan?.device_id).filter(Boolean))];
+    const deviceLocations = new Map<string, string>();
+
+    if (deviceIds.length > 0) {
+      const { data: devices, error: devicesError } = await supabase
+        .from('rfid_devices')
+        .select('device_id, location')
+        .in('device_id', deviceIds);
+
+      if (devicesError) throw devicesError;
+
+      for (const device of devices || []) {
+        if (device.device_id && device.location) {
+          deviceLocations.set(String(device.device_id), String(device.location));
+        }
+      }
+    }
+
     const scansWithAnalysis = includeAnalysis
       ? await Promise.all(
           normalizedScans.map(async (scan) => {
             if (!scan?.user_id || !scan?.device_id || !scan?.timestamp) {
               return {
                 ...scan,
+                device_location: deviceLocations.get(String(scan.device_id)) ?? null,
                 analysis: null,
               };
             }
@@ -317,17 +336,22 @@ export async function GET(request: NextRequest) {
 
               return {
                 ...scan,
+                device_location: deviceLocations.get(String(scan.device_id)) ?? null,
                 analysis,
               };
             } catch {
               return {
                 ...scan,
+                device_location: deviceLocations.get(String(scan.device_id)) ?? null,
                 analysis: null,
               };
             }
           })
         )
-      : normalizedScans;
+      : normalizedScans.map((scan) => ({
+          ...scan,
+          device_location: deviceLocations.get(String(scan.device_id)) ?? null,
+        }));
 
     return NextResponse.json({
       success: true,

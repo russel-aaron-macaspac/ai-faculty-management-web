@@ -6,7 +6,7 @@ import { Attendance } from '@/types/attendance';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { Loader2, Search, AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { Loader2, Search, AlertTriangle, CheckCircle2, ShieldAlert, MapPin } from 'lucide-react';
 import { format } from 'date-fns';
 import { StoredUser, normalize } from '@/lib/stringUtils';
 import { formatTimeToTwelveHour, formatAttendanceTimestampToTime } from '@/lib/timeUtils';
@@ -15,6 +15,8 @@ import { useRFID } from '@/hooks/useRFID';
 type LatestScanSummary = {
   id: string;
   uid: string;
+  device_id?: string | null;
+  device_location?: string | null;
   user_id?: number | null;
   status: 'success' | 'failed' | 'not_registered';
   timestamp: string;
@@ -25,6 +27,12 @@ type LatestScanSummary = {
     middle_name?: string | null;
     last_name?: string | null;
   } | null;
+};
+
+type RecentScanSummary = LatestScanSummary & {
+  user?: LatestScanSummary['user'] & {
+    employee_no?: string | null;
+  };
 };
 
 type ScanAnalysis = {
@@ -149,6 +157,15 @@ function fullNameFromScan(scan?: LatestScanSummary | null): string {
     .trim();
 
   return value || '';
+}
+
+function scanName(scan: RecentScanSummary): string {
+  const name = fullNameFromScan(scan);
+  return name || (scan.user_id ? `User ${scan.user_id}` : 'Unregistered card');
+}
+
+function scanRoom(scan: RecentScanSummary): string {
+  return scan.device_location || scan.analysis?.deviceRoom || 'Unknown room';
 }
 
 function parseTimeToMinutes(value?: string): number | null {
@@ -407,6 +424,7 @@ export default function AttendancePage() {
   const [filterDate, setFilterDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [lastScanMessage, setLastScanMessage] = useState<string | null>(null);
   const [lastScanValidation, setLastScanValidation] = useState<ScanValidationSummary | null>(null);
+  const [recentScans, setRecentScans] = useState<RecentScanSummary[]>([]);
   const [activeScannedUserId, setActiveScannedUserId] = useState<string | null>(null);
   const lastSeenScanId = useRef<string | null>(null);
   const [currentUser] = useState<StoredUser | null>(() => {
@@ -427,6 +445,7 @@ export default function AttendancePage() {
   });
   const isAdminUser = currentUser?.role === 'admin';
   const isFacultyReviewer = currentUser?.role === 'hro';
+  const canMonitorScans = isAdminUser || isFacultyReviewer;
   const currentUserId = currentUser?.id ? String(currentUser.id) : '';
   const scopeUserId = activeScannedUserId || (!isAdminUser && !isFacultyReviewer && currentUserId ? currentUserId : null);
   const attendanceScope = isFacultyReviewer ? 'faculty' as const : undefined;
@@ -489,7 +508,7 @@ export default function AttendancePage() {
     const scannedUserId = scan.userId ? String(scan.userId) : null;
     const isOwnScan = scannedUserId !== null && currentUserId !== '' && scannedUserId === currentUserId;
 
-    if (!isAdminUser && !isFacultyReviewer && !isOwnScan) {
+    if (!canMonitorScans && !isOwnScan) {
       return;
     }
 
@@ -505,15 +524,32 @@ export default function AttendancePage() {
       `Card ${scan.uid} scanned (${scan.status}) at ${formatTimeToTwelveHour(formatAttendanceTimestampToTime(scan.timestamp))}${detailsSuffix}`
     );
     setLastScanValidation(buildScanValidationSummary(scan));
-    setActiveScannedUserId(scannedUserId);
+    if (!isFacultyReviewer) {
+      setActiveScannedUserId(scannedUserId);
+    }
     setRefreshingFromScan(true);
 
-    void loadAttendance(false, scannedUserId).finally(() => {
+    const scanFilterUserId = isFacultyReviewer ? null : scannedUserId;
+    void loadAttendance(false, scanFilterUserId).finally(() => {
       setRefreshingFromScan(false);
     });
 
-    void loadRecentRecords(scannedUserId);
-  }, [currentUserId, isAdminUser, isFacultyReviewer, loadAttendance, loadRecentRecords]);
+    void loadRecentRecords(scanFilterUserId);
+  }, [canMonitorScans, currentUserId, isFacultyReviewer, loadAttendance, loadRecentRecords]);
+
+  const fetchRecentScans = useCallback(async (): Promise<RecentScanSummary[]> => {
+    const response = await fetch('/api/iot/scans?limit=10', { cache: 'no-store' });
+    if (!response.ok) {
+      return [];
+    }
+
+    const payload = await response.json();
+    if (!payload.success || !Array.isArray(payload.scans)) {
+      return [];
+    }
+
+    return payload.scans as RecentScanSummary[];
+  }, []);
 
   const fetchLatestScan = useCallback(async (): Promise<LatestScanSummary | null> => {
     const response = await fetch('/api/iot/scans?limit=1&includeAnalysis=1', { cache: 'no-store' });
@@ -530,7 +566,7 @@ export default function AttendancePage() {
   }, []);
 
   useRFID({
-    autoConnect: !isFacultyReviewer,
+    autoConnect: canMonitorScans,
     onScan: (scan) => {
       refreshFromScan({
         uid: scan.uid,
@@ -545,13 +581,19 @@ export default function AttendancePage() {
   });
 
   useEffect(() => {
-    if (isFacultyReviewer) {
+    if (!canMonitorScans) {
       return;
     }
 
     let isMounted = true;
 
     const syncLatestHttpScan = async () => {
+      const recent = await fetchRecentScans();
+      if (!isMounted) {
+        return;
+      }
+
+      setRecentScans(recent);
       const latest = await fetchLatestScan();
       if (!isMounted || !latest) {
         return;
@@ -583,7 +625,7 @@ export default function AttendancePage() {
       isMounted = false;
       globalThis.clearInterval(intervalId);
     };
-  }, [fetchLatestScan, isFacultyReviewer, refreshFromScan]);
+  }, [canMonitorScans, fetchLatestScan, fetchRecentScans, refreshFromScan]);
 
   const accountRecords = useMemo(() => {
     if (!currentUser) {
@@ -718,14 +760,14 @@ export default function AttendancePage() {
           </div>
         </div>
 
-        {!isFacultyReviewer && (lastScanMessage || refreshingFromScan) && (
+        {canMonitorScans && (lastScanMessage || refreshingFromScan) && (
           <div className="px-4 py-3 border-b border-slate-100 bg-emerald-50/70 flex items-center justify-between gap-3">
             <p className="text-sm text-emerald-800">{lastScanMessage ?? 'Refreshing attendance from live RFID scan...'}</p>
             {refreshingFromScan && <Loader2 className="h-4 w-4 animate-spin text-emerald-700" />}
           </div>
         )}
 
-        {!isFacultyReviewer && lastScanValidation && (
+        {canMonitorScans && lastScanValidation && (
           <div className={`px-4 py-3 border-b ${VALIDATION_TONE_CLASSES[lastScanValidation.tone]}`}>
             <div className="flex items-center gap-2 font-semibold text-sm">
               {lastScanValidation.tone === 'emerald' ? (
@@ -796,6 +838,58 @@ export default function AttendancePage() {
             ))}
           </TableBody>
         </Table>
+      {isFacultyReviewer && (
+        <div className="border-t border-slate-200">
+          <div className="px-4 py-3 border-b border-slate-100">
+            <h2 className="text-sm font-semibold text-slate-900">Recent RFID scans</h2>
+            <p className="text-xs text-slate-500 mt-1">Monitor which room each faculty RFID scan came from.</p>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-slate-50">
+                <TableHead>Faculty / Card</TableHead>
+                <TableHead>Scanned at</TableHead>
+                <TableHead>Room</TableHead>
+                <TableHead>Result</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {recentScans.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center py-8 text-slate-500">
+                    No RFID scans have been recorded yet.
+                  </TableCell>
+                </TableRow>
+              )}
+              {recentScans.map((scan) => (
+                <TableRow key={scan.id}>
+                  <TableCell>
+                    <div className="font-medium text-slate-900">{scanName(scan)}</div>
+                    <div className="text-xs text-slate-500">RFID: {scan.uid}</div>
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {formatTimeToTwelveHour(formatAttendanceTimestampToTime(scan.timestamp))}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1.5 text-sm text-slate-700">
+                      <MapPin className="h-3.5 w-3.5 text-slate-400" />
+                      {scanRoom(scan)}
+                    </div>
+                    {scan.device_id && (
+                      <div className="text-xs text-slate-500">Reader: {scan.device_id}</div>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${scan.status === 'success' ? 'bg-emerald-100 text-emerald-800' : scan.status === 'failed' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700'}`}>
+                      {scan.status.replace('_', ' ')}
+                    </span>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
       </div>
     </div>
   );
