@@ -7,9 +7,11 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ChevronDown, ChevronUp, Loader2, Plus, Trash2, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { scheduleService } from '@/services/scheduleService';
 import { toast } from '@/lib/toast';
+import { formatTimeToTwelveHour } from '@/lib/timeUtils';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -31,6 +33,7 @@ interface LoadRow {
   classSize: string;
   status: RowStatus;
   statusMessage?: string;
+  conflictGuidance?: string[];
 }
 
 interface TimeRow {
@@ -153,6 +156,65 @@ function isRowComplete(row: LoadRow): boolean {
   );
 }
 
+function formatConflictTime(startTime: unknown, endTime: unknown): string {
+  const start = typeof startTime === 'string' ? startTime.slice(0, 5) : '';
+  const end = typeof endTime === 'string' ? endTime.slice(0, 5) : '';
+  return start && end ? `${formatTimeToTwelveHour(start)} - ${formatTimeToTwelveHour(end)}` : 'the submitted time';
+}
+
+function getExistingScheduleLabel(detail: Record<string, unknown>): string {
+  const subject = detail.subject as { code?: string; name?: string } | null | undefined;
+  const code = subject?.code || 'Another class';
+  const name = subject?.name ? ` - ${subject.name}` : '';
+  const section = detail.section ? ` (${String(detail.section)})` : '';
+  const faculty = detail.faculty as { first_name?: string; middle_name?: string; last_name?: string } | null | undefined;
+  const facultyName = [faculty?.first_name, faculty?.middle_name, faculty?.last_name].filter(Boolean).join(' ');
+  return `${code}${name}${section}${facultyName ? `, assigned to ${facultyName}` : ''}`;
+}
+
+function buildConflictGuidance(
+  row: LoadRow,
+  facultyName: string,
+  conflict: {
+    conflicts: Array<{ conflict_type: string; details: Array<Record<string, unknown>> }>;
+    suggestions?: {
+      suggested_rooms?: Array<{ name: string }>;
+      suggested_time_slots?: Array<{ day: string; start_time: string; end_time: string }>;
+    };
+  }
+): string[] {
+  const guidance = conflict.conflicts.flatMap((item) => {
+    if (item.conflict_type === 'faculty') {
+      return item.details.map((detail) =>
+        `Faculty conflict: ${getExistingScheduleLabel(detail)} already uses this faculty member on ${String(detail.day || row.day)} at ${formatConflictTime(detail.start_time, detail.end_time)}. Move this class to another available time.`
+      );
+    }
+    if (item.conflict_type === 'room') {
+      return item.details.map((detail) =>
+        `Room conflict: ${String((detail.room as { name?: string } | null | undefined)?.name || row.roomName)} is occupied by ${getExistingScheduleLabel(detail)} on ${String(detail.day || row.day)} at ${formatConflictTime(detail.start_time, detail.end_time)}. Choose another room or time.`
+      );
+    }
+    if (item.conflict_type === 'availability') {
+      if (item.details.length === 0) {
+        return [`Availability conflict: no saved availability covers ${row.day} at ${formatConflictTime(row.startTime, row.endTime)}. Add faculty availability or choose a saved availability window.`];
+      }
+      const windows = item.details.map((detail) => `${String(detail.day)} ${formatConflictTime(detail.start_time, detail.end_time)}`).join('; ');
+      return [`Availability conflict: ${facultyName} is only available during ${windows}. Move this class into one of those windows or update the faculty availability.`];
+    }
+    return [`Schedule conflict: ${item.conflict_type}. Review the day, time, section, and room before saving.`];
+  });
+
+  const timeSlots = conflict.suggestions?.suggested_time_slots || [];
+  if (timeSlots.length > 0) {
+    guidance.push(`Suggested action: try ${timeSlots.slice(0, 3).map((slot) => `${slot.day} ${formatConflictTime(slot.start_time, slot.end_time)}`).join('; ')}.`);
+  }
+  const rooms = conflict.suggestions?.suggested_rooms || [];
+  if (rooms.length > 0) {
+    guidance.push(`Suggested action: use an available room such as ${rooms.slice(0, 3).map((room) => room.name).join(', ')}.`);
+  }
+  return [...new Set(guidance)];
+}
+
 const NUMERIC_FIELDS = ['units', 'lectureContactHours', 'labContactHours', 'classSize'] as const;
 const TEXT_INPUT_CLASS = 'h-9 focus:ring-2 focus:ring-blue-300';
 
@@ -171,6 +233,7 @@ export function FacultyLoadGrid({
   const [consultationRows, setConsultationRows] = useState<TimeRow[]>(() => loadConsultationRows(facultyId));
   const [saving, setSaving] = useState(false);
   const [summary, setSummary] = useState<{ savedCount: number; failedCount: number } | null>(null);
+  const [selectedConflict, setSelectedConflict] = useState<{ row: LoadRow; guidance: string[] } | null>(null);
   const [isMinimized, setIsMinimized] = useState(true);
 
   useEffect(() => {
@@ -195,6 +258,7 @@ export function FacultyLoadGrid({
                 : value,
               status: 'idle',
               statusMessage: undefined,
+              conflictGuidance: undefined,
             }
           : row
       )
@@ -214,6 +278,7 @@ export function FacultyLoadGrid({
       labContactHours: subject.lab_units == null ? '' : String(subject.lab_units),
       status: 'idle',
       statusMessage: undefined,
+      conflictGuidance: undefined,
     } : row));
   };
 
@@ -222,7 +287,7 @@ export function FacultyLoadGrid({
     setRows((prev) => prev.map((row) => {
       if (row.localId !== localId) return row;
       const subject = subjects.find((item) => item.code.toLowerCase() === row.code.trim().toLowerCase());
-      return { ...row, startTime, endTime: calculateEndTime(startTime, subject?.hours), status: 'idle', statusMessage: undefined };
+      return { ...row, startTime, endTime: calculateEndTime(startTime, subject?.hours), status: 'idle', statusMessage: undefined, conflictGuidance: undefined };
     }));
   };
 
@@ -309,7 +374,11 @@ export function FacultyLoadGrid({
             : conflictType === 'room'
               ? 'This physical room is already occupied during this time.'
               : 'Schedule conflict detected.';
-        setRowStatus(loadType, row.localId, 'conflict', message);
+        const guidance = buildConflictGuidance(row, facultyName, result.conflict);
+        const setRows = loadType === 'regular' ? setRegularRows : setOverloadRows;
+        setRows((current) => current.map((item) => item.localId === row.localId
+          ? { ...item, status: 'conflict', statusMessage: message, conflictGuidance: guidance }
+          : item));
         return false;
       }
 
@@ -544,7 +613,15 @@ export function FacultyLoadGrid({
                 />
               </TableCell>
               <TableCell>
-                <RowStatusBadge status={row.status} message={row.statusMessage} />
+                <div className="space-y-1">
+                  <RowStatusBadge
+                    status={row.status}
+                    message={row.statusMessage}
+                    onClick={row.status === 'conflict' && row.conflictGuidance
+                      ? () => setSelectedConflict({ row, guidance: row.conflictGuidance || [] })
+                      : undefined}
+                  />
+                </div>
               </TableCell>
               <TableCell className="text-right">
                 <Button
@@ -710,11 +787,41 @@ export function FacultyLoadGrid({
           )}
         </div>
       </CardContent>}
+      <Dialog open={selectedConflict !== null} onOpenChange={(open) => { if (!open) setSelectedConflict(null); }}>
+        <DialogContent className="max-h-[85vh] max-w-2xl overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Schedule conflict details</DialogTitle>
+            <DialogDescription>
+              Review the conflict and suggested actions before trying to save this class again.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedConflict && (
+            <div className="min-h-0 space-y-4 overflow-y-auto pr-2">
+              <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">
+                <div className="font-semibold">{selectedConflict.row.code || 'Class'}{selectedConflict.row.description ? ` - ${selectedConflict.row.description}` : ''}</div>
+                <div className="mt-1 text-xs">
+                  {selectedConflict.row.day} · {selectedConflict.row.startTime || 'No start time'} - {selectedConflict.row.endTime || 'No end time'} · {selectedConflict.row.roomName || 'No room'}
+                </div>
+              </div>
+              <div className="space-y-3">
+                {selectedConflict.guidance.map((item, index) => (
+                  <div key={`${item}-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm leading-5 text-slate-700">
+                    {item}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" />}>Close</DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
 
-function RowStatusBadge({ status, message }: { status: RowStatus; message?: string }) {
+function RowStatusBadge({ status, message, onClick }: { status: RowStatus; message?: string; onClick?: () => void }) {
   if (status === 'saving') {
     return (
       <span className="inline-flex items-center gap-1 text-xs text-slate-500">
@@ -730,6 +837,19 @@ function RowStatusBadge({ status, message }: { status: RowStatus; message?: stri
     );
   }
   if (status === 'conflict' || status === 'error') {
+    if (status === 'conflict' && onClick) {
+      return (
+        <button
+          type="button"
+          className="inline-flex max-w-full items-center gap-1 text-left text-xs font-medium text-rose-600 underline decoration-dotted underline-offset-2 hover:text-rose-800"
+          onClick={onClick}
+          aria-label="View schedule conflict details"
+        >
+          <AlertTriangle className="h-3 w-3 shrink-0" />
+          View conflict details
+        </button>
+      );
+    }
     return (
       <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-600" title={message}>
         <AlertTriangle className="h-3 w-3 shrink-0" />

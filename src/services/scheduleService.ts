@@ -57,7 +57,7 @@ interface SectionPayload {
 interface SchedulingConflictResponse {
   error: string;
   conflict_type: 'faculty' | 'room' | 'availability';
-  conflicts: Array<{ conflict_type: string; details: unknown[] }>;
+  conflicts: Array<{ conflict_type: string; details: Array<Record<string, unknown>> }>;
   suggestions: {
     suggested_rooms: Array<{ id: string; name: string; capacity: number }>;
     suggested_time_slots: Array<{ day: string; start_time: string; end_time: string }>;

@@ -101,7 +101,21 @@ export async function detectScheduleConflicts(supabase, payload) {
   // Fetch all schedules for the day (exclude rejected)
   const baseQuery = supabase
     .from("schedules")
-    .select("id, faculty_id, faculty_id_uuid, subject_id, room_id, day, start_time, end_time, status")
+    .select(`
+      id,
+      faculty_id,
+      faculty_id_uuid,
+      subject_id,
+      room_id,
+      section,
+      day,
+      start_time,
+      end_time,
+      status,
+      subject:subjects!schedules_subject_id_fkey (code, name),
+      room:rooms!schedules_room_id_fkey (name),
+      faculty:users!schedules_faculty_id_fkey (first_name, middle_name, last_name)
+    `)
     .eq("day", day)
     .neq("status", "rejected");
 
