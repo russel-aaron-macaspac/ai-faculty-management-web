@@ -24,6 +24,28 @@ function isOnlineRoom(roomName) {
   return /\b(online|virtual|remote|tbd|tba)\b/i.test(String(roomName || ""));
 }
 
+function formatScheduleChanges(previous, next) {
+  const fields = [
+    ["faculty_id", "faculty", next.faculty_id],
+    ["subject_id", "subject", next.subject_id],
+    ["room_id", "room", next.room_id],
+    ["section", "section", next.section],
+    ["day", "day", next.day],
+    ["start_time", "start time", next.start_time],
+    ["end_time", "end time", next.end_time],
+    ["units", "units", next.units],
+    ["lecture_contact_hours", "lecture contact hours", next.lecture_contact_hours],
+    ["lab_contact_hours", "lab contact hours", next.lab_contact_hours],
+    ["class_size", "class size", next.class_size],
+    ["load_type", "load type", next.load_type],
+  ];
+
+  return fields
+    .filter(([field]) => String(previous[field] ?? "") !== String(next[field] ?? ""))
+    .map(([, label, value]) => `${label}: ${value ?? "none"}`)
+    .join("; ");
+}
+
 async function createVirtualRoom(supabase, { name, capacity }) {
   const { data, error } = await supabase
     .from("rooms")
@@ -201,9 +223,10 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: "Failed to update schedule" }, { status: 500 });
     }
 
+    const changes = formatScheduleChanges(schedule, updatePayload);
     await notifyAllUsers(supabase, {
       title: "Schedule updated",
-      message: `Schedule #${id} was updated.`,
+      message: `Schedule #${id} was updated${changes ? `. Changes: ${changes}.` : "."}`,
       type: "schedule_updated",
       relatedId: String(id),
     });

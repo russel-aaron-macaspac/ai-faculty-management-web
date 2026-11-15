@@ -1,3 +1,5 @@
+import nodemailer from 'nodemailer';
+
 const OFFICE_ROLE_ALIASES = {
   'Dominican Learning Resource Center': ['dlrc'],
   'Property Management Office': ['pmo'],
@@ -15,6 +17,57 @@ const OFFICE_ROLE_ALIASES = {
 };
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const normalizeOfficeName = (name) => String(name ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+async function sendEmailNotifications(recipients, { title, message }) {
+  const username = process.env.GMAIL_USER;
+  const appPassword = process.env.GMAIL_APP_PASSWORD;
+  const from = process.env.EMAIL_FROM || username;
+
+  if (!username || !appPassword || !from) return;
+
+  const validRecipients = [...new Set(
+    recipients
+      .map((recipient) => String(recipient.email ?? '').trim())
+      .filter((email) => EMAIL_PATTERN.test(email))
+  )];
+
+  if (validRecipients.length === 0) return;
+
+  const transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: {
+      user: username,
+      pass: appPassword,
+    },
+  });
+
+  await Promise.all(validRecipients.map(async (email) => {
+    await transporter.sendMail({
+      from,
+      to: email,
+      subject: title,
+      text: message,
+      html: `
+        <div style="font-family:Arial,sans-serif;line-height:1.5;color:#1e293b">
+          <h2>${escapeHtml(title)}</h2>
+          <p>${escapeHtml(message).replace(/\n/g, '<br>')}</p>
+        </div>
+      `,
+    });
+  }));
+}
 
 async function resolveOfficeRecipientIds(supabase, officeId) {
   if (officeId == null) return [];
@@ -141,13 +194,13 @@ export async function notifyAllUsers(
     numericRecipientIds.length
       ? supabase
         .from('users')
-        .select('user_id, supabase_id')
+        .select('user_id, supabase_id, email')
         .in('user_id', numericRecipientIds)
       : { data: [], error: null },
     supabaseRecipientIds.length
       ? supabase
         .from('users')
-        .select('user_id, supabase_id')
+        .select('user_id, supabase_id, email')
         .in('supabase_id', supabaseRecipientIds)
       : { data: [], error: null },
   ]);
@@ -159,15 +212,21 @@ export async function notifyAllUsers(
   }
 
   const users = [...(numericUsersResult.data || []), ...(supabaseUsersResult.data || [])];
-  const recipients = [...new Set(users
-    .map((user) => user.supabase_id || user.user_id)
-    .filter((userId) => userId != null && String(userId) !== String(excludeUserId ?? '')))];
+  const recipients = users.filter((user) => {
+    const userId = user.supabase_id || user.user_id;
+    return userId != null && String(userId) !== String(excludeUserId ?? '');
+  }).filter((user, index, allUsers) => {
+    const userId = user.supabase_id || user.user_id;
+    return allUsers.findIndex((candidate) => (
+      String(candidate.supabase_id || candidate.user_id) === String(userId)
+    )) === index;
+  });
 
   if (recipients.length === 0) return { data: [], error: null };
 
   const { data, error } = await supabase.from('notifications').insert(
-    recipients.map((userId) => ({
-      user_id: userId,
+    recipients.map((user) => ({
+      user_id: user.supabase_id || user.user_id,
       title,
       message,
       type,
@@ -179,6 +238,14 @@ export async function notifyAllUsers(
 
   if (error) {
     console.error('[NOTIFICATIONS] Failed to create notifications:', error);
+  }
+
+  if (!error) {
+    try {
+      await sendEmailNotifications(recipients, { title, message });
+    } catch (emailError) {
+      console.error('[NOTIFICATIONS] Failed to send email notifications:', emailError);
+    }
   }
 
   return { data, error };

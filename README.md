@@ -8,6 +8,18 @@ MISTRAL_MODEL=mistral-large-latest
 ```
 
 Restart the development server after changing environment variables. The key is read only by the server-side scheduling route and must not use a `NEXT_PUBLIC_` prefix.
+
+## Email notifications
+
+Notification emails are sent only to the same resolved recipients who receive the in-app notification. Configure Gmail SMTP with a Google App Password:
+
+```env
+GMAIL_USER=your-account@gmail.com
+GMAIL_APP_PASSWORD=your-16-character-app-password
+EMAIL_FROM=Faculty Management <your-account@gmail.com>
+```
+
+Enable 2-Step Verification on the Gmail account, then create the App Password under Google Account security settings. Do not use the normal Gmail password. Email content uses the notification title and message, so status changes, notes, and schedule updates describe the actual update. If the SMTP settings are missing, in-app notifications continue to work and email delivery remains disabled.
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
