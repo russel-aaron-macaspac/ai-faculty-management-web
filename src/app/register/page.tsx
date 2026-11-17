@@ -21,22 +21,28 @@ const schema = z.object({
   middleName: z.string().trim().optional(),
   email: z.string().trim().email('Enter a valid email address.'),
   password: z.string().min(12, 'Use at least 12 characters.').regex(/[A-Za-z]/, 'Include a letter.').regex(/\d/, 'Include a number.'),
+  confirmPassword: z.string().min(1, 'Confirm your password.'),
   department: z.enum(DEPARTMENTS, { message: 'Select your department.' }),
   phone: z.string().trim().min(1, 'Enter your phone number.'),
   statusOfAppointment: z.enum(['full-time', 'part-time'], { message: 'Select your appointment status.' }),
   role: z.enum(['faculty', 'program_chair', 'dean'], { message: 'Select your role.' }),
+}).refine((values) => values.password === values.confirmPassword, {
+  path: ['confirmPassword'],
+  message: 'Passwords do not match.',
 });
 type RegistrationValues = z.infer<typeof schema>;
 
 export default function RegisterPage() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const form = useForm<RegistrationValues>({ resolver: zodResolver(schema), defaultValues: { firstName: '', lastName: '', middleName: '', email: '', password: '', department: undefined, phone: '', statusOfAppointment: 'full-time', role: 'faculty' } });
+  const form = useForm<RegistrationValues>({ resolver: zodResolver(schema), defaultValues: { firstName: '', lastName: '', middleName: '', email: '', password: '', confirmPassword: '', department: undefined, phone: '', statusOfAppointment: 'full-time', role: 'faculty' } });
 
   async function onSubmit(values: RegistrationValues) {
     setIsSubmitting(true);
     try {
-      const response = await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(values) });
+      const { confirmPassword, ...registrationValues } = values;
+      void confirmPassword;
+      const response = await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(registrationValues) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.error || 'Registration failed.');
       toast({ title: 'Registration submitted', description: 'An administrator must approve your account before you can sign in.', type: 'success' });
@@ -60,6 +66,7 @@ export default function RegisterPage() {
             <div className="space-y-2"><Label htmlFor="email">Email</Label><Input id="email" type="email" {...form.register('email')} />{form.formState.errors.email && <p className="text-sm text-red-600">{form.formState.errors.email.message}</p>}</div>
             <div className="space-y-2"><Label htmlFor="phone">Phone</Label><Input id="phone" type="tel" {...form.register('phone')} />{form.formState.errors.phone && <p className="text-sm text-red-600">{form.formState.errors.phone.message}</p>}</div>
             <div className="space-y-2 md:col-span-2"><Label htmlFor="password">Password</Label><Input id="password" type="password" {...form.register('password')} /><p className="text-xs text-slate-500">At least 12 characters, including a letter and a number.</p>{form.formState.errors.password && <p className="text-sm text-red-600">{form.formState.errors.password.message}</p>}</div>
+            <div className="space-y-2 md:col-span-2"><Label htmlFor="confirmPassword">Confirm password</Label><Input id="confirmPassword" type="password" {...form.register('confirmPassword')} />{form.formState.errors.confirmPassword && <p className="text-sm text-red-600">{form.formState.errors.confirmPassword.message}</p>}</div>
             <div className="space-y-2"><Label htmlFor="department">Department</Label><Select value={form.watch('department') ?? ''} onValueChange={(value) => form.setValue('department', value as RegistrationValues['department'], { shouldValidate: true })}><SelectTrigger id="department"><SelectValue placeholder="Select a department" /></SelectTrigger><SelectContent>{DEPARTMENTS.map((department) => <SelectItem key={department} value={department}>{department}</SelectItem>)}</SelectContent></Select>{form.formState.errors.department && <p className="text-sm text-red-600">{form.formState.errors.department.message}</p>}</div>
             <div className="space-y-2"><Label htmlFor="statusOfAppointment">Appointment status</Label><Select value={form.watch('statusOfAppointment')} onValueChange={(value) => form.setValue('statusOfAppointment', value as RegistrationValues['statusOfAppointment'], { shouldValidate: true })}><SelectTrigger id="statusOfAppointment"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="full-time">Full-time</SelectItem><SelectItem value="part-time">Part-time</SelectItem></SelectContent></Select></div>
             <div className="space-y-2"><Label htmlFor="role">Role</Label><Select value={form.watch('role')} onValueChange={(value) => form.setValue('role', value as RegistrationValues['role'], { shouldValidate: true })}><SelectTrigger id="role"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="faculty">Faculty</SelectItem><SelectItem value="program_chair">Program Chair</SelectItem><SelectItem value="dean">Dean</SelectItem></SelectContent></Select>{form.formState.errors.role && <p className="text-sm text-red-600">{form.formState.errors.role.message}</p>}</div>
