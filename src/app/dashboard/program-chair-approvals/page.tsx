@@ -294,7 +294,7 @@ function ProgramChairApprovalsContent() {
               className="min-h-28 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#D4A017]/40"
               value={remarkText}
               onChange={(event) => setRemarkText(event.target.value)}
-              placeholder="Example: Submit the updated program chair clearance document."
+              placeholder="Example: Submit the updated Program Chair clearance document."
               aria-label="Requirement reminder"
             />
             <div className="flex justify-end gap-2">

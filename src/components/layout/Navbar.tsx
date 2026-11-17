@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import type { ClearanceNotificationState } from '@/hooks/useClearanceNotifications';
 import { User } from '@/types/user';
+import { getRoleDisplayName } from '@/lib/roleConfig';
 
 interface NavbarProps {
   onMenuClick?: () => void;
@@ -14,7 +15,7 @@ interface NavbarProps {
 
 export function Navbar({ onMenuClick, user = null, notificationState }: Readonly<NavbarProps>) {
   const displayName = user?.name ?? (user as unknown as { full_name?: string })?.full_name ?? 'Workspace';
-  const roleLabel = user?.role ? user.role.replaceAll('_', ' ') : 'Active session';
+  const roleLabel = user?.role ? getRoleDisplayName(user.role) : 'Active session';
 
   return (
     <header className="sticky top-0 z-30 flex h-20 w-full items-center justify-between border-b border-slate-200/80 bg-white/92 px-4 backdrop-blur-xl sm:px-6 print:hidden">

@@ -23,7 +23,7 @@ import { Button } from '@/components/ui/button';
 import { User } from '@/types/user';
 import type { ClearanceNotificationState } from '@/hooks/useClearanceNotifications';
 import { authService } from '@/services/authService';
-import { isApprovalOfficer, getApprovalOfficerConfig, isFacultyLikeRole } from '@/lib/roleConfig';
+import { getRoleDisplayName, isApprovalOfficer, getApprovalOfficerConfig, isFacultyLikeRole } from '@/lib/roleConfig';
 import { Badge } from '@/components/ui/badge';
 import type { ClearanceNotification } from '@/types/clearance';
 
@@ -253,8 +253,8 @@ export function Sidebar({ user, notificationState, collapsed = false, onToggle }
         <div className={cn('rounded-[10px] border border-white/10 bg-white/5 p-2.5', collapsed && 'text-center')}>
           <div className={cn('flex min-w-0 flex-col', collapsed && 'hidden')}>
             <span className="truncate font-sans text-sm font-medium text-white">{displayName || user?.role}</span>
-            <Badge variant="outline" className="mt-0.5 w-fit border-white/10 bg-transparent px-1.5 py-0 font-sans text-[10px] capitalize text-slate-400">
-              {user?.role === 'program_chair' ? 'Program chair' : user?.role}
+            <Badge variant="outline" className="mt-0.5 w-fit border-white/10 bg-transparent px-1.5 py-0 font-sans text-[10px] text-slate-400">
+              {getRoleDisplayName(user?.role)}
             </Badge>
           </div>
         </div>

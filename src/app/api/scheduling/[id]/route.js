@@ -111,7 +111,7 @@ export async function PUT(request, { params }) {
 
     const scope = await getDepartmentScope(supabase, actorId, actorRole);
     if (!scope.isAdmin && !scope.actor) {
-      return NextResponse.json({ error: "Program chair account not found" }, { status: 403 });
+      return NextResponse.json({ error: "Program Chair account not found" }, { status: 403 });
     }
 
     const { data: targetFaculty, error: targetFacultyError } = await supabase
@@ -261,7 +261,7 @@ export async function DELETE(request, { params }) {
 
     const scope = await getDepartmentScope(supabase, actorId, actorRole);
     if (!scope.isAdmin && !scope.actor) {
-      return NextResponse.json({ error: "Program chair account not found" }, { status: 403 });
+      return NextResponse.json({ error: "Program Chair account not found" }, { status: 403 });
     }
 
     const { data: targetFaculty, error: targetFacultyError } = await supabase

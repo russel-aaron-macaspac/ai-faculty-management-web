@@ -157,7 +157,7 @@ function AccountCreationContent() {
         {createdAccount && (
           <div className="mb-6 flex gap-3 rounded-[10px] border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800" role="status">
             <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
-            <div><p className="font-semibold">Account ready</p><p>{createdAccount.name} ({createdAccount.email}) can sign in with the assigned {createdAccount.role === 'program_chair' ? 'program chair' : createdAccount.role} role.</p></div>
+            <div><p className="font-semibold">Account ready</p><p>{createdAccount.name} ({createdAccount.email}) can sign in with the assigned {createdAccount.role === 'program_chair' ? 'Program Chair' : createdAccount.role} role.</p></div>
           </div>
         )}
 

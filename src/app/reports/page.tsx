@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Search, Loader2, ClipboardList, FileCheck2, CalendarCheck2, Download, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
+import { getRoleDisplayName } from '@/lib/roleConfig';
 
 type AuditEntry = {
   id: string;
@@ -172,7 +173,7 @@ function AuditTrailContent() {
         <TableCell>
           <div className="text-sm font-medium text-slate-900">{entry.actorName ?? 'System'}</div>
           {entry.actorRole && (
-            <div className="text-xs capitalize text-slate-500">{entry.actorRole.replaceAll('_', ' ')}</div>
+            <div className="text-xs text-slate-500">{getRoleDisplayName(entry.actorRole)}</div>
           )}
         </TableCell>
         <TableCell>

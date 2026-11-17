@@ -2,6 +2,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { NextResponse } from "next/server";
 import { canRoleActOnStatus, resolveNextStatus } from "@/lib/scheduling/approvalWorkflow";
 import { notifyAllUsers } from "@/lib/notifications";
+import { getRoleDisplayName } from "@/lib/roleConfig";
 
 export async function POST(request, { params }) {
   try {
@@ -72,7 +73,7 @@ export async function POST(request, { params }) {
 
     await notifyAllUsers(supabase, {
       title: `Schedule ${action === "approve" ? "approved" : "rejected"}`,
-      message: `Schedule #${id} was ${action === "approve" ? "approved" : "rejected"} by ${role}.`,
+      message: `Schedule #${id} was ${action === "approve" ? "approved" : "rejected"} by ${getRoleDisplayName(role)}.`,
       type: action === "approve" ? "schedule_approved" : "schedule_updated",
       relatedId: String(id),
     });

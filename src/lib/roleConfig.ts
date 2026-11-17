@@ -161,6 +161,18 @@ export const normalizeApprovalOfficerRole = (
   return normalizedRole ? APPROVAL_ROLE_ALIASES[normalizedRole] ?? normalizedRole : undefined;
 };
 
+export const getRoleDisplayName = (role: string | undefined): string => {
+  if (!role) {
+    return '';
+  }
+
+  if (role === 'program_chair' || role === 'programchair') {
+    return 'Program Chair';
+  }
+
+  return role.replaceAll('_', ' ');
+};
+
 export const getRequiredOfficeForOfficer = (role: string | undefined): string | null => {
   const officeByRole: Partial<Record<ApprovalOfficerId, string>> = {
     dlrc: 'Dominican Learning Resource Center',

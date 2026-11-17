@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/lib/toast';
 import { User } from '@/types/user';
-import { isApprovalOfficer, isFacultyLikeRole } from '@/lib/roleConfig';
+import { getRoleDisplayName, isApprovalOfficer, isFacultyLikeRole } from '@/lib/roleConfig';
 import { Badge } from '@/components/ui/badge';
 
 export default function ProfilePage() {
@@ -75,7 +75,7 @@ export default function ProfilePage() {
             <div>
               <CardTitle className="text-2xl">{user.name}</CardTitle>
               <CardDescription className="mt-2 flex flex-wrap items-center gap-2">
-                <Badge variant="secondary" className="capitalize">{user.role.replaceAll('_', ' ')}</Badge>
+                <Badge variant="secondary">{getRoleDisplayName(user.role)}</Badge>
               </CardDescription>
             </div>
 
