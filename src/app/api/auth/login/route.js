@@ -18,7 +18,7 @@ export async function POST(request) {
 
     const { data: user, error: userError } = await supabase
       .from("users")
-      .select("user_id, supabase_id, email, role, first_name, middle_name, last_name, password_hash, status, approval_status, phone_number, address, status_of_appointment, department_id, last_login")
+      .select("user_id, supabase_id, email, role, first_name, middle_name, last_name, password_hash, status, approval_status, phone_number, address, status_of_appointment, department_id")
       .eq("email", email)
       .single();
 
@@ -52,8 +52,6 @@ export async function POST(request) {
       );
     }
 
-    const mustChangePassword = user.last_login === null;
-
     await supabase
       .from("users")
       .update({ last_login: new Date().toISOString() })
@@ -77,7 +75,6 @@ export async function POST(request) {
         role: frontendRole,
         full_name: fullName,
         name: fullName,
-        mustChangePassword,
         phone: user.phone_number || null,
         address: user.address || null,
         statusOfAppointment: user.status_of_appointment || null,
