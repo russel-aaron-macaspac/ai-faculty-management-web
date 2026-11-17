@@ -109,6 +109,10 @@ function formatBoardTime(minutes: number) {
   return `${displayHour}:${String(minutes % 60).padStart(2, '0')} ${suffix}`;
 }
 
+function formatBoardSlot(minutes: number) {
+  return `${formatBoardTime(minutes)} - ${formatBoardTime(minutes + 30)}`;
+}
+
 function boardMinutes(value: string) {
   const [hours, minutes] = value.split(':').map(Number);
   return hours * 60 + minutes;
@@ -162,14 +166,14 @@ function ScheduleRoomBoard({ rows, allRows, onUpdate, onDelete, color, savedColo
       <table className="w-full min-w-260 table-fixed border-collapse text-xs">
         <thead>
           <tr className="bg-slate-100 text-slate-800">
-            <th className="w-32 border border-slate-300 px-2 py-3 text-center font-bold uppercase">Time</th>
+            <th className="w-40 whitespace-nowrap border border-slate-300 px-2 py-3 text-center font-bold uppercase">Time</th>
             {DAYS.slice(0, 6).map((day) => <th key={day} className="border border-slate-300 px-2 py-3 text-center font-bold uppercase">{day}</th>)}
         </tr>
         </thead>
         <tbody>
           {BOARD_SLOTS.map((slot) => (
             <tr key={slot} className="h-10">
-              <th className="border border-slate-300 bg-slate-50 px-2 text-center font-semibold text-slate-600">{formatBoardTime(slot)}</th>
+              <th className="border border-slate-300 bg-slate-50 px-2 text-center font-semibold text-slate-600">{formatBoardSlot(slot)}</th>
               {DAYS.slice(0, 6).map((day) => {
                 const row = rows
                   .filter((candidate) => candidate.day === day && boardMinutes(candidate.startTime) === slot)
@@ -704,13 +708,41 @@ export function AIScheduleGenerator({ faculties, subjects, rooms, sections, crea
 
 function ScheduleOnlineBoard({ rows, onUpdate, onDelete, color, readOnly }: Readonly<{ rows: GeneratedRow[]; onUpdate: (localId: string, field: keyof GeneratedRow, value: string) => void; onDelete: (localId: string) => void; color: string; readOnly: boolean }>) {
   const conflictingRows = rows.filter((row) => rows.some((other) => row.localId !== other.localId && row.day === other.day && overlaps(boardMinutes(row.startTime), boardMinutes(row.endTime), boardMinutes(other.startTime), boardMinutes(other.endTime)) && (row.facultyId === other.facultyId || (row.section && row.section === other.section))));
-  return <div className="overflow-x-auto rounded-lg border border-sky-300 bg-white shadow-sm"><div className="border-b border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">Online classes may share a cell, but the same faculty member or section cannot overlap.</div><table className="w-full min-w-260 table-fixed border-collapse text-xs"><thead><tr className="bg-sky-100 text-slate-800"><th className="w-32 border border-slate-300 px-2 py-3 text-center font-bold uppercase">Time</th>{DAYS.slice(0, 6).map((day) => <th key={day} className="border border-slate-300 px-2 py-3 text-center font-bold uppercase">{day}</th>)}</tr></thead><tbody>{BOARD_SLOTS.map((slot) => <tr key={slot} className="min-h-10"><th className="border border-slate-300 bg-slate-50 px-2 text-center font-semibold text-slate-600">{formatBoardTime(slot)}</th>{DAYS.slice(0, 6).map((day) => { const cellRows = rows.filter((row) => row.day === day && boardMinutes(row.startTime) === slot); return <td key={`${day}-${slot}`} className="border border-slate-300 p-1 align-top"><div className="space-y-1">{cellRows.map((row) => { const hasConflict = conflictingRows.some((candidate) => candidate.localId === row.localId); return <div key={row.localId} className={`rounded border p-2 text-left ${hasConflict ? 'border-rose-700 bg-rose-200 ring-1 ring-rose-400' : 'border-sky-700/40'}`} style={{ backgroundColor: hasConflict ? '#fecaca' : row.isSaved ? '#cbd5e1' : color }}><div className="flex items-start justify-between gap-1"><div className="min-w-0 font-semibold leading-tight"><div className="text-[10px] font-medium uppercase tracking-wide">{row.facultyName}</div>{row.name}<div className="font-normal">{row.code}{row.section ? ` · ${row.section}` : ''}</div></div>{!row.isSaved && !readOnly && <button type="button" onClick={() => onDelete(row.localId)} className="shrink-0 p-1 text-slate-700 hover:text-rose-700" title="Delete generated row"><Trash2 className="h-3.5 w-3.5" /></button>}</div><div className="mt-1 grid grid-cols-2 gap-1"><Select value={row.day} onValueChange={(value) => onUpdate(row.localId, 'day', value || 'Monday')} disabled={row.isSaved || readOnly}><SelectTrigger className="h-7 rounded border-slate-700 bg-white/70 px-1.5 text-[11px]"><SelectValue /></SelectTrigger><SelectContent>{DAYS.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent></Select><Input className="h-7 rounded border-slate-700 bg-white/70 px-1 text-[11px]" type="time" step="1800" value={row.startTime} onChange={(event) => onUpdate(row.localId, 'startTime', event.target.value)} disabled={row.isSaved || readOnly} /></div><div className="mt-1 grid grid-cols-2 gap-1"><Input className="h-7 rounded border-slate-700 bg-white/70 px-1 text-[11px]" type="time" step="1800" value={row.endTime} onChange={(event) => onUpdate(row.localId, 'endTime', event.target.value)} disabled={row.isSaved || readOnly} /><Input className="h-7 rounded border-slate-700 bg-white/70 px-1.5 text-[11px]" value={row.section} onChange={(event) => onUpdate(row.localId, 'section', event.target.value)} placeholder="Section" disabled={row.isSaved || readOnly} /></div></div>; })}</div></td>; })}</tr>)}</tbody></table></div>;
+  return <div className="overflow-x-auto rounded-lg border border-sky-300 bg-white shadow-sm">
+    <div className="border-b border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">Online classes may share a cell, but the same faculty member or section cannot overlap.</div>
+    <table className="w-full min-w-260 table-fixed border-collapse text-xs">
+      <thead><tr className="bg-sky-100 text-slate-800"><th className="w-40 whitespace-nowrap border border-slate-300 px-2 py-3 text-center font-bold uppercase">Time</th>{DAYS.slice(0, 6).map((day) => <th key={day} className="border border-slate-300 px-2 py-3 text-center font-bold uppercase">{day}</th>)}</tr></thead>
+      <tbody>{BOARD_SLOTS.map((slot) => <tr key={slot} className="min-h-10">
+        <th className="w-40 whitespace-nowrap border border-slate-300 bg-slate-50 px-2 text-center font-semibold text-slate-600">{formatBoardSlot(slot)}</th>
+        {DAYS.slice(0, 6).map((day) => {
+          const cellRows = rows.filter((row) => row.day === day && boardMinutes(row.startTime) === slot);
+          const active = rows.some((row) => row.day === day && boardMinutes(row.startTime) < slot && boardMinutes(row.endTime) > slot);
+          if (active && cellRows.length === 0) return null;
+          if (cellRows.length === 0) return <td key={`${day}-${slot}`} className="border border-slate-300 bg-white" />;
+          const span = Math.max(...cellRows.map((row) => Math.max(1, Math.ceil((boardMinutes(row.endTime) - boardMinutes(row.startTime)) / 30))));
+          return <td key={`${day}-${slot}`} rowSpan={span} style={{ height: `${span * 40}px` }} className="border border-slate-300 p-1 align-top">
+            <div className="space-y-1">
+              {cellRows.map((row) => {
+                const hasConflict = conflictingRows.some((candidate) => candidate.localId === row.localId);
+                return <div key={row.localId} style={{ minHeight: `${span * 40 - 8}px`, backgroundColor: hasConflict ? '#fecaca' : row.isSaved ? '#cbd5e1' : color }} className={`rounded border p-2 text-left ${hasConflict ? 'border-rose-700 bg-rose-200 ring-1 ring-rose-400' : 'border-sky-700/40'}`}>
+                  <div className="flex items-start justify-between gap-1"><div className="min-w-0 font-semibold leading-tight"><div className="text-[10px] font-medium uppercase tracking-wide">{row.facultyName}</div>{row.name}<div className="font-normal">{row.code}{row.section ? ` · ${row.section}` : ''}</div></div>{!row.isSaved && !readOnly && <button type="button" onClick={() => onDelete(row.localId)} className="shrink-0 p-1 text-slate-700 hover:text-rose-700" title="Delete generated row"><Trash2 className="h-3.5 w-3.5" /></button>}</div>
+                  <div className="mt-1 grid grid-cols-2 gap-1"><Select value={row.day} onValueChange={(value) => onUpdate(row.localId, 'day', value || 'Monday')} disabled={row.isSaved || readOnly}><SelectTrigger className="h-7 rounded border-slate-700 bg-white/70 px-1.5 text-[11px]"><SelectValue /></SelectTrigger><SelectContent>{DAYS.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent></Select><Input className="h-7 rounded border-slate-700 bg-white/70 px-1 text-[11px]" type="time" step="1800" value={row.startTime} onChange={(event) => onUpdate(row.localId, 'startTime', event.target.value)} disabled={row.isSaved || readOnly} /></div>
+                  <div className="mt-1 grid grid-cols-2 gap-1"><Input className="h-7 rounded border-slate-700 bg-white/70 px-1 text-[11px]" type="time" step="1800" value={row.endTime} onChange={(event) => onUpdate(row.localId, 'endTime', event.target.value)} disabled={row.isSaved || readOnly} /><Input className="h-7 rounded border-slate-700 bg-white/70 px-1.5 text-[11px]" value={row.section} onChange={(event) => onUpdate(row.localId, 'section', event.target.value)} placeholder="Section" disabled={row.isSaved || readOnly} /></div>
+                </div>;
+              })}
+            </div>
+          </td>;
+        })}
+      </tr>)}</tbody>
+    </table>
+  </div>;
 }
 
 function ScheduleBoard({ rows, onUpdate, onDelete, color, readOnly = false, facultyAvailability }: Readonly<{ rows: GeneratedRow[]; onUpdate: (localId: string, field: keyof GeneratedRow, value: string) => void; onDelete: (localId: string) => void; color: string; readOnly?: boolean; facultyAvailability: Record<string, Array<{ day: string; startTime: string; endTime: string }>> }>) {
   const physicalRows = rows.filter((row) => isPhysicalRoom(row.roomName));
   const onlineRows = rows.filter((row) => !isPhysicalRoom(row.roomName));
   const [collapsedRooms, setCollapsedRooms] = useState<Set<string>>(new Set());
+  const [onlineCollapsed, setOnlineCollapsed] = useState(false);
   const roomGroups = [...new Set(physicalRows.map((row) => `${row.roomId}::${row.roomName}`))].map((group) => {
     const separator = group.indexOf('::');
     const roomId = group.slice(0, separator);
@@ -725,7 +757,7 @@ function ScheduleBoard({ rows, onUpdate, onDelete, color, readOnly = false, facu
     return next;
   });
 
-  return <div className="space-y-4">{onlineRows.length > 0 && <div className="rounded-lg border border-sky-200 bg-sky-50 p-2"><div className="px-2 py-2 text-sm font-semibold text-sky-900">Online Matrix <span className="ml-1 text-xs font-normal text-sky-700">({onlineRows.length} schedule{onlineRows.length === 1 ? '' : 's'})</span></div><ScheduleOnlineBoard rows={onlineRows} onUpdate={onUpdate} onDelete={onDelete} color={color} readOnly={readOnly} /></div>}{roomGroups.map((group) => {
+  return <div className="space-y-4">{onlineRows.length > 0 && <div className="rounded-lg border border-sky-200 bg-sky-50 p-2"><button type="button" onClick={() => setOnlineCollapsed((current) => !current)} className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm font-semibold text-sky-900 hover:bg-white/70" aria-expanded={!onlineCollapsed}><span>Online Matrix <span className="ml-1 text-xs font-normal text-sky-700">({onlineRows.length} schedule{onlineRows.length === 1 ? '' : 's'})</span></span>{onlineCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}</button>{!onlineCollapsed && <div className="mt-1"><ScheduleOnlineBoard rows={onlineRows} onUpdate={onUpdate} onDelete={onDelete} color={color} readOnly={readOnly} /></div>}</div>}{roomGroups.map((group) => {
     const roomKey = group.roomId || group.roomName;
     const collapsed = collapsedRooms.has(roomKey);
     return <div key={roomKey} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
