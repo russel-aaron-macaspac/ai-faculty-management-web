@@ -190,11 +190,16 @@ export const getRequiredOfficeForOfficer = (role: string | undefined): string | 
     hro: 'Human Resources Office',
   };
 
-  if (!role || !isApprovalOfficer(role)) {
+  const normalizedRole = role === 'program_chair' ? 'programchair' : role;
+  if (!normalizedRole || !isApprovalOfficer(normalizedRole)) {
     return null;
   }
 
-  return officeByRole[role as ApprovalOfficerId] ?? null;
+  return officeByRole[normalizedRole as ApprovalOfficerId] ?? null;
+};
+
+export const canManageClearanceRequirements = (role: string | undefined): boolean => {
+  return isApprovalOfficer(role) || role === 'program_chair';
 };
 
 /**

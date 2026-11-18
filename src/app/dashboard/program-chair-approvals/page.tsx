@@ -12,6 +12,7 @@ import { CheckCircle2, FileText, Loader2, Search, Check, X, Clock, MessageSquare
 import { StoredUser } from '@/lib/stringUtils';
 import { toast } from '@/lib/toast';
 import { PopupDialog } from '@/components/ui/popup-dialog';
+import { ClearanceRequirementsPanel } from '@/components/ClearanceRequirementsPanel';
 
 const PROGRAM_CHAIR_OFFICE_NAME = 'Program Chair';
 type ClearanceStatusFilter = 'all' | 'approved' | 'rejected' | 'pending';
@@ -26,6 +27,7 @@ export default function ProgramChairApprovalsPage() {
 
 function ProgramChairApprovalsContent() {
   const [records, setRecords] = useState<Clearance[]>([]);
+  const [offices, setOffices] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [yearFilter, setYearFilter] = useState('all');
@@ -43,6 +45,7 @@ function ProgramChairApprovalsContent() {
     setLoading(true);
     try {
       const offices = await clearanceService.getOffices();
+      setOffices(offices || []);
       const matched = (offices || []).find(
         (o: { name?: string }) => (o.name || '').toLowerCase() === PROGRAM_CHAIR_OFFICE_NAME.toLowerCase()
       );
@@ -276,6 +279,8 @@ function ProgramChairApprovalsContent() {
 
   return (
     <div className="space-y-6">
+      <ClearanceRequirementsPanel user={currentUser} offices={offices} />
+
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-2">
           <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Program Chair Clearance Approvals</h1>

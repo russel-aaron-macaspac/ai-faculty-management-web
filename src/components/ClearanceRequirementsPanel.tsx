@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ClearanceCategory } from '@/types/clearance';
 import { clearanceService } from '@/services/clearanceService';
-import { getRequiredOfficeForOfficer, isApprovalOfficer } from '@/lib/roleConfig';
+import { canManageClearanceRequirements, getRequiredOfficeForOfficer } from '@/lib/roleConfig';
 import { StoredUser, normalize } from '@/lib/stringUtils';
 
 interface ClearanceRequirementsPanelProps {
@@ -23,7 +23,7 @@ export function ClearanceRequirementsPanel({ user, offices }: Readonly<Clearance
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState('');
 
-  const isOfficer = isApprovalOfficer(user?.role);
+  const canManageRequirements = canManageClearanceRequirements(user?.role);
   const office = useMemo(() => {
     if (!user?.role) return undefined;
     const officeName = getRequiredOfficeForOfficer(user.role);
@@ -72,7 +72,7 @@ export function ClearanceRequirementsPanel({ user, offices }: Readonly<Clearance
     }
   };
 
-  if (!isOfficer || !office) return null;
+  if (!canManageRequirements || !office) return null;
 
   return (
     <Card>
