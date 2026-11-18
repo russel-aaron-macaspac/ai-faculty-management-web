@@ -2,6 +2,7 @@
 
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -235,6 +236,8 @@ export function FacultyLoadGrid({
   const [summary, setSummary] = useState<{ savedCount: number; failedCount: number } | null>(null);
   const [selectedConflict, setSelectedConflict] = useState<{ row: LoadRow; guidance: string[] } | null>(null);
   const [isMinimized, setIsMinimized] = useState(true);
+  const [openSubjectRowId, setOpenSubjectRowId] = useState<string | null>(null);
+  const [subjectMenuPosition, setSubjectMenuPosition] = useState<{ top: number; left: number } | null>(null);
 
   useEffect(() => {
     if (!facultyId) return;
@@ -479,39 +482,64 @@ export function FacultyLoadGrid({
           {rows.map((row) => (
             <TableRow key={row.localId}>
               <TableCell>
-                <div className="space-y-1">
+                <div className="relative min-w-[220px]">
                   <Input
                     className={TEXT_INPUT_CLASS}
                     value={row.code}
-                    placeholder="Filter code"
+                    placeholder="Search or select subject code"
                     title={row.code}
+                    onFocus={(event) => {
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      const menuHeight = Math.min(224, subjects.length * 40 + 8);
+                      const belowTop = rect.bottom + 4;
+                      const top = belowTop + menuHeight <= window.innerHeight || rect.top < menuHeight + 8
+                        ? belowTop
+                        : rect.top - menuHeight - 4;
+                      setSubjectMenuPosition({ top, left: rect.left });
+                      setOpenSubjectRowId(row.localId);
+                    }}
+                    onBlur={() => setTimeout(() => setOpenSubjectRowId((current) => current === row.localId ? null : current), 0)}
                     onChange={(e) => {
                       updateRow(loadType, row.localId, 'code', e.target.value);
                       updateRow(loadType, row.localId, 'description', '');
+                      setOpenSubjectRowId(row.localId);
                     }}
                   />
-                  {row.code.trim() && !row.description && (
-                    <div className="max-h-40 min-w-[220px] overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
-                      {subjects.filter((subject) => subject.code.toLowerCase().includes(row.code.trim().toLowerCase())).slice(0, 8).map((subject) => (
-                        <button
-                          key={subject.id}
-                          type="button"
-                          className="block w-full rounded-md px-2 py-1.5 text-left text-xs text-slate-800 hover:bg-slate-50"
-                          onClick={() => {
-                            selectSubject(loadType, row.localId, subject);
-                          }}
+                  {openSubjectRowId === row.localId && (
+                    typeof document !== 'undefined' && subjectMenuPosition
+                      ? createPortal(
+                        <div
+                          className="fixed z-[100] max-h-56 w-[360px] overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg"
+                          style={{ top: subjectMenuPosition.top, left: subjectMenuPosition.left }}
                         >
-                          <span className="font-medium">{subject.code}</span>
-                          <span className="ml-2 text-slate-500">{formatSubjectName(subject)}</span>
-                        </button>
-                      ))}
-                    </div>
+                          {subjects
+                            .filter((subject) => subject.code.toLowerCase().includes(row.code.trim().toLowerCase()))
+                            .map((subject) => (
+                              <button
+                                key={subject.id}
+                                type="button"
+                                className="block w-full whitespace-normal rounded-md px-2 py-1.5 text-left text-xs text-slate-800 hover:bg-slate-50"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => {
+                                  selectSubject(loadType, row.localId, subject);
+                                  setOpenSubjectRowId(null);
+                                  setSubjectMenuPosition(null);
+                                }}
+                              >
+                                <span className="font-medium">{subject.code}</span>
+                                <span className="ml-2 text-slate-500">{formatSubjectName(subject)}</span>
+                              </button>
+                            ))}
+                        </div>,
+                        document.body
+                      )
+                      : null
                   )}
                 </div>
               </TableCell>
               <TableCell>
                 <Input
-                  className={TEXT_INPUT_CLASS}
+                  className={`${TEXT_INPUT_CLASS} min-w-[300px]`}
                   value={row.description}
                   placeholder="Select a subject code"
                   title={row.description}
