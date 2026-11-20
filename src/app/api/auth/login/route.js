@@ -52,6 +52,12 @@ export async function POST(request) {
       );
     }
 
+    let mustChangePassword = false;
+    if (user.supabase_id) {
+      const { data: authUser } = await supabase.auth.admin.getUserById(user.supabase_id);
+      mustChangePassword = authUser?.user?.user_metadata?.must_change_password === true;
+    }
+
     await supabase
       .from("users")
       .update({ last_login: new Date().toISOString() })
@@ -80,6 +86,7 @@ export async function POST(request) {
         statusOfAppointment: user.status_of_appointment || null,
         department: department?.name || null,
         department_id: user.department_id ?? null,
+        mustChangePassword,
       },
     });
   } catch (err) {

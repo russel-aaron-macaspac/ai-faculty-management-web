@@ -53,7 +53,7 @@ export const facultyService = {
     return mockFacultyData.find(f => f.id === id);
   },
 
-  createFaculty: async (data: Omit<Faculty, 'id'>): Promise<Faculty> => {
+  createFaculty: async (data: Omit<Faculty, 'id'>): Promise<Faculty & { temporaryPassword?: string }> => {
     try {
       const res = await fetch('/api/users/faculty', {
         method: 'POST',
@@ -76,7 +76,7 @@ export const facultyService = {
 
       // Keep local mock in sync for fallbacks
       mockFacultyData.push(newFaculty);
-      return newFaculty;
+      return { ...newFaculty, temporaryPassword: created?.temporaryPassword };
     } catch (err) {
       console.warn('[facultyService.createFaculty] failed, falling back to mock', err);
       await delay(600);

@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from '@/lib/toast';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { CheckCircle2, Eye, EyeOff, Loader2, UserPlus } from 'lucide-react';
+import { CheckCircle2, Copy, Loader2, UserPlus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
@@ -37,7 +37,6 @@ const accountSchema = z.object({
   surname: z.string().trim().min(1, 'Enter the surname.'),
   middleName: z.string().trim().optional(),
   email: z.string().trim().email('Enter a valid email address.'),
-  password: z.string().min(12, 'Use at least 12 characters.').regex(/[A-Za-z]/, 'Include at least one letter.').regex(/\d/, 'Include at least one number.'),
   department: z.enum(DEPARTMENTS, { message: 'Select a department.' }),
   phone: z.string().trim().min(1, 'Enter a contact number.'),
   status: z.enum(['active', 'on_leave', 'inactive'], { message: 'Select an account status.' }),
@@ -56,16 +55,15 @@ export default function AccountCreationPage() {
 }
 
 function AccountCreationContent() {
-  const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [createdAccount, setCreatedAccount] = useState<{ name: string; email: string; role: string } | null>(null);
+  const [createdAccount, setCreatedAccount] = useState<{ name: string; email: string; role: string; temporaryPassword: string; emailSent: boolean; emailDeliveryReason?: string | null } | null>(null);
   const [pendingAccounts, setPendingAccounts] = useState<Array<{ id: string; name: string; email: string; role: string; phone: string; department: string; statusOfAppointment: string }>>([]);
   const [isLoadingPending, setIsLoadingPending] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<{ id: string; name: string; action: 'approve' | 'reject' } | null>(null);
   const form = useForm<AccountFormValues>({
     resolver: zodResolver(accountSchema),
-    defaultValues: { firstName: '', surname: '', middleName: '', email: '', password: '', department: undefined, phone: '', status: 'active', statusOfAppointment: 'full-time', role: 'faculty' },
+    defaultValues: { firstName: '', surname: '', middleName: '', email: '', department: undefined, phone: '', status: 'active', statusOfAppointment: 'full-time', role: 'faculty' },
   });
 
   const loadPendingAccounts = async () => {
@@ -117,9 +115,22 @@ function AccountCreationContent() {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.error || 'Unable to create the account.');
 
-      setCreatedAccount({ name: payload.data.name, email: payload.data.email, role: payload.data.role });
-      form.reset({ firstName: '', surname: '', middleName: '', email: '', password: '', department: undefined, phone: '', status: 'active', statusOfAppointment: 'full-time', role: 'faculty' });
-      toast({ title: 'Account created', description: `${payload.data.name} can now sign in.`, type: 'success' });
+      setCreatedAccount({
+        name: payload.data.name,
+        email: payload.data.email,
+        role: payload.data.role,
+        temporaryPassword: payload.data.temporaryPassword,
+        emailSent: payload.data.emailSent,
+        emailDeliveryReason: payload.data.emailDeliveryReason,
+      });
+      form.reset({ firstName: '', surname: '', middleName: '', email: '', department: undefined, phone: '', status: 'active', statusOfAppointment: 'full-time', role: 'faculty' });
+      toast({
+        title: 'Account created',
+        description: payload.data.emailSent
+          ? `Login details, including the temporary password, were emailed to ${payload.data.email}.`
+          : 'Account created, but the credential email could not be sent.',
+        type: payload.data.emailSent ? 'success' : 'warning',
+      });
     } catch (error) {
       toast({ title: 'Account creation failed', description: error instanceof Error ? error.message : 'Please try again.', type: 'error' });
     } finally {
@@ -157,7 +168,26 @@ function AccountCreationContent() {
         {createdAccount && (
           <div className="mb-6 flex gap-3 rounded-[10px] border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800" role="status">
             <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
-            <div><p className="font-semibold">Account ready</p><p>{createdAccount.name} ({createdAccount.email}) can sign in with the assigned {createdAccount.role === 'program_chair' ? 'Program Chair' : createdAccount.role} role.</p></div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">Account ready</p>
+              <p>{createdAccount.name} ({createdAccount.email}) can sign in with the assigned {createdAccount.role === 'program_chair' ? 'Program Chair' : createdAccount.role} role.</p>
+              <p className="mt-2 font-medium">Unique temporary password:</p>
+              <div className="mt-1 flex items-center gap-2">
+                <code className="min-w-0 break-all rounded border border-emerald-200 bg-white px-2 py-1 font-mono text-slate-900">{createdAccount.temporaryPassword}</code>
+                <Button type="button" size="icon" variant="outline" className="h-8 w-8 shrink-0" aria-label="Copy temporary password" onClick={async () => {
+                  await navigator.clipboard.writeText(createdAccount.temporaryPassword);
+                  toast({ title: 'Password copied', description: 'The temporary password is on your clipboard.', type: 'success' });
+                }}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="mt-2 text-xs">Send this password securely. It will not be shown again.</p>
+              <p className="mt-1 text-xs font-medium">
+                {createdAccount.emailSent
+                  ? `Login details were emailed to ${createdAccount.email}.`
+                  : `Email was not sent${createdAccount.emailDeliveryReason ? `: ${createdAccount.emailDeliveryReason}` : '.'}`}
+              </p>
+            </div>
           </div>
         )}
 
@@ -184,18 +214,6 @@ function AccountCreationContent() {
             <Label htmlFor="email">Email Address</Label>
             <Input id="email" type="email" autoComplete="email" placeholder="faculty@example.edu" {...form.register('email')} aria-invalid={!!form.formState.errors.email} />
             {form.formState.errors.email && <p className="text-sm text-red-600">{form.formState.errors.email.message}</p>}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <div className="relative">
-              <Input id="password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" placeholder="At least 12 characters" className="pr-11" {...form.register('password')} aria-invalid={!!form.formState.errors.password} />
-              <button type="button" onClick={() => setShowPassword((visible) => !visible)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-500 hover:text-slate-900" aria-label={showPassword ? 'Hide password' : 'Show password'}>
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-            <p className="text-xs text-slate-500">Use at least 12 characters, including a letter and a number.</p>
-            {form.formState.errors.password && <p className="text-sm text-red-600">{form.formState.errors.password.message}</p>}
           </div>
 
           <div className="space-y-2">

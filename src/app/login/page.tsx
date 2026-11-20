@@ -64,6 +64,11 @@ export default function LoginPage() {
     try {
       const response = await authService.login(values.email, values.password);
       localStorage.setItem('user', JSON.stringify(response.user));
+      if (response.user.mustChangePassword) {
+        toast({ title: 'Password change required', description: 'Create a strong new password before continuing.', type: 'warning' });
+        router.replace('/dashboard/changepassword');
+        return;
+      }
       const dashboardPath = getDashboardPathForRole(response.user.role);
       toast({ title: 'Signed In', description: `Welcome back, ${response.user.full_name}`, type: 'success' });
       router.replace(dashboardPath);

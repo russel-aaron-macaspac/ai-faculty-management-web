@@ -17,11 +17,14 @@ import {
 } from '@/components/ui/form';
 import { Eye, EyeOff, KeyRound } from 'lucide-react';
 import { toast } from '@/lib/toast';
+import { PASSWORD_MIN_LENGTH } from '@/lib/passwordPolicy';
+import { useRouter } from 'next/navigation';
+import { getDashboardPathForRole } from '@/lib/roleConfig';
 
 const changePasswordSchema = z
   .object({
     oldPassword: z.string().min(1, 'Current password is required.'),
-    newPassword: z.string().min(8, 'Use at least 8 characters.'),
+    newPassword: z.string().min(PASSWORD_MIN_LENGTH, `Use at least ${PASSWORD_MIN_LENGTH} characters.`),
     confirmPassword: z.string().min(1, 'Confirm your new password.'),
   })
   .refine((data) => data.newPassword === data.confirmPassword, {
@@ -31,11 +34,28 @@ const changePasswordSchema = z
   .refine((data) => data.oldPassword !== data.newPassword, {
     message: 'Use a different password.',
     path: ['newPassword'],
+  })
+  .refine((data) => /[a-z]/.test(data.newPassword), {
+    message: 'Include at least one lowercase letter.',
+    path: ['newPassword'],
+  })
+  .refine((data) => /[A-Z]/.test(data.newPassword), {
+    message: 'Include at least one uppercase letter.',
+    path: ['newPassword'],
+  })
+  .refine((data) => /\d/.test(data.newPassword), {
+    message: 'Include at least one number.',
+    path: ['newPassword'],
+  })
+  .refine((data) => /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(data.newPassword), {
+    message: 'Include at least one special character.',
+    path: ['newPassword'],
   });
 
 type ChangePasswordFormValues = z.infer<typeof changePasswordSchema>;
 
 export default function ChangePasswordPage() {
+  const router = useRouter();
   // userId read from localStorage (fallback if you have an auth context, replace accordingly)
   const [userId, setUserId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -95,6 +115,17 @@ export default function ChangePasswordPage() {
 
       toast({ title: 'Password Updated', description: 'Password updated successfully.', type: 'success' });
       form.reset();
+      try {
+        const stored = localStorage.getItem('user');
+        if (stored) {
+          const user = JSON.parse(stored) as { mustChangePassword?: boolean; role?: string };
+          const updatedUser = { ...user, mustChangePassword: false };
+          localStorage.setItem('user', JSON.stringify(updatedUser));
+          router.replace(getDashboardPathForRole(updatedUser.role));
+        }
+      } catch {
+        // Password was updated; cached state can be refreshed on the next login.
+      }
     } catch {
       toast({ title: 'Connection Error', description: 'Try again.', type: 'error' });
     } finally {
@@ -154,7 +185,7 @@ export default function ChangePasswordPage() {
                       <div className="relative w-96">
                         <Input
                           type={showNew ? 'text' : 'password'}
-                          placeholder="At least 8 characters"
+                          placeholder={`At least ${PASSWORD_MIN_LENGTH} characters`}
                           className="bg-white pr-10"
                           {...field}
                         />
@@ -168,6 +199,9 @@ export default function ChangePasswordPage() {
                         </button>
                       </div>
                     </FormControl>
+                    <p className="text-xs text-slate-500">
+                      Use 12+ characters with uppercase and lowercase letters, a number, and a special character.
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}

@@ -1,6 +1,7 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import { validatePassword } from '@/lib/passwordPolicy';
 
 export async function POST(request) {
   try {
@@ -13,25 +14,16 @@ export async function POST(request) {
       );
     }
 
-    if (newPassword.length < 8) {
-      return NextResponse.json(
-        { error: "New password must be at least 8 characters long." },
-        { status: 400 }
-      );
-    }
-
-    if (oldPassword === newPassword) {
-      return NextResponse.json(
-        { error: "New password must be different from the old password." },
-        { status: 400 }
-      );
+    const passwordError = validatePassword(newPassword, oldPassword);
+    if (passwordError) {
+      return NextResponse.json({ error: passwordError }, { status: 400 });
     }
 
     const supabase = createSupabaseAdminClient();
 
     const { data: user, error: userError } = await supabase
       .from("users")
-      .select("user_id, password_hash, status")
+      .select("user_id, supabase_id, password_hash, status")
       .eq("user_id", userId)
       .single();
 
@@ -58,6 +50,11 @@ export async function POST(request) {
       );
     }
 
+    const passwordPolicyError = validatePassword(newPassword, oldPassword);
+    if (passwordPolicyError) {
+      return NextResponse.json({ error: passwordPolicyError }, { status: 400 });
+    }
+
     const saltRounds = 12;
     const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
 
@@ -75,6 +72,26 @@ export async function POST(request) {
         { error: "Failed to update password. Please try again." },
         { status: 500 }
       );
+    }
+
+    if (user.supabase_id) {
+      const { error: authUpdateError } = await supabase.auth.admin.updateUserById(user.supabase_id, {
+        password: newPassword,
+        user_metadata: {
+          must_change_password: false,
+        },
+      });
+      if (authUpdateError) {
+        await supabase
+          .from("users")
+          .update({ password_hash: user.password_hash, updated_at: new Date().toISOString() })
+          .eq("user_id", user.user_id);
+        console.error("[CHANGE PASSWORD] Auth update error:", authUpdateError);
+        return NextResponse.json(
+          { error: "Password was not updated in authentication. Please try again." },
+          { status: 500 }
+        );
+      }
     }
 
     return NextResponse.json(

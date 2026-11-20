@@ -69,6 +69,77 @@ async function sendEmailNotifications(recipients, { title, message }) {
   }));
 }
 
+export async function sendAccountCredentialsEmail({ email, name, role, temporaryPassword, loginUrl }) {
+  const username = process.env.GMAIL_USER;
+  const appPassword = process.env.GMAIL_APP_PASSWORD;
+  const from = process.env.EMAIL_FROM || username;
+
+  if (!username || !appPassword || !from) {
+    return { sent: false, reason: 'Email delivery is not configured.' };
+  }
+  if (!EMAIL_PATTERN.test(String(email ?? '').trim())) {
+    return { sent: false, reason: 'Recipient email is invalid.' };
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: { user: username, pass: appPassword },
+  });
+  const safeName = escapeHtml(name);
+  const safeEmail = escapeHtml(email);
+  const safeRole = escapeHtml(role);
+  const safePassword = escapeHtml(temporaryPassword);
+  const safeLoginUrl = escapeHtml(loginUrl);
+
+  try {
+    await transporter.sendMail({
+      from,
+      to: email,
+      subject: 'Your DomStaX account has been created',
+      text: [
+        `Hello ${name},`,
+        '',
+        'An account has been created for you.',
+        `Email: ${email}`,
+        `Temporary password: ${temporaryPassword}`,
+        `Role: ${role}`,
+        '',
+        `Sign in: ${loginUrl}`,
+        'You must change this temporary password after signing in.',
+      ].join('\n'),
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:600px;color:#1e293b;line-height:1.6">
+          <h2>Welcome to DomStaX</h2>
+          <p>Hello ${safeName},</p>
+          <p>An account has been created for you with the role <strong>${safeRole}</strong>.</p>
+          <table style="border-collapse:collapse;margin:16px 0">
+            <tr><td style="padding:6px 12px 6px 0"><strong>Email</strong></td><td>${safeEmail}</td></tr>
+            <tr><td style="padding:6px 12px 6px 0"><strong>Temporary password</strong></td><td><code style="font-size:15px">${safePassword}</code></td></tr>
+          </table>
+          <p><a href="${safeLoginUrl}" style="display:inline-block;background:#0f172a;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px">Sign in</a></p>
+          <p><strong>You will be prompted to change this temporary password immediately after your first sign-in.</strong></p>
+        </div>
+      `,
+    });
+    return { sent: true };
+  } catch (error) {
+    console.error('[ACCOUNT CREDENTIAL EMAIL SMTP ERROR]', {
+      code: error?.code,
+      responseCode: error?.responseCode,
+      command: error?.command,
+      message: error?.message,
+    });
+    return {
+      sent: false,
+      reason: error?.code || error?.responseCode
+        ? `SMTP ${error.code || error.responseCode}`
+        : 'Gmail rejected the email.',
+    };
+  }
+}
+
 async function resolveOfficeRecipientIds(supabase, officeId) {
   if (officeId == null) return [];
 

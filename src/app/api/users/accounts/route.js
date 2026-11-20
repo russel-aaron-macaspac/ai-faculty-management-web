@@ -1,11 +1,12 @@
 import { createSupabaseAdminClient } from '@/lib/supabase/server-client';
+import { generateTemporaryPassword } from '@/lib/temporaryPassword';
+import { sendAccountCredentialsEmail } from '@/lib/notifications';
 import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
 
 const ALLOWED_ROLES = ['faculty', 'program_chair', 'dean'];
 const ALLOWED_STATUSES = ['active', 'on_leave', 'inactive'];
 const ALLOWED_APPOINTMENT_STATUSES = ['full-time', 'part-time'];
-const PASSWORD_MIN_LENGTH = 12;
 
 export async function POST(request) {
   let authUserId = null;
@@ -17,7 +18,6 @@ export async function POST(request) {
     const surname = typeof body?.surname === 'string' ? body.surname.trim() : '';
     const middleName = typeof body?.middleName === 'string' ? body.middleName.trim() : '';
     const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
-    const password = typeof body?.password === 'string' ? body.password : '';
     const department = typeof body?.department === 'string' ? body.department.trim() : '';
     const phone = typeof body?.phone === 'string' ? body.phone.trim() : '';
     const status = typeof body?.status === 'string' ? body.status : '';
@@ -34,14 +34,6 @@ export async function POST(request) {
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 });
-    }
-
-    if (password.length < PASSWORD_MIN_LENGTH) {
-      return NextResponse.json({ error: `Password must be at least ${PASSWORD_MIN_LENGTH} characters.` }, { status: 400 });
-    }
-
-    if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
-      return NextResponse.json({ error: 'Password must include at least one letter and one number.' }, { status: 400 });
     }
 
     if (!ALLOWED_ROLES.includes(role)) {
@@ -98,12 +90,13 @@ export async function POST(request) {
     const first_name = firstName;
     const middle_name = middleName || null;
     const last_name = surname;
+    const password = generateTemporaryPassword();
     const passwordHash = await bcrypt.hash(password, 12);
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
-      user_metadata: { first_name, middle_name, last_name, role },
+      user_metadata: { first_name, middle_name, last_name, role, must_change_password: true },
     });
 
     if (authError || !authData?.user?.id) {
@@ -141,12 +134,35 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Unable to save the faculty profile.' }, { status: 500 });
     }
 
+    let emailDelivery = { sent: false, reason: 'Email delivery is not configured.' };
+    try {
+      const loginUrl = process.env.NEXT_PUBLIC_APP_URL
+        ? `${process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')}/login`
+        : 'http://localhost:3000/login';
+      emailDelivery = await sendAccountCredentialsEmail({
+        email,
+        name: [profile.first_name, profile.middle_name, profile.last_name].filter(Boolean).join(' '),
+        role: profile.role,
+        temporaryPassword: password,
+        loginUrl,
+      });
+    } catch (emailError) {
+      console.error('[ACCOUNT CREDENTIAL EMAIL ERROR]', emailError);
+      emailDelivery = {
+        sent: false,
+        reason: emailError?.code ? `SMTP ${emailError.code}` : 'Email could not be sent.',
+      };
+    }
+
     return NextResponse.json({
       data: {
         id: String(profile.user_id),
         name: [profile.first_name, profile.middle_name, profile.last_name].filter(Boolean).join(' '),
         email: profile.email,
         role: profile.role,
+        temporaryPassword: password,
+        emailSent: emailDelivery.sent,
+        emailDeliveryReason: emailDelivery.sent ? null : emailDelivery.reason,
       },
     }, { status: 201 });
   } catch (error) {

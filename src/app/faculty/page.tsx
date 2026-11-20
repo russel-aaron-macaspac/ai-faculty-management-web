@@ -110,8 +110,14 @@ function FacultyPageContent() {
         await facultyService.updateFaculty(editingId, values);
         toast({ title: 'Faculty Updated', description: 'Faculty record saved successfully.', type: 'success' });
       } else {
-        await facultyService.createFaculty(values);
-        toast({ title: 'Faculty Created', description: 'New faculty record added.', type: 'success' });
+        const created = await facultyService.createFaculty(values);
+        toast({
+          title: 'Faculty Created',
+          description: created.temporaryPassword
+            ? `Temporary password: ${created.temporaryPassword}. Send it securely; it will not be shown again.`
+            : 'New faculty record added.',
+          type: 'success',
+        });
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Save failed. Please try again.';

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useRoleBasedAccess } from '@/hooks/useRoleBasedAccess';
 
 interface RouteGuardProps {
@@ -10,6 +11,7 @@ interface RouteGuardProps {
 
 export function RouteGuard({ children, requiredRoles, fallbackPath }: RouteGuardProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, hasAccess, loading } = useRoleBasedAccess();
 
   useEffect(() => {
@@ -20,12 +22,17 @@ export function RouteGuard({ children, requiredRoles, fallbackPath }: RouteGuard
       return;
     }
 
+    if (user.mustChangePassword && pathname !== '/dashboard/changepassword') {
+      router.replace('/dashboard/changepassword');
+      return;
+    }
+
     if (requiredRoles && !hasAccess(requiredRoles)) {
       const redirectPath = fallbackPath || (user.role === 'admin' ? '/dashboard/admin' : '/dashboard/faculty');
       router.push(redirectPath);
       return;
     }
-  }, [user, hasAccess, loading, requiredRoles, fallbackPath, router]);
+  }, [user, hasAccess, loading, requiredRoles, fallbackPath, router, pathname]);
 
   if (loading) {
     return (
@@ -37,6 +44,10 @@ export function RouteGuard({ children, requiredRoles, fallbackPath }: RouteGuard
 
   if (!user) {
     return null; // Will redirect in useEffect
+  }
+
+  if (user.mustChangePassword && pathname !== '/dashboard/changepassword') {
+    return null;
   }
 
   if (requiredRoles && !hasAccess(requiredRoles)) {

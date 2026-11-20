@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
-import crypto from 'crypto';
+import { generateTemporaryPassword } from '@/lib/temporaryPassword';
+import { sendAccountCredentialsEmail } from '@/lib/notifications';
 import { NextResponse } from "next/server";
 
 export async function GET(request) {
@@ -103,13 +104,13 @@ export async function POST(req) {
     // Create a Supabase Auth user with a random temporary password so the new faculty can sign in.
     // If this fails, roll back the profile insert to avoid dangling records.
     try {
-      const tempPassword = crypto.randomBytes(12).toString('base64').replace(/\+/g, 'A').replace(/\//g, 'B');
+      const tempPassword = generateTemporaryPassword();
 
       const { data: authData, error: authError } = await supabase.auth.admin.createUser({
         email,
         password: tempPassword,
         email_confirm: true,
-        user_metadata: { first_name, middle_name, last_name, role: 'faculty' },
+        user_metadata: { first_name, middle_name, last_name, role: 'faculty', must_change_password: true },
       });
 
       if (authError) {
@@ -124,8 +125,32 @@ export async function POST(req) {
         return NextResponse.json({ error: 'Failed to create auth user for faculty' }, { status: 500 });
       }
 
-      // Success: return both profile id and auth user id (do not return password)
-      return NextResponse.json({ data: { id: String(created?.user_id || ''), name: [created?.first_name, created?.middle_name, created?.last_name].filter(Boolean).join(' '), auth_user_id: authData?.id || null } });
+      let emailDelivery = { sent: false };
+      try {
+        const loginUrl = process.env.NEXT_PUBLIC_APP_URL
+          ? `${process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')}/login`
+          : 'http://localhost:3000/login';
+        emailDelivery = await sendAccountCredentialsEmail({
+          email,
+          name: [created?.first_name, created?.middle_name, created?.last_name].filter(Boolean).join(' '),
+          role: 'faculty',
+          temporaryPassword: tempPassword,
+          loginUrl,
+        });
+      } catch (emailError) {
+        console.error('[FACULTY CREDENTIAL EMAIL ERROR]', emailError);
+      }
+
+      // Return the temporary password once so the administrator can share it securely.
+      return NextResponse.json({
+        data: {
+          id: String(created?.user_id || ''),
+          name: [created?.first_name, created?.middle_name, created?.last_name].filter(Boolean).join(' '),
+          auth_user_id: authData?.user?.id || authData?.id || null,
+          temporaryPassword: tempPassword,
+          emailSent: emailDelivery.sent,
+        },
+      });
     } catch (errAuth) {
       console.error('[FACULTY AUTH UNEXPECTED ERROR]', errAuth);
       try {

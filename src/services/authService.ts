@@ -12,6 +12,7 @@ export interface AuthUser {
   statusOfAppointment?: "full-time" | "part-time" | null;
   department?: string | null;
   department_id?: number | null;
+  mustChangePassword?: boolean;
 }
 
 export interface LoginResponse {
