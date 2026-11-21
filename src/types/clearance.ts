@@ -27,6 +27,7 @@ export interface ClearanceAttachment {
   originalFilename: string;
   filePath: string;
   uploadedAt?: string;
+  requirementId?: string;
 }
 
 export interface ClearanceNote {

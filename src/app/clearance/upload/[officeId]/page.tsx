@@ -30,6 +30,8 @@ export default function ClearanceUploadPage() {
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<string | null>(null);
+  const [requirementFiles, setRequirementFiles] = useState<Record<string, File[]>>({});
+  const [requirementLinks, setRequirementLinks] = useState<Record<string, string>>({});
 
   const hrSubmissionBlocked =
     Boolean(office && isHumanResourcesOffice(office.name)) &&
@@ -82,6 +84,122 @@ export default function ClearanceUploadPage() {
 
     void load();
   }, [params.officeId, user]);
+
+  const handleRequirementUpload = async (requirement: ClearanceCategory) => {
+    if (!user || !office) return;
+    const selectedFiles = requirementFiles[String(requirement.id)] ?? [];
+    if (selectedFiles.length === 0) return;
+
+    setSaving(true);
+    try {
+      let clearanceId = record?.id;
+      if (!clearanceId) {
+        await clearanceService.uploadDocument(
+          user.supabase_id ?? String(user.id ?? ''),
+          Number(office.id),
+          undefined,
+          undefined,
+          { name: user.name ?? user.full_name, role: user.role }
+        );
+        const records = await clearanceService.getClearances(
+          user.supabase_id ?? String(user.id ?? ''),
+          office.id
+        );
+        clearanceId = (records as Clearance[])[0]?.id;
+      }
+
+      if (!clearanceId) throw new Error('The clearance record could not be loaded.');
+      await clearanceService.addAttachments(clearanceId, selectedFiles, String(requirement.id));
+
+      setRequirementFiles((current) => ({ ...current, [String(requirement.id)]: [] }));
+      const refreshedRecords = await clearanceService.getClearances(
+        user.supabase_id ?? String(user.id ?? ''),
+        office.id
+      );
+      setRecord((refreshedRecords as Clearance[]).find((item) => String(item.officeId) === params.officeId) ?? record ?? null);
+      toast({
+        title: 'Requirement submitted',
+        description: `${requirement.name} was submitted for ${office.name}.`,
+        type: 'success',
+      });
+      router.refresh();
+    } catch (error) {
+      toast({
+        title: 'Requirement upload failed',
+        description: error instanceof Error ? error.message : 'Could not upload the requirement.',
+        type: 'error',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRequirementLink = async (requirement: ClearanceCategory) => {
+    if (!user || !office) return;
+    const linkValue = requirementLinks[String(requirement.id)]?.trim() ?? '';
+    if (!linkValue) return;
+
+    let link: URL;
+    try {
+      link = new URL(linkValue);
+      if (!['http:', 'https:'].includes(link.protocol)) throw new Error();
+    } catch {
+      toast({
+        title: 'Invalid link',
+        description: 'Enter a valid http:// or https:// document link.',
+        type: 'error',
+      });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      let clearanceId = record?.id;
+      if (!clearanceId) {
+        await clearanceService.uploadDocument(
+          user.supabase_id ?? String(user.id ?? ''),
+          Number(office.id),
+          undefined,
+          undefined,
+          { name: user.name ?? user.full_name, role: user.role }
+        );
+        const records = await clearanceService.getClearances(
+          user.supabase_id ?? String(user.id ?? ''),
+          office.id
+        );
+        clearanceId = (records as Clearance[])[0]?.id;
+      }
+
+      if (!clearanceId) throw new Error('The clearance record could not be loaded.');
+      await clearanceService.addExternalLink(
+        clearanceId,
+        link.toString(),
+        'External document link',
+        String(requirement.id)
+      );
+
+      setRequirementLinks((current) => ({ ...current, [String(requirement.id)]: '' }));
+      const refreshedRecords = await clearanceService.getClearances(
+        user.supabase_id ?? String(user.id ?? ''),
+        office.id
+      );
+      setRecord((refreshedRecords as Clearance[]).find((item) => String(item.officeId) === params.officeId) ?? record ?? null);
+      toast({
+        title: 'Requirement link submitted',
+        description: `${requirement.name} was submitted using a document link.`,
+        type: 'success',
+      });
+      router.refresh();
+    } catch (error) {
+      toast({
+        title: 'Requirement link failed',
+        description: error instanceof Error ? error.message : 'Could not submit the document link.',
+        type: 'error',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleUpload = async (submitWithoutDocument = false) => {
     if (!user || !office) return;
@@ -193,15 +311,89 @@ export default function ClearanceUploadPage() {
         <CardContent className="space-y-5">
           {requirements.length > 0 && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-              <p className="text-sm font-semibold text-amber-900">Office requirements</p>
-              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-700">
-                {requirements.map((requirement) => (
-                  <li key={requirement.id}>
-                    <span className="font-medium">{requirement.name}</span>
-                    {requirement.description && <span className="text-slate-500"> — {requirement.description}</span>}
-                  </li>
-                ))}
-              </ul>
+              <p className="text-sm font-semibold text-amber-900">Submit each required file</p>
+              <p className="mt-1 text-xs text-amber-800">
+                Upload a separate file for every requirement below.
+              </p>
+              <div className="mt-3 space-y-3">
+                {requirements.map((requirement) => {
+                  const requirementSubmitted = record?.attachments?.some((attachment) =>
+                    String(attachment.requirementId) === String(requirement.id)
+                  );
+                  return (
+                    <div key={String(requirement.id)} className="rounded-lg border border-amber-100 bg-white p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium text-slate-800">{requirement.name}</p>
+                          {requirement.description && (
+                            <p className="mt-0.5 text-xs text-slate-500">{requirement.description}</p>
+                          )}
+                        </div>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                          requirementSubmitted
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          {requirementSubmitted ? 'Submitted' : 'Not submitted'}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <Input
+                          type="file"
+                          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                          onChange={(event) => setRequirementFiles((current) => ({
+                            ...current,
+                            [String(requirement.id)]: Array.from(event.target.files ?? []),
+                          }))}
+                          aria-label={`Choose file for ${requirement.name}`}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => void handleRequirementUpload(requirement)}
+                          disabled={saving || (requirementFiles[String(requirement.id)]?.length ?? 0) === 0}
+                        >
+                          {saving ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <UploadCloud className="mr-2 h-3.5 w-3.5" />}
+                          Submit file
+                        </Button>
+                      </div>
+                      <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+                        <label
+                          htmlFor={`requirement-link-${requirement.id}`}
+                          className="flex items-center gap-2 text-xs font-medium text-slate-700"
+                        >
+                          <LinkIcon className="h-3.5 w-3.5" />
+                          Or submit a link for a large document
+                        </label>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Input
+                            id={`requirement-link-${requirement.id}`}
+                            type="url"
+                            value={requirementLinks[String(requirement.id)] ?? ''}
+                            onChange={(event) => setRequirementLinks((current) => ({
+                              ...current,
+                              [String(requirement.id)]: event.target.value,
+                            }))}
+                            placeholder="https://drive.google.com/..."
+                            disabled={saving}
+                            className="min-w-52 flex-1"
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void handleRequirementLink(requirement)}
+                            disabled={saving || !(requirementLinks[String(requirement.id)]?.trim())}
+                          >
+                            {saving ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <LinkIcon className="mr-2 h-3.5 w-3.5" />}
+                            Submit link
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
           {hrSubmissionBlocked ? (
@@ -209,7 +401,7 @@ export default function ClearanceUploadPage() {
               <p className="font-semibold">Human Resources is the final clearance office.</p>
               <p className="mt-1">All other office clearances must be approved before you can submit to the Human Resources Office.</p>
             </div>
-          ) : record?.filePath || record?.attachments?.length ? (
+          ) : requirements.length === 0 && (record?.filePath || record?.attachments?.length) ? (
             <div className="space-y-4">
               <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-4">
                 <p className="text-xs capitalize text-slate-500">Status: {record.status}</p>
@@ -235,7 +427,7 @@ export default function ClearanceUploadPage() {
                 </div>
               </div>
             </div>
-          ) : (
+          ) : requirements.length === 0 ? (
             <div className="space-y-4">
               {record && record.status !== 'rejected' && (
                 <div className="space-y-1 rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -262,7 +454,7 @@ export default function ClearanceUploadPage() {
                 </Button>
               </div>
             </div>
-          )}
+          ) : null}
         </CardContent>
       </Card>
       <PopupDialog

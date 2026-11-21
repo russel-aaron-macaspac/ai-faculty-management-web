@@ -138,20 +138,21 @@ export const clearanceService = {
     return json.url;
   },
 
-  async addAttachments(clearanceId: string, files: File[]) {
+  async addAttachments(clearanceId: string, files: File[], requirementId?: string) {
     const formData = new FormData();
     files.forEach((file) => formData.append('files', file));
+    if (requirementId) formData.append('requirement_id', requirementId);
     const res = await fetch(`/api/clearances/${clearanceId}/attachments`, { method: 'POST', body: formData });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error ?? 'Could not upload attachments.');
     return json.data || [];
   },
 
-  async addExternalLink(clearanceId: string, link: string, filename = 'External document link') {
+  async addExternalLink(clearanceId: string, link: string, filename = 'External document link', requirementId?: string) {
     const res = await fetch(`/api/clearances/${clearanceId}/attachments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ link, filename }),
+      body: JSON.stringify({ link, filename, requirementId }),
     });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error ?? 'Could not add document link.');

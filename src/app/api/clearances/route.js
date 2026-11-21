@@ -184,10 +184,20 @@ export async function GET(request) {
       } else {
         attachmentsByClearance = (attachments || []).reduce((map, attachment) => {
           const key = String(attachment.clearance_id);
+          let requirementId = null;
+          let originalFilename = attachment.original_filename;
+          if (typeof originalFilename === "string" && originalFilename.startsWith("requirement:")) {
+            const separatorIndex = originalFilename.indexOf("|");
+            if (separatorIndex >= 0) {
+              requirementId = originalFilename.slice("requirement:".length, separatorIndex);
+              originalFilename = originalFilename.slice(separatorIndex + 1);
+            }
+          }
           const item = {
             id: String(attachment.attachment_id),
             clearanceId: key,
-            originalFilename: attachment.original_filename,
+            originalFilename,
+            requirementId,
             filePath: attachment.file_path,
             uploadedAt: attachment.uploaded_at,
           };

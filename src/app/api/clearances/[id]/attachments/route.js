@@ -1,6 +1,20 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server-client";
 import { NextResponse } from "next/server";
 
+function encodeRequirementFilename(requirementId, filename) {
+  return requirementId ? `requirement:${requirementId}|${filename}` : filename;
+}
+
+function decodeRequirementFilename(filename) {
+  if (!filename?.startsWith("requirement:")) return { requirementId: null, originalFilename: filename };
+  const separatorIndex = filename.indexOf("|");
+  if (separatorIndex < 0) return { requirementId: null, originalFilename: filename };
+  return {
+    requirementId: filename.slice("requirement:".length, separatorIndex),
+    originalFilename: filename.slice(separatorIndex + 1),
+  };
+}
+
 export async function POST(request, { params }) {
   try {
     const { id } = await params;
@@ -8,9 +22,11 @@ export async function POST(request, { params }) {
     let files = [];
     let externalLink = null;
     let externalFilename = "External document link";
+    let requirementId = null;
     if (contentType.includes("application/json")) {
       const body = await request.json();
       externalLink = typeof body?.link === "string" ? body.link.trim() : null;
+      requirementId = typeof body?.requirementId === "string" ? body.requirementId : null;
       externalFilename = typeof body?.filename === "string" && body.filename.trim()
         ? body.filename.trim()
         : externalFilename;
@@ -23,6 +39,8 @@ export async function POST(request, { params }) {
     } else {
       const form = await request.formData();
       files = form.getAll("files").filter((file) => file && typeof file.arrayBuffer === "function");
+      const submittedRequirementId = form.get("requirement_id");
+      requirementId = typeof submittedRequirementId === "string" ? submittedRequirementId : null;
       if (files.length === 0) {
         return NextResponse.json({ error: "No files provided" }, { status: 400 });
       }
@@ -39,20 +57,25 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: "Clearance request not found" }, { status: 404 });
     }
     if (externalLink) {
+      const storedFilename = encodeRequirementFilename(requirementId, externalFilename);
       const { data, error } = await supabase
         .from("clearance_attachments")
-        .insert({ clearance_id: Number(id), original_filename: externalFilename, file_path: externalLink })
+        .insert({ clearance_id: Number(id), original_filename: storedFilename, file_path: externalLink })
         .select("attachment_id, clearance_id, original_filename, file_path, uploaded_at");
       if (error) {
         return NextResponse.json({ error: "Failed to save document link", details: error.message }, { status: 500 });
       }
-      return NextResponse.json({ data: data.map((attachment) => ({
-        id: String(attachment.attachment_id),
-        clearanceId: String(attachment.clearance_id),
-        originalFilename: attachment.original_filename,
-        filePath: attachment.file_path,
-        uploadedAt: attachment.uploaded_at,
-      })) });
+      return NextResponse.json({ data: data.map((attachment) => {
+        const decoded = decodeRequirementFilename(attachment.original_filename);
+        return {
+          id: String(attachment.attachment_id),
+          clearanceId: String(attachment.clearance_id),
+          originalFilename: decoded.originalFilename,
+          requirementId: decoded.requirementId,
+          filePath: attachment.file_path,
+          uploadedAt: attachment.uploaded_at,
+        };
+      }) });
     }
 
     const attachments = [];
@@ -68,7 +91,7 @@ export async function POST(request, { params }) {
       }
       attachments.push({
         clearance_id: Number(id),
-        original_filename: file.name || safeName,
+        original_filename: encodeRequirementFilename(requirementId, file.name || safeName),
         file_path: filePath,
       });
     }
@@ -84,13 +107,17 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: "Failed to save attachments", details: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ data: data.map((attachment) => ({
-      id: String(attachment.attachment_id),
-      clearanceId: String(attachment.clearance_id),
-      originalFilename: attachment.original_filename,
-      filePath: attachment.file_path,
-      uploadedAt: attachment.uploaded_at,
-    })) });
+    return NextResponse.json({ data: data.map((attachment) => {
+      const decoded = decodeRequirementFilename(attachment.original_filename);
+      return {
+        id: String(attachment.attachment_id),
+        clearanceId: String(attachment.clearance_id),
+        originalFilename: decoded.originalFilename,
+        requirementId: decoded.requirementId,
+        filePath: attachment.file_path,
+        uploadedAt: attachment.uploaded_at,
+      };
+    }) });
   } catch (error) {
     console.error("[CLEARANCE ATTACHMENTS POST ERROR]", error);
     return NextResponse.json({ error: "Internal server error", details: error instanceof Error ? error.message : String(error) }, { status: 500 });

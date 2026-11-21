@@ -13,9 +13,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
-import { UploadCloud, CheckCircle2, AlertTriangle, FileText, Loader2, Search, Check, X, Clock, Users, ClipboardCheck, ShieldCheck, MessageSquare, Trash2, Printer } from 'lucide-react';
+import { UploadCloud, CheckCircle2, AlertTriangle, FileText, Loader2, Search, Check, X, Clock, Users, ClipboardCheck, ShieldCheck, MessageSquare, Trash2, Printer, Download } from 'lucide-react';
 import { FACULTY_REQUIRED_OFFICES, hasApprovedOtherOfficeClearances, isHumanResourcesOffice } from '@/lib/clearanceOffices';
-import { isApprovalOfficer, getClearancePageInfo, isFacultyLikeRole } from '@/lib/roleConfig';
+import { isApprovalOfficer, getClearancePageInfo, getRequiredOfficeForOfficer } from '@/lib/roleConfig';
 import { StoredUser, normalize } from '@/lib/stringUtils';
 import { toast } from '@/lib/toast';
 import { PopupDialog } from '@/components/ui/popup-dialog';
@@ -95,9 +95,13 @@ export default function ClearancePage() {
   const [deleteReminder, setDeleteReminder] = useState<{ record: Clearance; noteId: string } | null>(null);
   const requestedDocumentId = searchParams.get('documentId');
 
-  const isFacultyUser = isFacultyLikeRole(currentUser?.role);
+  const isFacultyUser =
+    currentUser?.role === 'faculty';
   const isApprovalOfficer_ = isApprovalOfficer(currentUser?.role);
-  const canReviewFaculty = isApprovalOfficer_;
+  const canReviewFaculty =
+    isApprovalOfficer_ ||
+    currentUser?.role === 'program_chair' ||
+    currentUser?.role === 'programchair';
 
   const officeIdMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -113,6 +117,50 @@ export default function ClearancePage() {
     const officeId = record.officeId || officeIdMap.get(normalize(record.requiredDocument));
     return requirements.filter((requirement) => String(requirement.officeId) === String(officeId));
   };
+
+  const getManagingOfficeName = (record?: Clearance | null) => {
+    if (!record) return '';
+    if (currentUser?.role === 'program_chair' || currentUser?.role === 'programchair') {
+      return 'Program Chair';
+    }
+    if (isApprovalOfficer(currentUser?.role)) {
+      return getRequiredOfficeForOfficer(currentUser?.role) ?? record.requiredDocument;
+    }
+    return record.requiredDocument;
+  };
+
+  const getRequirementsForOfficeName = (officeName: string) => {
+    const office = offices.find((item) => normalize(item.name) === normalize(officeName));
+    if (!office) {
+      return requirements.filter((requirement) =>
+        normalize(requirement.officeName || '') === normalize(officeName)
+      );
+    }
+    return requirements.filter((requirement) =>
+      String(requirement.officeId) === String(office.id)
+      || normalize(requirement.officeName || '') === normalize(officeName)
+    );
+  };
+
+  const getRequirementSubmissionStatus = (
+    requirementId: string,
+    facultyRecords: Clearance[]
+  ) => {
+    const officeRecord = facultyRecords.find((item) =>
+      item.attachments?.some((attachment) => String(attachment.requirementId) === requirementId)
+    );
+    if (!officeRecord) return 'not submitted';
+    if (officeRecord.status === 'approved') return 'approved';
+    if (officeRecord.status === 'rejected') return 'rejected';
+    return 'submitted';
+  };
+
+  const getRequirementAttachment = (
+    requirementId: string,
+    facultyRecords: Clearance[]
+  ) => facultyRecords
+    .flatMap((item) => item.attachments ?? [])
+    .find((attachment) => String(attachment.requirementId) === requirementId);
 
   const getOfficeId = (role?: string): string | undefined => {
     if (!role) return undefined;
@@ -229,7 +277,7 @@ export default function ClearancePage() {
   };
 
   const facultyStepRecords = useMemo<FacultyStepRecord[]>(() => {
-    if (!currentUser || !isFacultyLikeRole(currentUser.role)) return [];
+    if (!currentUser || currentUser.role !== 'faculty') return [];
 
     const accountId = currentUser.id ? String(currentUser.id) : '';
     const accountName = normalize(currentUser.full_name || currentUser.name || '');
@@ -264,7 +312,7 @@ export default function ClearancePage() {
   const filtered = useMemo(() => {
     if (!currentUser) return [];
     const term = searchTerm.toLowerCase();
-    if (isFacultyLikeRole(currentUser.role)) {
+    if (isFacultyUser) {
       return facultyStepRecords.filter((row) =>
         ((row.requiredDocument ?? '').toLowerCase().includes(term) ||
         (row.employeeName ?? '').toLowerCase().includes(term)) &&
@@ -305,7 +353,7 @@ export default function ClearancePage() {
       (record.requiredDocument ?? '').toLowerCase().includes(term)) &&
       matchesClearanceFilters(record, yearFilter, statusFilter)
     );
-  }, [records, searchTerm, currentUser, facultyStepRecords, canReviewFaculty, yearFilter, statusFilter]);
+  }, [records, searchTerm, currentUser, facultyStepRecords, isFacultyUser, canReviewFaculty, yearFilter, statusFilter]);
 
   const adminFacultyProgress = useMemo<AdminFacultyProgress[]>(() => {
     if (currentUser?.role !== 'admin') return [];
@@ -341,7 +389,7 @@ export default function ClearancePage() {
         memberRecords.some((record) => normalize(record.requiredDocument) === normalize(office) && record.status === 'approved')
       ).length;
       const submitted = monitoredOffices.filter((office) =>
-        memberRecords.some((record) => normalize(record.requiredDocument) === normalize(office) && record.status !== 'rejected')
+        memberRecords.some((record) => normalize(record.requiredDocument) === normalize(office))
       ).length;
       const rejected = memberRecords.filter((record) => record.status === 'rejected').length;
 
@@ -584,6 +632,66 @@ export default function ClearancePage() {
     });
   };
 
+  const downloadFacultyClearanceSummary = (faculty: AdminFacultyProgress) => {
+    const monitoredOffices = offices.length > 0
+      ? offices
+      : FACULTY_REQUIRED_OFFICES.map((name, index) => ({ id: String(index + 1), name }));
+
+    const escapeCsv = (value: string) => `"${value.replaceAll('"', '""')}"`;
+    const rows: string[] = [];
+    monitoredOffices.forEach((office) => {
+      const record = faculty.records.find((item) =>
+        normalize(item.requiredDocument) === normalize(office.name)
+      );
+      const officeRequirements = requirements.filter((requirement) =>
+        String(requirement.officeId) === String(office.id)
+        || normalize(requirement.officeName || '') === normalize(office.name)
+      );
+      const filename = record?.originalFilename
+        || record?.attachments?.map((attachment) => attachment.originalFilename).join(', ')
+        || '';
+
+      if (officeRequirements.length > 0) {
+        officeRequirements.forEach((requirement) => {
+          const facultyRequirementStatus = getRequirementSubmissionStatus(String(requirement.id), faculty.records);
+          const requirementAttachment = faculty.records
+            .flatMap((item) => item.attachments ?? [])
+            .find((attachment) => String(attachment.requirementId) === String(requirement.id));
+          rows.push([
+            faculty.name,
+            faculty.department,
+            office.name,
+            requirement.name,
+            facultyRequirementStatus,
+            requirementAttachment?.originalFilename || filename,
+          ].map(escapeCsv).join(','));
+        });
+      } else {
+        rows.push([
+          faculty.name,
+          faculty.department,
+          office.name,
+          'No requirement configured',
+          'not submitted',
+          filename,
+        ].map(escapeCsv).join(','));
+      }
+    });
+
+    const csv = [
+      ['Faculty', 'Department', 'Office / Department', 'Requirement', 'Status', 'Submitted File'].map(escapeCsv).join(','),
+      ...rows,
+    ].join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${faculty.name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase()}-clearance-summary.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const clearanceFormRows: ClearanceFormRow[] = facultyStepRecords.map((record) => ({
     signature: record._isRequiredPlaceholder ? '' : getStatusLabel(record.status),
     date: record.reviewedAt || record.submissionDate || '',
@@ -730,7 +838,9 @@ export default function ClearancePage() {
   return (
     <>
     <div className="space-y-6 print:hidden">
-      <ClearanceRequirementsPanel user={currentUser} offices={offices} />
+      {!isFacultyUser && (
+        <ClearanceRequirementsPanel user={currentUser} offices={offices} />
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-2">
@@ -827,41 +937,91 @@ export default function ClearancePage() {
                   </div>
                 )}
 
-                {isFacultyUser && getRequirementsForRecord(selectedRecord).length > 0 && (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-                    <h3 className="text-sm font-semibold text-amber-900">Office requirements</h3>
-                    <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-700">
-                      {getRequirementsForRecord(selectedRecord).map((requirement) => (
-                        <li key={requirement.id}>
-                          <span className="font-medium">{requirement.name}</span>
-                          {requirement.description && <span className="text-slate-500"> — {requirement.description}</span>}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                {(isFacultyUser || canReviewFaculty) && (() => {
+                  const managingOfficeName = getManagingOfficeName(selectedRecord);
+                  const officeRequirements = getRequirementsForOfficeName(managingOfficeName);
+                  if (officeRequirements.length === 0) return null;
+
+                  const facultyRecords = records.filter((item) =>
+                    normalize(item.employeeName) === normalize(selectedRecord.employeeName)
+                    || (selectedRecord.employeeId && item.employeeId === selectedRecord.employeeId)
+                  );
+                  const submittedCount = officeRequirements.filter((requirement) =>
+                    getRequirementAttachment(String(requirement.id), facultyRecords)
+                  ).length;
+
+                  return (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                      <div>
+                        <h3 className="text-sm font-semibold text-amber-900">{managingOfficeName} requirements</h3>
+                        <p className="mt-1 text-xs text-amber-800">
+                          {submittedCount} submitted · {officeRequirements.length - submittedCount} not submitted
+                        </p>
+                      </div>
+                      <div className="mt-3 space-y-2">
+                        {officeRequirements.map((requirement) => {
+                          const requirementStatus = getRequirementSubmissionStatus(String(requirement.id), facultyRecords);
+                          const requirementAttachment = getRequirementAttachment(String(requirement.id), facultyRecords);
+                          return (
+                            <div key={requirement.id} className="flex items-start justify-between gap-3 rounded-md border border-amber-100 bg-white px-3 py-3">
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-slate-800">{requirement.name}</p>
+                                {requirement.description && (
+                                  <p className="mt-0.5 text-xs text-slate-500">{requirement.description}</p>
+                                )}
+                                {requirementAttachment && (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="mt-2 max-w-full justify-start"
+                                    onClick={() => void handleOpenFile(
+                                      requirementAttachment.filePath,
+                                      requirementAttachment.originalFilename
+                                    )}
+                                  >
+                                    <FileText className="mr-2 h-3.5 w-3.5 shrink-0 text-red-600" />
+                                    <span className="truncate">{requirementAttachment.originalFilename}</span>
+                                  </Button>
+                                )}
+                              </div>
+                              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${
+                                requirementStatus === 'approved'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : requirementStatus === 'rejected'
+                                    ? 'bg-rose-100 text-rose-800'
+                                    : requirementStatus === 'submitted'
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : 'bg-slate-100 text-slate-600'
+                              }`}>
+                                {requirementStatus === 'approved'
+                                  ? 'Cleared'
+                                  : requirementStatus === 'submitted'
+                                    ? 'Submitted'
+                                    : requirementStatus === 'rejected'
+                                      ? 'Rejected'
+                                      : 'Not submitted'}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div className="min-w-0 space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-semibold text-slate-900">Uploaded files</h3>
-                    {isFacultyUser && (() => {
-                      const officeId = officeIdMap.get(normalize(selectedRecord.requiredDocument));
-                      const hrSubmissionBlocked = isHumanResourcesOffice(selectedRecord.requiredDocument)
-                        && (selectedRecord.id.startsWith('required-') || selectedRecord.status === 'rejected')
-                        && !hasApprovedOtherOfficeClearances(facultyStepRecords);
-                      return officeId
-                        ? hrSubmissionBlocked
-                          ? <span className="text-sm text-slate-500">Wait for all other offices to approve</span>
-                          : <Link href={`/clearance/upload/${officeId}`} className="text-sm font-medium text-red-700 hover:underline">{selectedRecord.filePath ? 'Manage files' : 'Upload file'}</Link>
-                        : null;
-                    })()}
-                  </div>
-                  {selectedRecord.filePath || selectedRecord.attachments?.length ? (
-                    <div className="min-w-0 space-y-2">
-                      {selectedRecord.filePath && <Button type="button" variant="outline" className="flex w-full max-w-full min-w-0 justify-start overflow-hidden text-left" onClick={() => void handleOpenFile(selectedRecord.filePath!, selectedRecord.originalFilename || 'Submitted document')} title={selectedRecord.originalFilename || 'Submitted document'}><FileText className="mr-2 h-4 w-4 shrink-0 text-red-600" /><span className="block w-0 min-w-0 flex-1 overflow-hidden text-left text-ellipsis whitespace-nowrap">{selectedRecord.originalFilename || 'Submitted document'}</span></Button>}
-                      {selectedRecord.attachments?.map((attachment) => <Button key={attachment.id} type="button" variant="outline" className="flex w-full max-w-full min-w-0 justify-start overflow-hidden text-left" onClick={() => void handleOpenFile(attachment.filePath, attachment.originalFilename)} title={attachment.originalFilename}><FileText className="mr-2 h-4 w-4 shrink-0 text-red-600" /><span className="block w-0 min-w-0 flex-1 overflow-hidden text-left text-ellipsis whitespace-nowrap">{attachment.originalFilename}</span></Button>)}
-                    </div>
-                  ) : <p className="text-sm text-slate-500">No files uploaded yet.</p>}
+                  {isFacultyUser && (() => {
+                    const officeId = officeIdMap.get(normalize(selectedRecord.requiredDocument));
+                    const hrSubmissionBlocked = isHumanResourcesOffice(selectedRecord.requiredDocument)
+                      && (selectedRecord.id.startsWith('required-') || selectedRecord.status === 'rejected')
+                      && !hasApprovedOtherOfficeClearances(facultyStepRecords);
+                    return officeId
+                      ? hrSubmissionBlocked
+                        ? <div className="text-sm text-slate-500">Wait for all other offices to approve</div>
+                        : <div className="flex items-center justify-end"><Link href={`/clearance/upload/${officeId}`} className="text-sm font-medium text-red-700 hover:underline">{selectedRecord.filePath || selectedRecord.attachments?.length ? 'Manage files' : 'Upload file'}</Link></div>
+                      : null;
+                  })()}
                 </div>
 
                 <div className="space-y-2">
@@ -887,14 +1047,80 @@ export default function ClearancePage() {
               <DialogTitle>{selectedFaculty?.name}</DialogTitle>
               <DialogDescription>{selectedFaculty?.department || 'Department not assigned'} · {selectedFaculty?.approved} of {monitoredOfficeCount} offices approved</DialogDescription>
             </DialogHeader>
-            <div className="space-y-2">
-              {selectedFaculty?.records.length ? selectedFaculty.records.map((record) => (
-                <button key={record.id} type="button" className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 p-3 text-left hover:border-red-300 hover:bg-slate-50" onClick={() => { setSelectedFaculty(null); setSelectedRecord(record); }}>
-                  <span><span className="block font-medium text-slate-800">{record.requiredDocument}</span><span className="text-xs text-slate-500">{record.originalFilename || 'No file uploaded'}</span></span>
-                  <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${getStatusClass(record.status)}`}>{getStatusLabel(record.status)}</span>
-                </button>
-              )) : <p className="text-sm text-slate-500">No clearance records have been submitted.</p>}
-            </div>
+            {selectedFaculty && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Submitted</p>
+                    <p className="mt-1 text-xl font-semibold text-slate-900">{selectedFaculty.submitted}</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Not submitted</p>
+                    <p className="mt-1 text-xl font-semibold text-slate-900">{Math.max(monitoredOfficeCount - selectedFaculty.submitted, 0)}</p>
+                  </div>
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                    <p className="text-xs text-emerald-700">Approved</p>
+                    <p className="mt-1 text-xl font-semibold text-emerald-800">{selectedFaculty.approved}</p>
+                  </div>
+                  <div className="rounded-lg border border-rose-200 bg-rose-50 p-3">
+                    <p className="text-xs text-rose-700">Rejected</p>
+                    <p className="mt-1 text-xl font-semibold text-rose-800">{selectedFaculty.rejected}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-slate-900">Office submission checklist</h3>
+                    <Button type="button" size="sm" variant="outline" onClick={() => downloadFacultyClearanceSummary(selectedFaculty)}>
+                      <Download className="mr-2 h-4 w-4" />
+                      Download report
+                    </Button>
+                  </div>
+                  <div className="overflow-hidden rounded-lg border border-slate-200">
+                    {(offices.length > 0 ? offices : FACULTY_REQUIRED_OFFICES.map((name, index) => ({ id: String(index + 1), name }))).map((office) => {
+                      const record = selectedFaculty.records.find((item) =>
+                        normalize(item.requiredDocument) === normalize(office.name)
+                      );
+                      const officeRequirements = requirements.filter((requirement) =>
+                        String(requirement.officeId) === String(office.id)
+                        || normalize(requirement.officeName || '') === normalize(office.name)
+                      );
+                      const status = record ? getStatusLabel(record.status) : 'not submitted';
+                      const statusClass = record
+                        ? getStatusClass(record.status)
+                        : 'bg-slate-100 text-slate-600';
+
+                      return (
+                        <button
+                          key={office.id}
+                          type="button"
+                          className="flex w-full items-center justify-between gap-3 border-b border-slate-100 p-3 text-left last:border-b-0 hover:bg-slate-50"
+                          onClick={() => {
+                            if (record) {
+                              setSelectedFaculty(null);
+                              setSelectedRecord(record);
+                            }
+                          }}
+                        >
+                          <span className="min-w-0">
+                            <span className="block font-medium text-slate-800">{office.name}</span>
+                            <span className="text-xs text-slate-500">
+                              {officeRequirements.length > 0
+                                ? `${officeRequirements.length} requirement${officeRequirements.length === 1 ? '' : 's'}`
+                                : 'No office requirements configured'}
+                              {record?.originalFilename ? ` · ${record.originalFilename}` : ''}
+                            </span>
+                          </span>
+                          <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium capitalize ${statusClass}`}>
+                            {status}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
 
