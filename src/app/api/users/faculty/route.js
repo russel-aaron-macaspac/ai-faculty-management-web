@@ -127,9 +127,11 @@ export async function POST(req) {
 
       let emailDelivery = { sent: false };
       try {
-        const loginUrl = process.env.NEXT_PUBLIC_APP_URL
-          ? `${process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')}/login`
-          : 'http://localhost:3000/login';
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL
+          || (process.env.VERCEL_PROJECT_PRODUCTION_URL
+            ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+            : 'https://domstax.vercel.app');
+        const loginUrl = `${appUrl.replace(/\/$/, '')}/login`;
         emailDelivery = await sendAccountCredentialsEmail({
           email,
           name: [created?.first_name, created?.middle_name, created?.last_name].filter(Boolean).join(' '),

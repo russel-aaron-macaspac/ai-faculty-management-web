@@ -136,9 +136,11 @@ export async function POST(request) {
 
     let emailDelivery = { sent: false, reason: 'Email delivery is not configured.' };
     try {
-      const loginUrl = process.env.NEXT_PUBLIC_APP_URL
-        ? `${process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')}/login`
-        : 'http://localhost:3000/login';
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL
+        || (process.env.VERCEL_PROJECT_PRODUCTION_URL
+          ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+          : 'https://domstax.vercel.app');
+      const loginUrl = `${appUrl.replace(/\/$/, '')}/login`;
       emailDelivery = await sendAccountCredentialsEmail({
         email,
         name: [profile.first_name, profile.middle_name, profile.last_name].filter(Boolean).join(' '),
