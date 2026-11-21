@@ -637,7 +637,8 @@ export default function ClearancePage() {
       ? offices
       : FACULTY_REQUIRED_OFFICES.map((name, index) => ({ id: String(index + 1), name }));
 
-    const escapeCsv = (value: string) => `"${value.replaceAll('"', '""')}"`;
+    const escapeCsv = (value: string | null | undefined) =>
+      `"${String(value ?? '').replaceAll('"', '""')}"`;
     const rows: string[] = [];
     monitoredOffices.forEach((office) => {
       const record = faculty.records.find((item) =>
